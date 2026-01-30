@@ -61,8 +61,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Generate reset link
                 $resetLink = APP_URL . '/reset_password.php?token=' . $token;
                 
-                // TODO: Send email in production
-                // mail($email, 'รีเซ็ตรหัสผ่าน', "คลิกลิงก์นี้เพื่อรีเซ็ตรหัสผ่าน: $resetLink");
+                // =====================================================
+                // Production: เปิด comment ด้านล่างเพื่อส่ง email จริง
+                // และลบ/comment บรรทัด $resetLink = ... ข้างบนออก
+                // =====================================================
+                // mail($email, 'รีเซ็ตรหัสผ่าน - ' . APP_NAME, 
+                //     "คลิกลิงก์นี้เพื่อรีเซ็ตรหัสผ่าน:\n$resetLink\n\nลิงก์นี้จะหมดอายุใน 1 ชั่วโมง",
+                //     "From: noreply@" . $_SERVER['HTTP_HOST']
+                // );
+                // $resetLink = null; // ซ่อน link จากหน้าจอใน production
                 
                 $success = true;
             }

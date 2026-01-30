@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/../includes/functions.php';
+requireStaff(); // Auth check ก่อนทำงานใดๆ
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../app/Services/BorrowService.php';
 
@@ -168,7 +169,7 @@ require_once __DIR__ . '/header.php';
                                 $fineAmount = (float)($borrow['fine_amount'] ?? 0);
                                 $fine = ['days' => 0, 'amount' => $fineAmount];
                             } else {
-                                $fine = calculateFine($borrow['due_date'], null);
+                                $fine = $borrowService->calculateFine($borrow['due_date'], null);
                             }
                         ?>
                         <tr class="hover:bg-gray-50/50 transition-colors <?= $isOverdue ? 'bg-red-50/30' : '' ?>">

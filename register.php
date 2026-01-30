@@ -18,6 +18,27 @@ $phone = '';
 
 // Process registration
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Rate limiting for registration attempts
+    $attemptKey = 'register_attempts';
+    $attemptTimeKey = 'register_time';
+    
+    if (!isset($_SESSION[$attemptKey])) {
+        $_SESSION[$attemptKey] = 0;
+        $_SESSION[$attemptTimeKey] = time();
+    }
+    
+    // Reset after 15 minutes
+    if (time() - $_SESSION[$attemptTimeKey] > 900) {
+        $_SESSION[$attemptKey] = 0;
+        $_SESSION[$attemptTimeKey] = time();
+    }
+    
+    if ($_SESSION[$attemptKey] >= 5) {
+        $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ 15 นาที';
+    }
+    
+    $_SESSION[$attemptKey]++;
+    
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $phone = trim($_POST['phone'] ?? '');

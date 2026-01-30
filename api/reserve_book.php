@@ -36,6 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $bookId = (int) ($_POST['book_id'] ?? 0);
 $userId = $_SESSION['user_id'];
 
+// CSRF validation
+if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid token']);
+    exit;
+}
+
 if ($bookId <= 0) {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'ข้อมูลไม่ถูกต้อง']);

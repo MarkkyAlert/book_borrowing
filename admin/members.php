@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/../includes/functions.php';
+requireStaff(); // Auth check ก่อนทำงานใดๆ
 require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();

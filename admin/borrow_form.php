@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/../includes/functions.php';
+requireStaff(); // Auth check ก่อนทำงานใดๆ
 require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
@@ -517,7 +518,7 @@ $(document).ready(function() {
         $.ajax({
             url: 'ajax_add_member.php',
             method: 'POST',
-            data: { name: name, email: email, phone: phone },
+            data: { name: name, email: email, phone: phone, csrf_token: '<?= generateCSRFToken() ?>' },
             dataType: 'json',
             success: function(response) {
                 if (response.success) {

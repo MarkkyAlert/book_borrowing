@@ -22,6 +22,13 @@ if (!isAdmin()) {
     exit;
 }
 
+// CSRF validation
+if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid token']);
+    exit;
+}
+
 $pdo = getDB();
 
 $name = trim($_POST['name'] ?? '');

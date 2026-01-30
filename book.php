@@ -174,7 +174,7 @@ require_once __DIR__ . '/includes/header.php';
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: 'book_id=' + bookId
+                        body: 'book_id=' + bookId + '&csrf_token=<?= generateCSRFToken() ?>'
                     })
                     .then(response => response.json())
                     .then(data => {
