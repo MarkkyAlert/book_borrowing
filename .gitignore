@@ -1,0 +1,23 @@
+# OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Dependency directories
+vendor/
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# Temp
+tmp/

@@ -1,0 +1,316 @@
+<?php
+/**
+ * Book Form - เพิ่ม/แก้ไขหนังสือ
+ */
+
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/db.php';
+
+$pdo = getDB();
+$errors = [];
+$book = [
+    'id' => 0,
+    'title' => '',
+    'author' => '',
+    'isbn' => '',
+    'category_id' => '',
+    'description' => '',
+    'cover_image' => '',
+    'quantity' => 1,
+    'available' => 1
+];
+$isEdit = false;
+
+// Get book for editing
+if (isset($_GET['id'])) {
+    $id = (int) $_GET['id'];
+    $stmt = $pdo->prepare("SELECT * FROM books WHERE id = ?");
+    $stmt->execute([$id]);
+    $existingBook = $stmt->fetch();
+    
+    if ($existingBook) {
+        $book = $existingBook;
+        $isEdit = true;
+    } else {
+        setFlash('error', 'ไม่พบหนังสือที่ต้องการแก้ไข');
+        redirect('books.php');
+    }
+}
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
+        redirect('books.php');
+    }
+    
+    $book['title'] = trim($_POST['title'] ?? '');
+    $book['author'] = trim($_POST['author'] ?? '');
+    $book['isbn'] = trim($_POST['isbn'] ?? '');
+    $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
+    $book['description'] = trim($_POST['description'] ?? '');
+    $book['quantity'] = max(1, (int) ($_POST['quantity'] ?? 1));
+    $isEdit = !empty($_POST['id']);
+    $book['id'] = (int) ($_POST['id'] ?? 0);
+    
+    // Validation
+    if (empty($book['title'])) {
+        $errors[] = 'กรุณากรอกชื่อหนังสือ';
+    } elseif (mb_strlen($book['title']) > 200) {
+        $errors[] = 'ชื่อหนังสือต้องไม่เกิน 200 ตัวอักษร';
+    }
+    
+    if (empty($book['author'])) {
+        $errors[] = 'กรุณากรอกชื่อผู้แต่ง';
+    } elseif (mb_strlen($book['author']) > 100) {
+        $errors[] = 'ชื่อผู้แต่งต้องไม่เกิน 100 ตัวอักษร';
+    }
+    
+    // Check ISBN duplicate
+    if (!empty($book['isbn'])) {
+        $stmt = $pdo->prepare("SELECT id FROM books WHERE isbn = ? AND id != ?");
+        $stmt->execute([$book['isbn'], $book['id']]);
+        if ($stmt->fetch()) {
+            $errors[] = 'ISBN นี้มีในระบบแล้ว';
+        }
+    }
+    
+    // Handle cover image upload
+    $coverImage = $book['cover_image'] ?? null;
+    if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['cover_image'];
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $maxSize = 2 * 1024 * 1024; // 2MB
+        
+        // Use finfo for secure MIME type detection (server-side)
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        
+        if (!in_array($mimeType, $allowedTypes)) {
+            $errors[] = 'รองรับเฉพาะไฟล์รูปภาพ (JPEG, PNG, GIF, WEBP)';
+        } elseif ($file['size'] > $maxSize) {
+            $errors[] = 'ขนาดไฟล์ต้องไม่เกิน 2MB';
+        } else {
+            $uploadDir = __DIR__ . '/../uploads/covers/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            // Sanitize extension based on actual MIME type (not user input)
+            $mimeToExt = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp'
+            ];
+            $ext = $mimeToExt[$mimeType] ?? 'jpg';
+            $newFilename = 'cover_' . time() . '_' . uniqid() . '.' . $ext;
+            $targetPath = $uploadDir . $newFilename;
+            
+            if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+                // Delete old image if exists
+                if (!empty($book['cover_image'])) {
+                    $oldPath = $uploadDir . $book['cover_image'];
+                    if (file_exists($oldPath)) {
+                        unlink($oldPath);
+                    }
+                }
+                $coverImage = $newFilename;
+            } else {
+                $errors[] = 'ไม่สามารถอัปโหลดรูปภาพได้';
+            }
+        }
+    }
+    
+    if (empty($errors)) {
+        if ($isEdit) {
+            $stmt = $pdo->prepare("
+                UPDATE books SET title = ?, author = ?, isbn = ?, category_id = ?, description = ?, cover_image = ?
+                WHERE id = ?
+            ");
+            $stmt->execute([
+                $book['title'],
+                $book['author'],
+                $book['isbn'] ?: null,
+                $book['category_id'],
+                $book['description'] ?: null,
+                $coverImage,
+                $book['id']
+            ]);
+            setFlash('success', 'อัปเดตหนังสือสำเร็จ');
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $book['title'],
+                $book['author'],
+                $book['isbn'] ?: null,
+                $book['category_id'],
+                $book['description'] ?: null,
+                $coverImage,
+                $book['quantity'],
+                $book['quantity']
+            ]);
+            setFlash('success', 'เพิ่มหนังสือสำเร็จ');
+        }
+        redirect('books.php');
+    }
+}
+
+// Get categories
+$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+
+$pageTitle = $isEdit ? 'แก้ไขหนังสือ' : 'เพิ่มหนังสือ';
+require_once __DIR__ . '/header.php';
+?>
+
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center">
+            <h5 class="font-bold text-gray-800 flex items-center text-lg">
+                <i class="bi bi-<?= $isEdit ? 'pencil' : 'plus-circle' ?> mr-2 text-primary-600"></i>
+                <?= $isEdit ? 'แก้ไขหนังสือ' : 'เพิ่มหนังสือใหม่' ?>
+            </h5>
+        </div>
+        
+        <div class="p-6 md:p-8">
+            <?php if (!empty($errors)): ?>
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="bi bi-exclamation-circle-fill text-red-500"></i>
+                        </div>
+                        <div class="ml-3">
+                            <ul class="list-disc list-inside text-sm text-red-700">
+                                <?php foreach ($errors as $error): ?>
+                                    <li><?= e($error) ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
+            <form method="POST" enctype="multipart/form-data" class="space-y-6">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <?php if ($isEdit): ?>
+                    <input type="hidden" name="id" value="<?= $book['id'] ?>">
+                <?php endif; ?>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="md:col-span-2">
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-1">
+                            ชื่อหนังสือ <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" id="title" name="title" value="<?= e($book['title']) ?>" 
+                               class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm"
+                               placeholder="กรอกชื่อหนังสือ" required autofocus>
+                    </div>
+                    
+                    <div class="md:col-span-1">
+                        <label for="isbn" class="block text-sm font-medium text-gray-700 mb-1">ISBN</label>
+                        <div class="relative rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="bi bi-upc-scan text-gray-400"></i>
+                            </div>
+                            <input type="text" id="isbn" name="isbn" value="<?= e($book['isbn']) ?>" 
+                                   class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 border-gray-300 rounded-xl"
+                                   placeholder="978-xxx-xxx">
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-1">
+                        <label for="author" class="block text-sm font-medium text-gray-700 mb-1">
+                            ผู้แต่ง <span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="bi bi-person text-gray-400"></i>
+                            </div>
+                            <input type="text" id="author" name="author" value="<?= e($book['author']) ?>" 
+                                   class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 border-gray-300 rounded-xl"
+                                   placeholder="กรอกชื่อผู้แต่ง" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-2">
+                        <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่</label>
+                        <select id="category_id" name="category_id" class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm">
+                            <option value="">-- เลือกหมวดหมู่ --</option>
+                            <?php foreach ($categories as $cat): ?>
+                                <option value="<?= $cat['id'] ?>" <?= $book['category_id'] == $cat['id'] ? 'selected' : '' ?>>
+                                    <?= e($cat['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="md:col-span-1">
+                        <label for="quantity" class="block text-sm font-medium text-gray-700 mb-1">
+                            จำนวน <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" id="quantity" name="quantity" value="<?= e($book['quantity'] ?? 1) ?>" 
+                               class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm"
+                               min="1" required>
+                        <?php if ($isEdit && isset($book['available'])): ?>
+                            <p class="mt-1 text-xs text-green-600 font-medium">ว่าง <?= $book['available'] ?> เล่ม</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">รายละเอียด/คำอธิบาย</label>
+                    <textarea id="description" name="description" rows="4" 
+                              class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm"
+                              placeholder="รายละเอียดหนังสือ (ถ้ามี)"><?= e($book['description']) ?></textarea>
+                </div>
+                
+                <div class="bg-gray-50 rounded-xl p-4 border border-gray-200 border-dashed">
+                    <label for="cover_image" class="block text-sm font-medium text-gray-700 mb-2">รูปหน้าปก</label>
+                    
+                    <div class="flex items-start space-x-4">
+                        <?php if (!empty($book['cover_image'])): ?>
+                            <div class="flex-shrink-0">
+                                <img src="<?= APP_URL ?>/uploads/covers/<?= e($book['cover_image']) ?>" 
+                                     alt="Current Cover" 
+                                     class="h-32 w-24 object-cover rounded-lg shadow-sm border border-gray-200">
+                                <p class="text-xs text-gray-500 mt-1 text-center">รูปปัจจุบัน</p>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="flex-1">
+                            <input type="file" id="cover_image" name="cover_image" 
+                                   class="block w-full text-sm text-gray-500
+                                          file:mr-4 file:py-2 file:px-4
+                                          file:rounded-full file:border-0
+                                          file:text-sm file:font-semibold
+                                          file:bg-primary-50 file:text-primary-700
+                                          hover:file:bg-primary-100
+                                          transition-colors cursor-pointer"
+                                   accept="image/jpeg,image/png,image/gif,image/webp">
+                            <p class="mt-2 text-xs text-gray-500">รองรับ JPEG, PNG, GIF, WEBP ขนาดไม่เกิน 2MB</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between pt-6 border-t border-gray-100">
+                    <a href="books.php" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                        <i class="bi bi-arrow-left mr-1"></i>ยกเลิก
+                    </a>
+                    <button type="submit" class="px-5 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors shadow-lg shadow-primary-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>
+                        <?= $isEdit ? 'บันทึกการแก้ไข' : 'เพิ่มหนังสือ' ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/footer.php'; ?>

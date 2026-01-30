@@ -1,0 +1,258 @@
+<?php
+/**
+ * Books Management - จัดการหนังสือ
+ */
+
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/db.php';
+
+$pdo = getDB();
+
+// Get filter parameters
+$search = trim($_GET['search'] ?? '');
+$categoryId = (int) ($_GET['category'] ?? 0);
+$status = $_GET['status'] ?? '';
+
+// Build query
+$where = [];
+$params = [];
+
+if (!empty($search)) {
+    $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+}
+
+if ($categoryId > 0) {
+    $where[] = "b.category_id = ?";
+    $params[] = $categoryId;
+}
+
+if ($status === 'available') {
+    $where[] = "b.available > 0";
+} elseif ($status === 'borrowed') {
+    $where[] = "b.available < b.quantity";
+}
+
+$whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+// Get books
+$sql = "
+    SELECT b.*, c.name as category_name 
+    FROM books b
+    LEFT JOIN categories c ON b.category_id = c.id
+    $whereSQL
+    ORDER BY b.created_at DESC
+";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$books = $stmt->fetchAll();
+
+// Get categories for filter
+$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+
+// Handle delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    // CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
+        redirect('books.php');
+    }
+    
+    $id = (int) ($_POST['id'] ?? 0);
+    
+    $pdo->beginTransaction();
+    try {
+        // Lock book row
+        $stmt = $pdo->prepare("SELECT available, quantity FROM books WHERE id = ? FOR UPDATE");
+        $stmt->execute([$id]);
+        $book = $stmt->fetch();
+        
+        if (!$book) {
+            throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
+        }
+        
+        // Check if being borrowed
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
+        $stmt->execute([$id]);
+        if ($stmt->fetchColumn() > 0) {
+            throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้กำลังถูกยืมอยู่');
+        }
+        
+        // Check if has borrow history (optional: can disable this for soft delete)
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
+        $stmt->execute([$id]);
+        if ($stmt->fetchColumn() > 0) {
+            throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
+        }
+        
+        // Get cover image filename before deleting
+        $stmt = $pdo->prepare("SELECT cover_image FROM books WHERE id = ?");
+        $stmt->execute([$id]);
+        $coverImage = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("DELETE FROM books WHERE id = ?");
+        $stmt->execute([$id]);
+        $pdo->commit();
+        
+        // Delete cover image file after successful commit
+        if (!empty($coverImage)) {
+            $coverPath = __DIR__ . '/../uploads/covers/' . $coverImage;
+            if (file_exists($coverPath)) {
+                unlink($coverPath);
+            }
+        }
+        
+        setFlash('success', 'ลบหนังสือสำเร็จ');
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        setFlash('error', $e->getMessage());
+    }
+    redirect('books.php');
+}
+
+$pageTitle = 'จัดการหนังสือ';
+require_once __DIR__ . '/header.php';
+?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+    <div>
+        <h3 class="text-lg font-bold text-gray-800">รายการหนังสือทั้งหมด</h3>
+        <p class="text-sm text-gray-500">ทั้งหมด <?= count($books) ?> เล่ม</p>
+    </div>
+    <a href="book_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+        <i class="bi bi-plus-circle mr-2"></i>เพิ่มหนังสือใหม่
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <div class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+        <i class="bi bi-funnel mr-2"></i>ตัวกรอง
+    </div>
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div class="md:col-span-1">
+            <label class="block text-xs font-medium text-gray-700 mb-1">ค้นหา</label>
+            <input type="text" class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="search" value="<?= e($search) ?>" placeholder="ชื่อ, ผู้แต่ง, ISBN...">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">หมวดหมู่</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="category">
+                <option value="">ทั้งหมด</option>
+                <?php foreach ($categories as $cat): ?>
+                    <option value="<?= $cat['id'] ?>" <?= $categoryId == $cat['id'] ? 'selected' : '' ?>>
+                        <?= e($cat['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">สถานะ</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="status">
+                <option value="">ทั้งหมด</option>
+                <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>ว่าง</option>
+                <option value="borrowed" <?= $status === 'borrowed' ? 'selected' : '' ?>>ถูกยืม</option>
+            </select>
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                <i class="bi bi-search mr-1"></i>ค้นหา
+            </button>
+            <a href="books.php" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors">ล้าง</a>
+        </div>
+    </form>
+</div>
+
+<!-- Books Table -->
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+        <?php if (empty($books)): ?>
+            <div class="text-center py-12 text-gray-400">
+                <i class="bi bi-book text-6xl mb-4 inline-block text-gray-300"></i>
+                <h4 class="text-lg font-medium text-gray-600">ไม่พบหนังสือ</h4>
+                <p class="text-sm mb-6">ลองปรับเปลี่ยนตัวกรองหรือเพิ่มหนังสือใหม่</p>
+                <a href="book_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors">
+                    <i class="bi bi-plus-circle mr-2"></i>เพิ่มหนังสือเล่มแรก
+                </a>
+            </div>
+        <?php else: ?>
+            <table class="w-full text-sm text-left">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                    <tr>
+                        <th class="px-6 py-4 font-medium" width="50">#</th>
+                        <th class="px-6 py-4 font-medium">ชื่อหนังสือ</th>
+                        <th class="px-6 py-4 font-medium">ผู้แต่ง</th>
+                        <th class="px-6 py-4 font-medium">หมวดหมู่</th>
+                        <th class="px-6 py-4 font-medium">จำนวน</th>
+                        <th class="px-6 py-4 font-medium">สถานะ</th>
+                        <th class="px-6 py-4 font-medium text-right">การจัดการ</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <?php foreach ($books as $index => $book): ?>
+                        <tr class="hover:bg-gray-50/50 transition-colors">
+                            <td class="px-6 py-4 text-gray-500"><?= $index + 1 ?></td>
+                            <td class="px-6 py-4">
+                                <a href="<?= APP_URL ?>/book.php?id=<?= $book['id'] ?>" class="font-bold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 max-w-xs block" target="_blank">
+                                    <?= e($book['title']) ?>
+                                </a>
+                                <?php if ($book['isbn']): ?>
+                                    <span class="text-xs text-gray-400 font-mono mt-1 block">ISBN: <?= e($book['isbn']) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-6 py-4 font-medium text-gray-700"><?= e($book['author']) ?></td>
+                            <td class="px-6 py-4">
+                                <span class="px-2.5 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs font-medium border border-gray-200">
+                                    <?= e($book['category_name'] ?? 'ไม่ระบุ') ?>
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="flex items-center text-gray-600 font-mono">
+                                    <span class="font-bold text-gray-900"><?= $book['available'] ?></span>
+                                    <span class="mx-1 text-gray-400">/</span>
+                                    <span><?= $book['quantity'] ?></span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <?php if ($book['available'] > 0): ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                                        ว่าง
+                                    </span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                                        หมด
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-6 py-4 text-right space-x-2">
+                                <a href="book_form.php?id=<?= $book['id'] ?>" class="text-amber-500 hover:text-amber-600 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition-colors inline-block" title="แก้ไข">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <?php if ($book['available'] == $book['quantity']): ?>
+                                    <form method="POST" class="d-inline inline-block" onsubmit="return confirm('ยืนยันการลบหนังสือเล่มนี้?')">
+                                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= $book['id'] ?>">
+                                        <button type="submit" class="text-red-500 hover:text-red-600 border border-red-200 hover:bg-red-50 p-1.5 rounded-lg transition-colors" title="ลบ">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                <?php else: ?>
+                                    <button class="text-gray-300 border border-gray-200 p-1.5 rounded-lg cursor-not-allowed" disabled title="ไม่สามารถลบได้ เนื่องจากมีผู้ยืมอยู่">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/footer.php'; ?>
