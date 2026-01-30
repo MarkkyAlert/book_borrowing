@@ -1,51 +1,46 @@
 <?php
 /**
  * API: Search Books - Returns HTML partial
+ * 
+ * ⚠️ กติกา: ไฟล์นี้ทำหน้าที่ Controller เท่านั้น
+ * - ตรวจ method / validate input
+ * - เรียก Repository
+ * - ส่ง Response (HTML partial)
+ * - ห้ามใส่ business logic
+ * - ห้ามเขียน SQL โดยตรง
  */
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../app/Repositories/BookRepository.php';
 
-$pdo = getDB();
+use App\Repositories\BookRepository;
 
-// Get search/filter parameters
+// ========== 1. รับ & Validate Input ==========
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
 
-// Build query
-$where = [];
-$params = [];
+// ========== 2. สร้าง filters array ==========
+$filters = [];
 
 if (!empty($search)) {
-    $where[] = "(b.title LIKE ? OR b.author LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
+    $filters['search'] = $search;
 }
 
 if ($categoryId > 0) {
-    $where[] = "b.category_id = ?";
-    $params[] = $categoryId;
+    $filters['category_id'] = $categoryId;
 }
 
 if ($status === 'available') {
-    $where[] = "b.available > 0";
+    $filters['available_only'] = true;
 }
 
-$whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+// ========== 3. เรียก Repository ==========
+$pdo = getDB();
+$bookRepository = new BookRepository($pdo);
+$books = $bookRepository->findAll($filters);
 
-// Get books
-$sql = "
-    SELECT b.*, c.name as category_name 
-    FROM books b
-    LEFT JOIN categories c ON b.category_id = c.id
-    $whereSQL
-    ORDER BY b.created_at DESC
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$books = $stmt->fetchAll();
-
-// Return the grid View
+// ========== 4. ส่ง Response (HTML partial) ==========
 header('Content-Type: text/html; charset=utf-8');
 require __DIR__ . '/../includes/book_grid.php';

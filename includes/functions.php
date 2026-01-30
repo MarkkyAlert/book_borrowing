@@ -285,31 +285,6 @@ function startSession(): void
 }
 
 /**
- * Calculate fine for overdue borrow
- * @param string $dueDate Due date (Y-m-d)
- * @param string|null $returnDate Return date or null/empty for current date
- * @return array ['days' => int, 'amount' => float]
- */
-function calculateFine(string $dueDate, ?string $returnDate = null): array
-{
-    $due = new DateTime($dueDate);
-    // Handle null, empty string, or invalid date
-    $returnDateStr = (!empty($returnDate)) ? $returnDate : date('Y-m-d');
-    $return = new DateTime($returnDateStr);
-    
-    $diff = $return->diff($due);
-    
-    // If return date is after due date (overdue)
-    if ($return > $due) {
-        $daysOverdue = $diff->days;
-        $fineAmount = $daysOverdue * FINE_PER_DAY;
-        return ['days' => $daysOverdue, 'amount' => $fineAmount];
-    }
-    
-    return ['days' => 0, 'amount' => 0];
-}
-
-/**
  * Format fine amount with Thai Baht
  */
 function formatFine(float $amount): string

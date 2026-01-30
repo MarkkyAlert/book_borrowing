@@ -5,8 +5,12 @@
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../app/Services/BorrowService.php';
+
+use App\Services\BorrowService;
 
 $pdo = getDB();
+$borrowService = new BorrowService($pdo);
 
 // Handle return book FIRST (before query)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -22,53 +26,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         $payNow = isset($_POST['pay_now']);
         
-        $pdo->beginTransaction();
         try {
-            // Lock row to prevent race condition
-            $stmt = $pdo->prepare("SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE");
-            $stmt->execute([$borrowId]);
-            $borrow = $stmt->fetch();
+            // ใช้ BorrowService แทน inline logic
+            $result = $borrowService->returnBook($borrowId, $payNow, $_SESSION['user_id']);
             
-            if ($borrow) {
-                // Calculate fine if overdue
-                $fine = calculateFine($borrow['due_date'], date('Y-m-d'));
-                
-                // Update borrow status with fine amount
-                $stmt = $pdo->prepare("UPDATE borrows SET status = 'returned', return_date = CURDATE(), fine_amount = ? WHERE id = ?");
-                $stmt->execute([$fine['amount'], $borrowId]);
-                
-                // Update book available count
-                $stmt = $pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
-                $stmt->execute([$borrow['book_id']]);
-
-                // Create Payment Record if Pay Now is checked and there is a fine
-                if ($payNow && $fine['amount'] > 0) {
-                    $stmt = $pdo->prepare("INSERT INTO payments (borrow_id, amount, recorded_by) VALUES (?, ?, ?)");
-                    $stmt->execute([$borrowId, $fine['amount'], $_SESSION['user_id']]);
-                }
-                
-                $pdo->commit();
-                
-                // Show appropriate message
-                if ($fine['amount'] > 0) {
-                    $msg = "บันทึกการคืนหนังสือสำเร็จ - ค่าปรับ: {$fine['amount']} บาท (เกิน {$fine['days']} วัน)";
-                    if ($payNow) {
-                        $msg .= " [รับชำระเงินแล้ว]";
-                        setFlash('success', $msg);
-                    } else {
-                        $msg .= " [ยังไม่จ่าย]";
-                        setFlash('warning', $msg);
-                    }
-                } else {
-                    setFlash('success', 'บันทึกการคืนหนังสือสำเร็จ');
-                }
+            if ($result['fine']['amount'] > 0) {
+                $flashType = $result['paid'] ? 'success' : 'warning';
             } else {
-                $pdo->rollBack();
-                setFlash('error', 'ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
+                $flashType = 'success';
             }
+            setFlash($flashType, $result['message']);
+            
         } catch (Exception $e) {
-            $pdo->rollBack();
-            setFlash('error', 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+            setFlash('error', $e->getMessage());
         }
         redirect('borrows.php');
     }

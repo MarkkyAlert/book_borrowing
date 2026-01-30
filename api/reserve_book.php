@@ -1,80 +1,61 @@
 <?php
 /**
  * API: Reserve Book
+ * 
+ * ⚠️ กติกา: ไฟล์นี้ทำหน้าที่ Controller เท่านั้น
+ * - ตรวจ method / auth / validate input
+ * - เรียก Service
+ * - ส่ง JSON response
+ * - ห้ามใส่ business logic
+ * - ห้ามเข้าถึง DB โดยตรง
  */
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../app/Services/ReservationService.php';
+
+use App\Services\ReservationService;
 
 header('Content-Type: application/json');
 
-// Check login
+// ========== 1. ตรวจ Auth ==========
 if (!isLoggedIn()) {
+    http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'กรุณาเข้าสู่ระบบก่อนจองหนังสือ']);
     exit;
 }
 
+// ========== 2. ตรวจ Method ==========
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
     exit;
 }
 
+// ========== 3. รับ & Validate Input ==========
 $bookId = (int) ($_POST['book_id'] ?? 0);
 $userId = $_SESSION['user_id'];
 
 if ($bookId <= 0) {
+    http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'ข้อมูลไม่ถูกต้อง']);
     exit;
 }
 
+// ========== 4. เรียก Service ==========
 try {
     $pdo = getDB();
-    $pdo->beginTransaction();
-
-    // 1. Check if user already reserved this book (pending)
-    $stmt = $pdo->prepare("SELECT id FROM reservations WHERE user_id = ? AND book_id = ? AND status = 'pending'");
-    $stmt->execute([$userId, $bookId]);
-    if ($stmt->fetch()) {
-        throw new Exception("คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ");
-    }
-
-    // 2. Check book availability
-    $stmt = $pdo->prepare("SELECT available, quantity, title FROM books WHERE id = ? FOR UPDATE");
-    $stmt->execute([$bookId]);
-    $book = $stmt->fetch();
-
-    if (!$book) {
-        throw new Exception("ไม่พบหนังสือ");
-    }
-
-    if ($book['available'] <= 0) {
-        throw new Exception("หนังสือหมด ไม่สามารถจองได้");
-    }
-
-    // 3. Create Reservation
-    // Expire in 2 days
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+2 days'));
+    $reservationService = new ReservationService($pdo);
     
-    $stmt = $pdo->prepare("
-        INSERT INTO reservations (user_id, book_id, expires_at, status)
-        VALUES (?, ?, ?, 'pending')
-    ");
-    $stmt->execute([$userId, $bookId, $expiresAt]);
-
-    // 4. Decrement Stock
-    $stmt = $pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
-    $stmt->execute([$bookId]);
-
-    $pdo->commit();
-
+    $result = $reservationService->createReservation($userId, $bookId);
+    
+    // ========== 5. ส่ง Response ==========
     echo json_encode([
-        'success' => true, 
-        'message' => "จองสำเร็จ! กรุณามารับหนังสือ \"{$book['title']}\" ภายในวันที่ " . formatDate($expiresAt)
+        'success' => true,
+        'message' => $result['message']
     ]);
 
 } catch (Exception $e) {
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
+    http_response_code(400);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }

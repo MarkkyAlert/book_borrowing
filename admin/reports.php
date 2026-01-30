@@ -58,6 +58,20 @@ if ($reportType === 'books') {
     ";
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
     $filename = "daily_revenue_" . date('Y-m-d');
+
+} elseif ($reportType === 'overdue') {
+    // Overdue Books
+    $sql = "
+        SELECT u.name, u.phone, bk.title, b.borrow_date, b.due_date,
+               DATEDIFF(CURDATE(), b.due_date) as days_overdue
+        FROM borrows b
+        JOIN users u ON b.user_id = u.id
+        JOIN books bk ON b.book_id = bk.id
+        WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
+        ORDER BY b.due_date ASC
+    ";
+    $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
+    $filename = "overdue_books_" . date('Y-m-d');
 }
 
 if (isset($sql)) {
@@ -100,10 +114,16 @@ require_once __DIR__ . '/header.php';
             </h3>
             <p class="text-gray-500">วิเคราะห์ข้อมูลเพื่อการวางแผน</p>
         </div>
-        <a href="reports.php?report=<?= $reportType ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
-            <i class="bi bi-file-earmark-spreadsheet mr-2"></i>
-            ส่งออก CSV
-        </a>
+        <div class="flex gap-2">
+            <a href="reports.php?report=<?= $reportType ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+                <i class="bi bi-file-earmark-spreadsheet mr-2"></i>
+                CSV
+            </a>
+            <a href="export_pdf.php?report=<?= $reportType ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+                <i class="bi bi-file-earmark-pdf mr-2"></i>
+                PDF
+            </a>
+        </div>
     </div>
 </div>
 
@@ -118,6 +138,9 @@ require_once __DIR__ . '/header.php';
         </a>
         <a href="reports.php?report=revenue" class="<?= $reportType === 'revenue' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-cash-coin mr-2"></i>สรุปรายได้
+        </a>
+        <a href="reports.php?report=overdue" class="<?= $reportType === 'overdue' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
+            <i class="bi bi-exclamation-triangle mr-2"></i>หนังสือค้างส่ง
         </a>
     </nav>
 </div>

@@ -2,9 +2,65 @@
 /**
  * Database Installation Script
  * เข้าถึง: http://localhost/book/install.php
+ * 
+ * ⚠️ ควรลบไฟล์นี้หลังติดตั้งเสร็จ
  */
 
 require_once __DIR__ . '/includes/config.php';
+
+// =====================================================
+// 🔒 INSTALL LOCK - ป้องกันการติดตั้งซ้ำ
+// =====================================================
+$lockFile = __DIR__ . '/.installed';
+$isInstalled = file_exists($lockFile);
+
+// ถ้าติดตั้งแล้ว แสดงข้อความเตือน
+if ($isInstalled && !isset($_GET['force'])) {
+    ?>
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ติดตั้งแล้ว - <?= APP_NAME ?></title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    </head>
+    <body class="bg-light">
+        <div class="container py-5">
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0"><i class="bi bi-shield-lock me-2"></i>ระบบติดตั้งแล้ว</h5>
+                        </div>
+                        <div class="card-body text-center py-5">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                            <h4 class="mt-3">ระบบได้รับการติดตั้งเรียบร้อยแล้ว</h4>
+                            <p class="text-muted">เพื่อความปลอดภัย กรุณาลบไฟล์ <code>install.php</code></p>
+                            <hr>
+                            <a href="index.php" class="btn btn-primary me-2">
+                                <i class="bi bi-house me-1"></i>หน้าแรก
+                            </a>
+                            <a href="admin/" class="btn btn-outline-primary">
+                                <i class="bi bi-gear me-1"></i>เข้า Admin
+                            </a>
+                        </div>
+                        <div class="card-footer bg-light">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                หากต้องการติดตั้งใหม่ ให้ลบไฟล์ <code>.installed</code> หรือเพิ่ม <code>?force=1</code>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
 
 $messages = [];
 $success = false;
@@ -143,11 +199,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $messages[] = "✅ เพิ่มหนังสือตัวอย่าง " . count($books) . " เล่ม";
 
+        // สร้าง lock file เพื่อป้องกันการติดตั้งซ้ำ
+        file_put_contents($lockFile, date('Y-m-d H:i:s') . "\nInstalled successfully.");
+        
         $success = true;
         $messages[] = "";
         $messages[] = "🎉 ติดตั้งระบบเรียบร้อยแล้ว!";
         $messages[] = "📧 Email: admin@library.com";
         $messages[] = "🔑 Password: 123456";
+        $messages[] = "";
+        $messages[] = "⚠️ กรุณาลบไฟล์ install.php เพื่อความปลอดภัย";
 
     } catch (PDOException $e) {
         $messages[] = "❌ เกิดข้อผิดพลาด: " . $e->getMessage();

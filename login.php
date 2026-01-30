@@ -158,7 +158,14 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </form>
             
-            <div class="mt-8 pt-6 border-t border-gray-100">
+            <div class="mt-6 text-center">
+                <a href="forgot_password.php" class="text-sm text-gray-500 hover:text-primary-600 transition-colors">
+                    <i class="bi bi-key mr-1"></i>
+                    ลืมรหัสผ่าน?
+                </a>
+            </div>
+            
+            <div class="mt-6 pt-6 border-t border-gray-100">
                 <div class="text-center">
                     <p class="text-sm text-gray-600">
                         ยังไม่มีบัญชีสมาชิก? 
