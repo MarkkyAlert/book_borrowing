@@ -6,7 +6,14 @@
 require_once __DIR__ . '/config.php';
 
 /**
- * Escape output to prevent XSS
+ * ป้องกัน XSS โดยแปลง HTML entities
+ * 
+ * ใช้ครอบทุกครั้งที่แสดงผลข้อมูลจาก user/database บนหน้าเว็บ
+ * 
+ * @param string|null $string ข้อความที่ต้องการ escape (รับ null ได้)
+ * @return string ข้อความที่ผ่านการ escape แล้ว (ปลอดภัยสำหรับ HTML)
+ * 
+ * @example echo e($user['name']); // แสดงชื่อผู้ใช้อย่างปลอดภัย
  */
 function e(?string $string): string
 {
@@ -14,7 +21,12 @@ function e(?string $string): string
 }
 
 /**
- * Redirect to another page
+ * เปลี่ยนเส้นทางไปยัง URL ที่กำหนด แล้วหยุดการทำงานทันที
+ * 
+ * @param string $url URL ปลายทาง (ควรใช้ APP_URL prefix)
+ * @return never ฟังก์ชันนี้จะ exit() เสมอ ไม่มี return
+ * 
+ * @example redirect(APP_URL . '/login.php');
  */
 function redirect(string $url): void
 {
@@ -23,7 +35,18 @@ function redirect(string $url): void
 }
 
 /**
- * Set flash message
+ * ตั้งค่าข้อความแจ้งเตือนชั่วคราว (แสดงครั้งเดียวแล้วหายไป)
+ * 
+ * ใช้คู่กับ redirect() เพื่อแจ้งผลการทำงานหลังจาก POST action
+ * 
+ * @param string $type    ประเภท: 'success', 'error', 'warning', 'info'
+ * @param string $message ข้อความที่ต้องการแสดง
+ * @param bool   $isHtml  true = แสดง HTML ตรงๆ (ระวัง XSS!), false = escape อัตโนมัติ
+ * 
+ * @sideeffect เขียนลง $_SESSION['flash']
+ * 
+ * @example setFlash('success', 'บันทึกสำเร็จ');
+ *          redirect('list.php');
  */
 function setFlash(string $type, string $message, bool $isHtml = false): void
 {
@@ -35,7 +58,11 @@ function setFlash(string $type, string $message, bool $isHtml = false): void
 }
 
 /**
- * Get and clear flash message
+ * ดึงข้อความ flash แล้วลบออกจาก session (แสดงได้ครั้งเดียว)
+ * 
+ * @return array|null ['type' => string, 'message' => string, 'isHtml' => bool] หรือ null ถ้าไม่มี
+ * 
+ * @sideeffect ลบ $_SESSION['flash'] หลังจากดึงค่า
  */
 function getFlash(): ?array
 {
@@ -85,10 +112,12 @@ function displayFlash(): void
 }
 
 /**
- * Check if user is logged in
+ * ตรวจสอบว่าผู้ใช้ login อยู่หรือไม่
  * 
- * [SECURITY] ตรวจสอบจาก session เท่านั้น - ห้ามเชื่อ cookie หรือ header อื่น
- * เพราะ session_id มีการ regenerate หลัง login แล้ว
+ * @return bool true = login อยู่, false = ยังไม่ login
+ * 
+ * @security ตรวจจาก session เท่านั้น ไม่เชื่อ cookie/header อื่น
+ *           session_id ถูก regenerate หลัง login แล้ว (ป้องกัน session fixation)
  */
 function isLoggedIn(): bool
 {
@@ -96,10 +125,12 @@ function isLoggedIn(): bool
 }
 
 /**
- * Check if user is admin
+ * ตรวจสอบว่าผู้ใช้เป็น admin หรือไม่
  * 
- * [AUTHORIZATION] ตรวจ role จาก session ที่ set ตอน login
- * ค่า role มาจาก DB ไม่ใช่จาก user input - ปลอดภัยจากการปลอมแปลง
+ * @return bool true = เป็น admin
+ * 
+ * @security role มาจาก DB ที่ set ตอน login ไม่ใช่จาก user input
+ *           ปลอดภัยจากการปลอมแปลง
  */
 function isAdmin(): bool
 {
@@ -107,10 +138,11 @@ function isAdmin(): bool
 }
 
 /**
- * Check if user is staff (Authorized personnel: Admin or Staff)
+ * ตรวจสอบว่าผู้ใช้เป็นเจ้าหน้าที่หรือไม่ (admin หรือ staff)
  * 
- * [AUTHORIZATION] staff = admin หรือ staff role
- * ใช้สำหรับหน้า admin ที่ไม่ต้องการสิทธิ์ admin เต็ม (เช่น books, borrows)
+ * @return bool true = เป็น admin หรือ staff
+ * 
+ * @note ใช้สำหรับหน้าที่ไม่ต้องการสิทธิ์ admin เต็ม เช่น จัดการหนังสือ, ยืม-คืน
  */
 function isStaff(): bool
 {
@@ -118,7 +150,14 @@ function isStaff(): bool
 }
 
 /**
- * Require login - redirect if not logged in
+ * บังคับให้ login ก่อนเข้าหน้านี้ - ถ้ายังไม่ login จะ redirect ไป login.php
+ * 
+ * @return void ถ้า login อยู่แล้ว / never ถ้ายังไม่ login (redirect แล้ว exit)
+ * 
+ * @sideeffect redirect ไป /login.php พร้อม flash message ถ้ายังไม่ login
+ * 
+ * @example // ใส่ไว้บรรทัดแรกของหน้าที่ต้อง login
+ *          requireLogin();
  */
 function requireLogin(): void
 {
@@ -129,7 +168,17 @@ function requireLogin(): void
 }
 
 /**
- * Require admin - redirect if not admin
+ * บังคับให้เป็น admin ก่อนเข้าหน้านี้
+ * 
+ * ถ้ายังไม่ login → redirect ไป login.php
+ * ถ้า login แล้วแต่ไม่ใช่ admin → redirect ไป index.php
+ * 
+ * @return void ถ้าเป็น admin / never ถ้าไม่ผ่าน (redirect แล้ว exit)
+ * 
+ * @sideeffect redirect พร้อม flash message ถ้าไม่มีสิทธิ์
+ * 
+ * @example // ใส่ไว้บรรทัดแรกของหน้า admin-only เช่น settings, reports
+ *          requireAdmin();
  */
 function requireAdmin(): void
 {
@@ -141,7 +190,17 @@ function requireAdmin(): void
 }
 
 /**
- * Require staff - redirect if not staff
+ * บังคับให้เป็นเจ้าหน้าที่ (admin หรือ staff) ก่อนเข้าหน้านี้
+ * 
+ * ถ้ายังไม่ login → redirect ไป login.php
+ * ถ้า login แล้วแต่ไม่ใช่ staff → redirect ไป index.php
+ * 
+ * @return void ถ้าเป็น staff / never ถ้าไม่ผ่าน (redirect แล้ว exit)
+ * 
+ * @sideeffect redirect พร้อม flash message ถ้าไม่มีสิทธิ์
+ * 
+ * @example // ใส่ไว้บรรทัดแรกของหน้า staff เช่น books, borrows
+ *          requireStaff();
  */
 function requireStaff(): void
 {
@@ -153,7 +212,12 @@ function requireStaff(): void
 }
 
 /**
- * Get current user data
+ * ดึงข้อมูลผู้ใช้ปัจจุบันจากฐานข้อมูล
+ * 
+ * @return array|null ['id', 'name', 'email', 'phone', 'role'] หรือ null ถ้าไม่ได้ login
+ * 
+ * @note Query DB ทุกครั้งที่เรียก (ไม่ cache) - เหมาะสำหรับข้อมูลที่อาจเปลี่ยน
+ *       ถ้าต้องการแค่ user_id/role ใช้ $_SESSION แทนจะเร็วกว่า
  */
 function getCurrentUser(): ?array
 {
@@ -173,7 +237,13 @@ function getCurrentUser(): ?array
 }
 
 /**
- * Get system setting
+ * ดึงค่า setting จากฐานข้อมูล
+ * 
+ * @param string $key     ชื่อ setting ที่ต้องการ
+ * @param mixed  $default ค่าเริ่มต้นถ้าไม่พบ setting
+ * @return mixed ค่า setting หรือค่าเริ่มต้น
+ * 
+ * @example $orgName = getSetting('org_name', 'ห้องสมุด');
  */
 function getSetting($key, $default = '') {
     $pdo = getDB();
@@ -184,7 +254,13 @@ function getSetting($key, $default = '') {
 }
 
 /**
- * Update system setting
+ * บันทึกค่า setting ลงฐานข้อมูล (insert หรือ update ถ้ามีอยู่แล้ว)
+ * 
+ * @param string $key   ชื่อ setting
+ * @param mixed  $value ค่าที่ต้องการบันทึก
+ * @return bool true = สำเร็จ
+ * 
+ * @sideeffect INSERT หรือ UPDATE ตาราง settings
  */
 function updateSetting($key, $value) {
     $pdo = getDB();
@@ -192,6 +268,16 @@ function updateSetting($key, $value) {
     return $stmt->execute([$key, $value, $value]);
 }
 
+/**
+ * จัดรูปแบบวันที่สำหรับแสดงผล
+ * 
+ * @param string|null $date   วันที่ในรูปแบบที่ strtotime() เข้าใจได้ (เช่น Y-m-d)
+ * @param string      $format รูปแบบผลลัพธ์ (default: d/m/Y สำหรับไทย)
+ * @return string วันที่ที่จัดรูปแบบแล้ว หรือ '-' ถ้าไม่มีค่า
+ * 
+ * @example formatDate('2024-01-15');         // "15/01/2024"
+ *          formatDate('2024-01-15', 'Y-m-d'); // "2024-01-15"
+ */
 function formatDate(?string $date, string $format = 'd/m/Y'): string
 {
     if (!$date) {
@@ -201,7 +287,14 @@ function formatDate(?string $date, string $format = 'd/m/Y'): string
 }
 
 /**
- * Calculate days difference
+ * คำนวณจำนวนวันระหว่าง 2 วันที่
+ * 
+ * @param string $date1 วันที่เริ่มต้น (Y-m-d หรือรูปแบบที่ DateTime เข้าใจ)
+ * @param string $date2 วันที่สิ้นสุด
+ * @return int จำนวนวัน (บวก = date2 > date1, ลบ = date2 < date1)
+ * 
+ * @example daysDiff('2024-01-01', '2024-01-15'); // 14
+ *          daysDiff('2024-01-15', '2024-01-01'); // -14
  */
 function daysDiff(string $date1, string $date2): int
 {
@@ -253,10 +346,13 @@ function getReservationStatusLabel(string $status): string
 }
 
 /**
- * Validate email format
+ * ตรวจสอบรูปแบบ email
  * 
- * [VALIDATION] ใช้ PHP built-in filter - รองรับ RFC 5321
- * ไม่ได้ตรวจว่า email มีจริงหรือไม่ (ต้องส่ง verification email เอง)
+ * @param string $email อีเมลที่ต้องการตรวจสอบ
+ * @return bool true = รูปแบบถูกต้อง
+ * 
+ * @note ใช้ PHP FILTER_VALIDATE_EMAIL (RFC 5321)
+ *       ไม่ได้ตรวจว่า email มีจริงหรือไม่ - ต้องส่ง verification email เอง
  */
 function isValidEmail(string $email): bool
 {
@@ -264,10 +360,13 @@ function isValidEmail(string $email): bool
 }
 
 /**
- * Validate phone format (Thai)
+ * ตรวจสอบรูปแบบเบอร์โทรศัพท์ (ไทย)
  * 
- * [VALIDATION] รองรับเฉพาะเบอร์ไทย 9-10 หลัก
- * ถ้าต้องการ international format ต้องแก้ regex
+ * @param string $phone เบอร์โทรที่ต้องการตรวจสอบ
+ * @return bool true = รูปแบบถูกต้อง (ตัวเลข 9-10 หลัก)
+ * 
+ * @note รองรับเฉพาะเบอร์ไทย เช่น 0812345678
+ *       ถ้าต้องการ international format (+66...) ต้องแก้ regex
  */
 function isValidPhone(string $phone): bool
 {
@@ -275,16 +374,20 @@ function isValidPhone(string $phone): bool
 }
 
 /**
- * Generate CSRF token
+ * สร้าง CSRF token สำหรับป้องกันการโจมตี Cross-Site Request Forgery
  * 
- * [SECURITY] ป้องกัน Cross-Site Request Forgery
- * - ใช้ random_bytes (cryptographically secure)
- * - Token เดียวต่อ session (ไม่สร้างใหม่ทุกครั้ง)
- * - ถ้าต้องการ per-request token ต้องแก้ logic ตรงนี้
+ * @return string token 64 ตัวอักษร (hex)
+ * 
+ * @security - ใช้ random_bytes() ที่ cryptographically secure
+ *           - Token เดียวต่อ session (สร้างครั้งเดียว ใช้ซ้ำได้จนกว่า session หมดอายุ)
+ *           - ถ้าต้องการ per-request token ต้องแก้ logic
+ * 
+ * @sideeffect เขียน $_SESSION['csrf_token'] ถ้ายังไม่มี
+ * 
+ * @example <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
  */
 function generateCSRFToken(): string
 {
-    // [NOTE] Token ถูกสร้างครั้งเดียวต่อ session - ถ้า session หมดอายุ token ก็หมดด้วย
     if (!isset($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
@@ -292,10 +395,17 @@ function generateCSRFToken(): string
 }
 
 /**
- * Validate CSRF token
+ * ตรวจสอบ CSRF token จาก form submission
  * 
- * [SECURITY] ใช้ hash_equals() ป้องกัน timing attack
- * - ห้ามใช้ == หรือ === เปรียบเทียบ token โดยตรง
+ * @param string $token token ที่ได้รับจาก $_POST['csrf_token']
+ * @return bool true = token ถูกต้อง
+ * 
+ * @security ใช้ hash_equals() ป้องกัน timing attack
+ *           ห้ามใช้ == หรือ === เปรียบเทียบ token
+ * 
+ * @example if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+ *              die('Invalid CSRF token');
+ *          }
  */
 function validateCSRFToken(string $token): bool
 {
@@ -313,7 +423,10 @@ function startSession(): void
 }
 
 /**
- * Format fine amount with Thai Baht
+ * จัดรูปแบบจำนวนเงินค่าปรับ (บาท)
+ * 
+ * @param float $amount จำนวนเงิน
+ * @return string เช่น "150 บาท" หรือ "-" ถ้าไม่มีค่าปรับ
  */
 function formatFine(float $amount): string
 {

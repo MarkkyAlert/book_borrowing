@@ -1,6 +1,8 @@
 <?php
 /**
- * UserRepository - Database Access สำหรับผู้ใช้งาน
+ * UserRepository - Data Access Layer สำหรับผู้ใช้งาน
+ * 
+ * Repository นี้จัดการ CRUD operations สำหรับตาราง users
  * 
  * @package App\Repositories
  */
@@ -19,7 +21,13 @@ class UserRepository
     }
 
     /**
-     * ดึงผู้ใช้ทั้งหมด
+     * ดึงผู้ใช้ทั้งหมดตาม filters
+     * 
+     * @param array $filters {
+     *     role?: string,    // กรองตาม role ('admin', 'staff', 'member')
+     *     search?: string   // ค้นหาใน name, email, phone
+     * }
+     * @return array รายการผู้ใช้ (ไม่รวม password)
      */
     public function findAll(array $filters = []): array
     {
@@ -71,7 +79,12 @@ class UserRepository
     }
 
     /**
-     * ดึงผู้ใช้ตาม email
+     * ดึงผู้ใช้ตาม email (รวม password สำหรับ login)
+     * 
+     * @param string $email อีเมล
+     * @return array|null ข้อมูลผู้ใช้ทั้งหมด (รวม password hash)
+     * 
+     * @security ใช้สำหรับ login - ไม่ควรส่ง password กลับไป client
      */
     public function findByEmail(string $email): ?array
     {
@@ -97,6 +110,18 @@ class UserRepository
 
     /**
      * สร้างผู้ใช้ใหม่
+     * 
+     * @param array $data {
+     *     name: string,       // ชื่อ (required)
+     *     email: string,      // อีเมล (required, unique)
+     *     password: string,   // password hash (required, ต้อง hash ก่อนส่งมา)
+     *     phone?: string,     // เบอร์โทร
+     *     role?: string       // role (default: 'member')
+     * }
+     * @return int ID ของผู้ใช้ที่สร้าง
+     * 
+     * @sideeffect INSERT ลง users table
+     * @security password ต้อง hash ก่อนส่งมา (ใช้ password_hash)
      */
     public function create(array $data): int
     {
@@ -136,6 +161,12 @@ class UserRepository
 
     /**
      * อัปเดตรหัสผ่าน
+     * 
+     * @param int    $id             ID ผู้ใช้
+     * @param string $hashedPassword password ที่ hash แล้ว (ต้อง hash ก่อนส่งมา)
+     * @return bool true = สำเร็จ
+     * 
+     * @security password ต้อง hash ก่อนส่งมา (ใช้ password_hash)
      */
     public function updatePassword(int $id, string $hashedPassword): bool
     {
@@ -154,6 +185,12 @@ class UserRepository
 
     /**
      * ตรวจสอบว่า email ซ้ำหรือไม่
+     * 
+     * @param string   $email     อีเมลที่ต้องการตรวจสอบ
+     * @param int|null $excludeId ID ที่ต้องการยกเว้น (ใช้ตอน update)
+     * @return bool true = มีอยู่แล้ว (ห้ามใช้)
+     * 
+     * @usecase ใช้ตอน register หรือ update profile
      */
     public function emailExists(string $email, ?int $excludeId = null): bool
     {
@@ -191,7 +228,15 @@ class UserRepository
     }
 
     /**
-     * ดึงสถิติของสมาชิก
+     * ดึงสถิติการยืมของสมาชิก (สำหรับหน้า profile)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @return array {
+     *     total_borrows: int,   // จำนวนการยืมทั้งหมด
+     *     active_borrows: int,  // จำนวนที่ยังไม่คืน
+     *     returned: int,        // จำนวนที่คืนแล้ว
+     *     total_fines: float    // ค่าปรับรวม (บาท)
+     * }
      */
     public function getMemberStatistics(int $userId): array
     {

@@ -23,13 +23,31 @@ class BorrowService
     }
 
     /**
-     * สร้างรายการยืมหนังสือ
+     * สร้างรายการยืมหนังสือ (รองรับยืมหลายเล่มพร้อมกัน)
      * 
-     * @param int $userId ID ผู้ยืม
-     * @param array $bookIds รายการ ID หนังสือที่ต้องการยืม
-     * @param int $borrowDays จำนวนวันที่ยืม (ถ้าไม่ระบุจะใช้ค่า Default)
-     * @return array ผลลัพธ์ ['success' => bool, 'borrowed' => [], 'skipped' => [], 'message' => string]
-     * @throws Exception
+     * @param int      $userId     ID ผู้ยืม (ต้องเป็น member เท่านั้น)
+     * @param array    $bookIds    รายการ ID หนังสือ (array of int, ไม่เกิน MAX_BORROW_BOOKS)
+     * @param int|null $borrowDays จำนวนวันยืม 1-30 (null = ใช้ DEFAULT_BORROW_DAYS)
+     * 
+     * @return array {
+     *     success: bool,           // true ถ้ายืมได้อย่างน้อย 1 เล่ม
+     *     borrowed: string[],      // รายชื่อหนังสือที่ยืมสำเร็จ
+     *     skipped: string[],       // รายชื่อหนังสือที่ข้าม พร้อมเหตุผล
+     *     due_date: string,        // วันกำหนดคืน (Y-m-d)
+     *     message: string          // ข้อความสรุปผล
+     * }
+     * 
+     * @throws Exception เมื่อ:
+     *     - userId ไม่ถูกต้องหรือไม่ใช่ member
+     *     - bookIds ว่าง
+     *     - borrowDays ไม่อยู่ในช่วง 1-30
+     *     - ผู้ยืมถึงโควต้าสูงสุด (MAX_BORROW_BOOKS)
+     * 
+     * @sideeffect
+     *     - INSERT ลง `borrows` table
+     *     - UPDATE `books.available` ลดลง 1 ต่อเล่ม
+     * 
+     * @security ใช้ FOR UPDATE lock ป้องกัน race condition (ยืมทะลุโควต้า)
      */
     public function createBorrow(int $userId, array $bookIds, int $borrowDays = null): array
     {
@@ -109,15 +127,31 @@ class BorrowService
     }
 
     /**
-     * คืนหนังสือ
+     * คืนหนังสือ พร้อมคำนวณค่าปรับและบันทึกการชำระเงิน (ถ้ามี)
      * 
-     * [STATE TRANSITION] borrowing → returned
+     * State Transition: borrowing → returned
      * 
-     * @param int $borrowId ID รายการยืม
-     * @param bool $payNow ชำระค่าปรับทันทีหรือไม่
-     * @param int|null $recordedBy ID ผู้บันทึก (สำหรับ payment)
-     * @return array ผลลัพธ์ ['success' => bool, 'fine' => array, 'message' => string]
-     * @throws Exception
+     * @param int      $borrowId   ID รายการยืม (ต้องมี status = 'borrowing')
+     * @param bool     $payNow     true = รับชำระค่าปรับทันที (สร้าง payment record)
+     * @param int|null $recordedBy ID staff ที่บันทึก (ใช้สำหรับ payment.recorded_by)
+     * 
+     * @return array {
+     *     success: bool,
+     *     fine: {days: int, amount: float},  // ค่าปรับ (0 ถ้าไม่เกินกำหนด)
+     *     paid: bool,                         // true ถ้ารับชำระแล้ว
+     *     message: string
+     * }
+     * 
+     * @throws Exception เมื่อ:
+     *     - ไม่พบรายการยืม
+     *     - รายการนี้คืนไปแล้ว (status ≠ 'borrowing')
+     * 
+     * @sideeffect
+     *     - UPDATE `borrows`: status='returned', return_date, fine_amount
+     *     - UPDATE `books.available` เพิ่มขึ้น 1
+     *     - INSERT `payments` (ถ้า payNow && มีค่าปรับ)
+     * 
+     * @security ใช้ FOR UPDATE lock ป้องกันคืนซ้ำ (กดปุ่มคืน 2 ครั้ง)
      */
     public function returnBook(int $borrowId, bool $payNow = false, ?int $recordedBy = null): array
     {
@@ -175,13 +209,23 @@ class BorrowService
     }
 
     /**
-     * คำนวณค่าปรับ
+     * คำนวณค่าปรับจากวันเกินกำหนด
      * 
-     * ⭐ แก้ไขสูตรคำนวณค่าปรับที่นี่
+     * สูตรปัจจุบัน: จำนวนวันเกิน × FINE_PER_DAY (ค่าคงที่ต่อวัน)
+     * ⭐ แก้ไขสูตรคำนวณค่าปรับที่ method นี้
      * 
-     * @param string $dueDate วันกำหนดคืน (Y-m-d)
-     * @param string|null $returnDate วันที่คืน หรือ null = วันนี้
-     * @return array ['days' => int, 'amount' => float]
+     * @param string      $dueDate    วันกำหนดคืน (Y-m-d)
+     * @param string|null $returnDate วันที่คืนจริง (null = วันนี้)
+     * 
+     * @return array {
+     *     days: int,      // จำนวนวันที่เกิน (0 ถ้าไม่เกิน)
+     *     amount: float   // ค่าปรับ (หน่วยบาท)
+     * }
+     * 
+     * @example
+     *     // เกิน 3 วัน, ค่าปรับวันละ 10 บาท
+     *     $fine = $service->calculateFine('2024-01-01', '2024-01-04');
+     *     // ['days' => 3, 'amount' => 30]
      */
     public function calculateFine(string $dueDate, ?string $returnDate = null): array
     {
@@ -220,7 +264,12 @@ class BorrowService
     }
 
     /**
-     * นับจำนวนการยืมที่ยังไม่คืนของผู้ใช้
+     * นับจำนวนหนังสือที่ผู้ใช้ยืมอยู่ (ยังไม่คืน)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @return int จำนวนเล่มที่ยืมอยู่
+     * 
+     * @note ใช้ FOR UPDATE เพื่อ lock - ควรเรียกใน transaction เท่านั้น
      */
     public function countActiveBorrows(int $userId): int
     {
@@ -235,6 +284,12 @@ class BorrowService
 
     /**
      * ตรวจสอบว่าผู้ใช้ยืมหนังสือเล่มนี้อยู่หรือไม่
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @param int $bookId ID หนังสือ
+     * @return bool true = กำลังยืมเล่มนี้อยู่ (ยังไม่คืน)
+     * 
+     * @usecase ป้องกันยืมหนังสือเล่มเดียวกันซ้ำ
      */
     public function isAlreadyBorrowing(int $userId, int $bookId): bool
     {
@@ -247,7 +302,11 @@ class BorrowService
     }
 
     /**
-     * ดึงรายการยืมที่เกินกำหนด
+     * ดึงรายการยืมที่เกินกำหนดคืน (สำหรับ dashboard/notification)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 10)
+     * @return array รายการยืมที่เกินกำหนด เรียงจากเกินนานสุดก่อน
+     *     แต่ละรายการมี: user_name, phone, book_title, due_date, ...
      */
     public function getOverdueBorrows(int $limit = 10): array
     {
@@ -265,7 +324,11 @@ class BorrowService
     }
 
     /**
-     * ดึงรายการยืมล่าสุด
+     * ดึงรายการยืมล่าสุด (สำหรับ dashboard)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 5)
+     * @return array รายการยืมล่าสุด เรียงจากใหม่สุดก่อน
+     *     แต่ละรายการมี: user_name, book_title, borrow_date, ...
      */
     public function getRecentBorrows(int $limit = 5): array
     {
@@ -284,7 +347,16 @@ class BorrowService
     // ==================== Private Methods ====================
 
     /**
-     * ยืมหนังสือทีละเล่ม (ใช้ภายใน transaction)
+     * ยืมหนังสือทีละเล่ม (internal - ใช้ภายใน transaction ของ createBorrow)
+     * 
+     * @param int    $userId     ID ผู้ยืม
+     * @param int    $bookId     ID หนังสือ
+     * @param string $borrowDate วันที่ยืม (Y-m-d)
+     * @param string $dueDate    วันกำหนดคืน (Y-m-d)
+     * 
+     * @return array {success: bool, title?: string, reason?: string}
+     * 
+     * @internal ต้องเรียกภายใน transaction เท่านั้น (มีการใช้ FOR UPDATE)
      */
     private function borrowSingleBook(int $userId, int $bookId, string $borrowDate, string $dueDate): array
     {

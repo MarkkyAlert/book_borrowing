@@ -1,6 +1,9 @@
 <?php
 /**
- * BookRepository - Database Access สำหรับหนังสือ
+ * BookRepository - Data Access Layer สำหรับหนังสือ
+ * 
+ * Repository นี้จัดการ CRUD operations สำหรับตาราง books
+ * ไม่มี business logic - เป็นแค่ data access
  * 
  * @package App\Repositories
  */
@@ -19,7 +22,14 @@ class BookRepository
     }
 
     /**
-     * ดึงหนังสือทั้งหมด
+     * ดึงหนังสือทั้งหมดตาม filters ที่กำหนด
+     * 
+     * @param array $filters {
+     *     search?: string,        // ค้นหาใน title, author, isbn
+     *     category_id?: int,      // กรองตามหมวดหมู่
+     *     available_only?: bool   // true = เฉพาะที่มี stock
+     * }
+     * @return array รายการหนังสือ (รวม category_name)
      */
     public function findAll(array $filters = []): array
     {
@@ -56,6 +66,9 @@ class BookRepository
 
     /**
      * ดึงหนังสือตาม ID
+     * 
+     * @param int $id ID หนังสือ
+     * @return array|null ข้อมูลหนังสือ (รวม category_name) หรือ null ถ้าไม่พบ
      */
     public function findById(int $id): ?array
     {
@@ -70,7 +83,10 @@ class BookRepository
     }
 
     /**
-     * ดึงหนังสือตาม ID หรือ ISBN
+     * ดึงหนังสือตาม ID หรือ ISBN (สำหรับ barcode scan)
+     * 
+     * @param string $identifier ID หรือ ISBN
+     * @return array|null ข้อมูลพื้นฐาน (id, title, author, available)
      */
     public function findByIdOrIsbn(string $identifier): ?array
     {
@@ -94,6 +110,19 @@ class BookRepository
 
     /**
      * สร้างหนังสือใหม่
+     * 
+     * @param array $data {
+     *     title: string,          // ชื่อหนังสือ (required)
+     *     author: string,         // ผู้แต่ง (required)
+     *     isbn?: string,          // ISBN
+     *     category_id?: int,      // หมวดหมู่
+     *     description?: string,   // รายละเอียด
+     *     cover_image?: string,   // ชื่อไฟล์รูปปก
+     *     quantity?: int          // จำนวนเล่ม (default: 1)
+     * }
+     * @return int ID ของหนังสือที่สร้าง
+     * 
+     * @sideeffect INSERT ลง books table (available = quantity)
      */
     public function create(array $data): int
     {
@@ -119,7 +148,13 @@ class BookRepository
     }
 
     /**
-     * อัปเดตหนังสือ
+     * อัปเดตข้อมูลหนังสือ
+     * 
+     * @param int   $id   ID หนังสือ
+     * @param array $data ข้อมูลที่ต้องการอัปเดต (ต้องส่งครบทุก field)
+     * @return bool true = สำเร็จ
+     * 
+     * @note cover_image จะอัปเดตเฉพาะเมื่อส่งค่ามา (ใช้ COALESCE)
      */
     public function update(int $id, array $data): bool
     {
@@ -154,7 +189,13 @@ class BookRepository
     }
 
     /**
-     * อัปเดต available count
+     * เพิ่ม/ลด จำนวนหนังสือที่ว่าง (available)
+     * 
+     * @param int $id     ID หนังสือ
+     * @param int $change จำนวนที่เปลี่ยน (+1 = คืน, -1 = ยืม)
+     * @return bool true = สำเร็จ
+     * 
+     * @note ใช้ SQL: available = available + change
      */
     public function updateAvailable(int $id, int $change): bool
     {
@@ -165,7 +206,13 @@ class BookRepository
     }
 
     /**
-     * Lock row สำหรับ transaction
+     * ดึงหนังสือพร้อม lock row (สำหรับใช้ใน transaction)
+     * 
+     * @param int $id ID หนังสือ
+     * @return array|null ข้อมูลหนังสือ (ถูก lock จน commit/rollback)
+     * 
+     * @security ใช้ FOR UPDATE ป้องกัน concurrent access
+     * @note ต้องเรียกภายใน transaction เท่านั้น
      */
     public function findByIdForUpdate(int $id): ?array
     {
@@ -185,7 +232,14 @@ class BookRepository
     }
 
     /**
-     * ดึงสถิติหนังสือ
+     * ดึงสถิติหนังสือ (สำหรับ dashboard)
+     * 
+     * @return array {
+     *     total: int,      // จำนวนเล่มทั้งหมด (SUM quantity)
+     *     available: int,  // จำนวนเล่มที่ว่าง (SUM available)
+     *     borrowed: int,   // จำนวนเล่มที่ถูกยืม (total - available)
+     *     titles: int      // จำนวนรายการหนังสือ (COUNT rows)
+     * }
      */
     public function getStatistics(): array
     {

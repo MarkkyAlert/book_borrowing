@@ -20,13 +20,32 @@ class ReservationService
     }
 
     /**
-     * จองหนังสือ
+     * จองหนังสือ (สำหรับ member ที่ต้องการยืมแต่ไม่สะดวกมารับทันที)
      * 
-     * @param int $userId ผู้จอง
-     * @param int $bookId หนังสือที่ต้องการจอง
-     * @param int $expireDays จำนวนวันก่อนหมดอายุ (default: 2 วัน)
-     * @return array ['success' => bool, 'message' => string]
-     * @throws Exception
+     * Flow: จอง → รอรับของ → admin อนุมัติ → เริ่มยืม
+     * 
+     * @param int $userId     ID ผู้จอง (member)
+     * @param int $bookId     ID หนังสือ (ต้องมี available > 0)
+     * @param int $expireDays จำนวนวันก่อนหมดอายุการจอง (default: 2)
+     * 
+     * @return array {
+     *     success: bool,
+     *     message: string,    // ข้อความแจ้งผล รวมวันหมดอายุ
+     *     expires_at: string  // วันหมดอายุ (Y-m-d H:i:s)
+     * }
+     * 
+     * @throws Exception เมื่อ:
+     *     - ไม่พบหนังสือ
+     *     - หนังสือหมด (available = 0)
+     *     - มีการจอง pending อยู่แล้ว (จองเล่มเดิมซ้ำไม่ได้)
+     * 
+     * @sideeffect
+     *     - INSERT ลง `reservations` (status = 'pending')
+     *     - UPDATE `books.available` ลดลง 1 ทันที (กัน stock ไว้)
+     * 
+     * @security ใช้ FOR UPDATE lock ป้องกัน 2 คนจองเล่มสุดท้ายพร้อมกัน
+     * 
+     * @note stock ถูกหักทันทีตอนจอง - ถ้าหมดอายุ/ยกเลิก ต้องคืน stock กลับ
      */
     public function createReservation(int $userId, int $bookId, int $expireDays = 2): array
     {
@@ -85,9 +104,27 @@ class ReservationService
     }
 
     /**
-     * ยกเลิกการจอง
+     * ยกเลิกการจอง พร้อมคืน stock กลับ
      * 
-     * [STATE TRANSITION] pending → cancelled
+     * State Transition: pending → cancelled
+     * 
+     * @param int      $reservationId ID การจอง (ต้องเป็น status = 'pending')
+     * @param int|null $userId        ID ผู้ยกเลิก (ถ้าระบุ = ตรวจ ownership)
+     *                                - null: admin ยกเลิกให้ใครก็ได้
+     *                                - int: user ยกเลิกเอง (ต้องเป็นเจ้าของ)
+     * 
+     * @return array {success: bool, message: string}
+     * 
+     * @throws Exception เมื่อ:
+     *     - ไม่พบรายการจอง
+     *     - สถานะไม่ใช่ 'pending' (ยกเลิกไปแล้ว หรือ fulfilled)
+     *     - userId ไม่ตรงกับเจ้าของ (ถ้าระบุ userId)
+     * 
+     * @sideeffect
+     *     - UPDATE `reservations.status` = 'cancelled'
+     *     - UPDATE `books.available` เพิ่มขึ้น 1 (คืน stock)
+     * 
+     * @security ใช้ FOR UPDATE lock ป้องกัน cancel/approve พร้อมกัน
      */
     public function cancelReservation(int $reservationId, int $userId = null): array
     {
@@ -136,7 +173,20 @@ class ReservationService
     }
 
     /**
-     * Mark การจองเป็น fulfilled (รับหนังสือแล้ว)
+     * Mark การจองเป็น fulfilled (ผู้จองมารับหนังสือแล้ว)
+     * 
+     * State Transition: pending → fulfilled
+     * 
+     * @param int $reservationId ID การจอง (ต้องเป็น status = 'pending')
+     * 
+     * @return array {success: bool, message: string}
+     * 
+     * @throws Exception ถ้าไม่พบรายการหรือสถานะไม่ใช่ 'pending'
+     * 
+     * @sideeffect UPDATE `reservations.status` = 'fulfilled'
+     * 
+     * @note ไม่คืน stock เพราะผู้ใช้รับของไปแล้ว (stock ถูกหักตอนจอง)
+     *       method นี้ใช้กรณี admin อนุมัติใน reservations.php แล้วสร้าง borrow แยก
      */
     public function fulfillReservation(int $reservationId): array
     {
@@ -157,7 +207,18 @@ class ReservationService
     }
 
     /**
-     * ตรวจสอบและ expire การจองที่หมดอายุ
+     * ตรวจสอบและ expire การจองที่หมดอายุ (batch job)
+     * 
+     * State Transition: pending (expired) → expired
+     * 
+     * @return int จำนวนรายการที่ถูก expire
+     * 
+     * @sideeffect
+     *     - UPDATE `reservations.status` = 'expired' สำหรับรายการที่หมดอายุ
+     *     - UPDATE `books.available` เพิ่มขึ้น 1 ต่อรายการ (คืน stock)
+     * 
+     * @usecase เรียกจาก cron job หรือเมื่อเปิดหน้า admin
+     *          เช่น: ทุกวัน 00:01 หรือเมื่อโหลดหน้า reservations.php
      */
     public function expireOverdueReservations(): int
     {
@@ -196,7 +257,13 @@ class ReservationService
     }
 
     /**
-     * ดึงรายการจองของ user
+     * ดึงรายการจองของ user (สำหรับหน้า profile)
+     * 
+     * @param int         $userId ID ผู้ใช้
+     * @param string|null $status กรองตามสถานะ (null = ทั้งหมด)
+     *                            'pending', 'fulfilled', 'expired', 'cancelled'
+     * 
+     * @return array รายการจอง (รวม book_title, book_author)
      */
     public function getUserReservations(int $userId, string $status = null): array
     {
@@ -221,7 +288,11 @@ class ReservationService
     }
 
     /**
-     * ดึงรายการจองที่รอดำเนินการ
+     * ดึงรายการจองที่รอดำเนินการ (สำหรับ admin dashboard)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 10)
+     * @return array รายการจอง pending เรียงจากเก่าสุดก่อน (FIFO)
+     *     รวม: user_name, user_phone, book_title
      */
     public function getPendingReservations(int $limit = 10): array
     {
@@ -240,7 +311,9 @@ class ReservationService
     }
 
     /**
-     * นับจำนวนการจองที่รอดำเนินการ
+     * นับจำนวนการจองที่รอดำเนินการ (สำหรับ badge notification)
+     * 
+     * @return int จำนวน pending reservations
      */
     public function countPending(): int
     {
@@ -250,7 +323,13 @@ class ReservationService
     }
 
     /**
-     * ตรวจสอบว่า user มีการจอง pending อยู่หรือไม่
+     * ตรวจสอบว่า user จองหนังสือเล่มนี้ไว้แล้วหรือไม่ (pending)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @param int $bookId ID หนังสือ
+     * @return bool true = มีการจองที่รอดำเนินการอยู่
+     * 
+     * @usecase ป้องกันจองหนังสือเล่มเดียวกันซ้ำ
      */
     public function hasPendingReservation(int $userId, int $bookId): bool
     {
