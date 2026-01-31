@@ -6,12 +6,15 @@
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/db.php';
 
+// [AUTHORIZATION] เฉพาะ admin เท่านั้น - staff ไม่มีสิทธิ์จัดการ reservation
+// เหตุผล: การอนุมัติ/ยกเลิกมีผลต่อ stock และเริ่มการยืมทันที
 requireAdmin();
 
 $pdo = getDB();
 
 // Handle Actions (Approve / Cancel)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // [SECURITY] CSRF check
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
         redirect('reservations.php');
@@ -21,36 +24,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'];
 
     try {
+        // [DB] Transaction สำคัญ - approve/cancel มีหลาย operations
         $pdo->beginTransaction();
 
+        // [CONCURRENCY] FOR UPDATE ล็อคแถว - ป้องกัน approve/cancel พร้อมกัน
         $stmt = $pdo->prepare("SELECT * FROM reservations WHERE id = ? FOR UPDATE");
         $stmt->execute([$resId]);
         $reservation = $stmt->fetch();
 
+        // [STATE CHECK] ต้องเป็น pending เท่านั้นถึงดำเนินการได้
+        // ป้องกัน double action (กด approve 2 ครั้ง, multi-tab)
         if (!$reservation || $reservation['status'] !== 'pending') {
             throw new Exception("ไม่พบรายการจองหรือสถานะไม่ถูกต้อง");
         }
 
         if ($action === 'approve') {
-            // Create Borrow Record (Start borrowing immediately)
+            // [STATE TRANSITION] pending → fulfilled + สร้าง borrow
+            // NOTE: stock ถูกหักไปแล้วตอนจอง จึงไม่ต้องหักซ้ำ
             $stmt = $pdo->prepare("
                 INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
                 VALUES (?, ?, CURDATE(), CURDATE() + INTERVAL 7 DAY, 'borrowing')
             ");
             $stmt->execute([$reservation['user_id'], $reservation['book_id']]);
 
-            // Update Reservation Status
             $stmt = $pdo->prepare("UPDATE reservations SET status = 'fulfilled' WHERE id = ?");
             $stmt->execute([$resId]);
 
             setFlash('success', 'อนุมัติการจองสำเร็จ! บันทึกเป็น "กำลังยืม" เรียบร้อยแล้ว');
 
         } elseif ($action === 'cancel') {
-            // Restore Stock
+            // [STATE TRANSITION] pending → cancelled + คืน stock
+            // สำคัญ: ต้องคืน stock เพราะตอนจองได้หักไปแล้ว
             $stmt = $pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
             $stmt->execute([$reservation['book_id']]);
 
-            // Update Reservation Status
             $stmt = $pdo->prepare("UPDATE reservations SET status = 'cancelled' WHERE id = ?");
             $stmt->execute([$resId]);
 

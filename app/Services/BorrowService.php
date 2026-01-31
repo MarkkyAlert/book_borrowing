@@ -111,6 +111,8 @@ class BorrowService
     /**
      * คืนหนังสือ
      * 
+     * [STATE TRANSITION] borrowing → returned
+     * 
      * @param int $borrowId ID รายการยืม
      * @param bool $payNow ชำระค่าปรับทันทีหรือไม่
      * @param int|null $recordedBy ID ผู้บันทึก (สำหรับ payment)
@@ -119,10 +121,12 @@ class BorrowService
      */
     public function returnBook(int $borrowId, bool $payNow = false, ?int $recordedBy = null): array
     {
+        // [DB] Transaction - ต้อง atomic: update status + คืน stock + บันทึก payment
         $this->pdo->beginTransaction();
 
         try {
-            // Lock row to prevent race condition
+            // [CONCURRENCY] FOR UPDATE ล็อคแถว - ป้องกันคืนซ้ำ (กด 2 ครั้ง, multi-tab)
+            // [STATE CHECK] ต้องเป็น 'borrowing' เท่านั้นถึงคืนได้
             $stmt = $this->pdo->prepare("SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE");
             $stmt->execute([$borrowId]);
             $borrow = $stmt->fetch();
@@ -131,10 +135,10 @@ class BorrowService
                 throw new Exception('ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
             }
 
-            // Calculate fine
+            // [BUSINESS RULE] คำนวณค่าปรับตาม due_date
             $fine = $this->calculateFine($borrow['due_date'], date('Y-m-d'));
 
-            // Update borrow status
+            // [DB WRITE] เปลี่ยนสถานะ + บันทึกค่าปรับ
             $stmt = $this->pdo->prepare("
                 UPDATE borrows 
                 SET status = 'returned', return_date = CURDATE(), fine_amount = ? 
@@ -142,11 +146,11 @@ class BorrowService
             ");
             $stmt->execute([$fine['amount'], $borrowId]);
 
-            // Update book available count
+            // [DB WRITE] คืน stock - สำคัญมาก! ต้องทำใน transaction เดียวกัน
             $stmt = $this->pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
             $stmt->execute([$borrow['book_id']]);
 
-            // Create payment record if pay now and has fine
+            // [DB WRITE] บันทึก payment ถ้าจ่ายทันที
             if ($payNow && $fine['amount'] > 0) {
                 $stmt = $this->pdo->prepare("
                     INSERT INTO payments (borrow_id, amount, recorded_by) 

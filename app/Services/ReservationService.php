@@ -30,15 +30,17 @@ class ReservationService
      */
     public function createReservation(int $userId, int $bookId, int $expireDays = 2): array
     {
+        // [DB] Transaction สำคัญ - ต้อง atomic ระหว่าง INSERT reservation และ UPDATE stock
         $this->pdo->beginTransaction();
 
         try {
-            // 1. ตรวจสอบว่า User เคยจองเล่มนี้ไว้แล้วหรือยัง (สถานะ pending)
+            // [STATE CHECK] 1. ตรวจซ้ำก่อน - ป้องกันจอง 2 ครั้ง (กด refresh, multi-tab)
             if ($this->hasPendingReservation($userId, $bookId)) {
                 throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
             }
 
-            // 2. ตรวจสอบว่าหนังสือว่างไหม (พร้อมล็อคแถวเพื่อกันแย่งกันจอง)
+            // [CONCURRENCY] 2. FOR UPDATE ล็อคแถวหนังสือ - ป้องกัน race condition
+            // กรณี 2 คนกดจองเล่มสุดท้ายพร้อมกัน → คนแรกได้ คนที่สอง error
             $stmt = $this->pdo->prepare("
                 SELECT available, quantity, title FROM books WHERE id = ? FOR UPDATE
             ");
@@ -49,11 +51,12 @@ class ReservationService
                 throw new Exception('ไม่พบหนังสือ');
             }
 
+            // [STATE CHECK] ตรวจว่ามี stock หรือไม่
             if ($book['available'] <= 0) {
                 throw new Exception('หนังสือหมด ไม่สามารถจองได้');
             }
 
-            // 3. สร้างรายการจอง (Create Reservation)
+            // [DB WRITE] 3. สร้าง reservation - status เริ่มต้น 'pending'
             $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
 
             $stmt = $this->pdo->prepare("
@@ -62,7 +65,8 @@ class ReservationService
             ");
             $stmt->execute([$userId, $bookId, $expiresAt]);
 
-            // 4. ตัดสต็อกหนังสือ (Decrement Stock)
+            // [DB WRITE] 4. ลด stock ทันที - ป้องกันคนอื่นจอง/ยืมเล่มที่ถูกจองแล้ว
+            // NOTE: ถ้า reservation หมดอายุ/ถูกยกเลิก ต้องคืน stock กลับ
             $stmt = $this->pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
             $stmt->execute([$bookId]);
 
@@ -82,17 +86,20 @@ class ReservationService
 
     /**
      * ยกเลิกการจอง
+     * 
+     * [STATE TRANSITION] pending → cancelled
      */
     public function cancelReservation(int $reservationId, int $userId = null): array
     {
         $this->pdo->beginTransaction();
 
         try {
-            // Get reservation
+            // [CONCURRENCY] FOR UPDATE ล็อคแถว reservation
             $sql = "SELECT * FROM reservations WHERE id = ? AND status = 'pending' FOR UPDATE";
             $params = [$reservationId];
             
-            // If userId provided, check ownership
+            // [AUTHORIZATION] ถ้าระบุ userId = ตรวจว่าเป็นเจ้าของการจองหรือไม่
+            // ใช้สำหรับ user ยกเลิกเอง (ไม่ใช่ admin ยกเลิกให้)
             if ($userId) {
                 $sql = "SELECT * FROM reservations WHERE id = ? AND user_id = ? AND status = 'pending' FOR UPDATE";
                 $params = [$reservationId, $userId];
@@ -102,15 +109,16 @@ class ReservationService
             $stmt->execute($params);
             $reservation = $stmt->fetch();
 
+            // [STATE CHECK] ต้องเป็น pending เท่านั้นถึงยกเลิกได้
             if (!$reservation) {
                 throw new Exception('ไม่พบรายการจองหรือยกเลิกไปแล้ว');
             }
 
-            // Update status
+            // [DB WRITE] เปลี่ยนสถานะ
             $stmt = $this->pdo->prepare("UPDATE reservations SET status = 'cancelled' WHERE id = ?");
             $stmt->execute([$reservationId]);
 
-            // Return stock
+            // [DB WRITE] คืน stock กลับ - สำคัญมาก! ต้องทำใน transaction เดียวกัน
             $stmt = $this->pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
             $stmt->execute([$reservation['book_id']]);
 

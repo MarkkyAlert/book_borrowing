@@ -14,10 +14,11 @@ $pdo = getDB();
 $borrowService = new BorrowService($pdo);
 
 // Handle return book FIRST (before query)
+// [NOTE] ทำ POST action ก่อน fetch data - เพื่อให้ data ที่แสดงเป็น version ล่าสุด
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
-    // CSRF validation
+    // [SECURITY] CSRF check ก่อนทำ state change
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('borrows.php');
@@ -28,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payNow = isset($_POST['pay_now']);
         
         try {
-            // ใช้ BorrowService แทน inline logic
+            // [STATE TRANSITION] borrowing → returned
+            // BorrowService จัดการ: คำนวณค่าปรับ, update status, คืน stock, บันทึก payment
             $result = $borrowService->returnBook($borrowId, $payNow, $_SESSION['user_id']);
             
             if ($result['fine']['amount'] > 0) {

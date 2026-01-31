@@ -57,7 +57,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'scan') {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF validation
+    // [SECURITY] CSRF check - ป้องกัน attacker หลอกให้ staff กดยืมโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('borrow_form.php');
@@ -100,15 +100,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $borrowDate = date('Y-m-d');
         $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
         
-        // Begin transaction
+        // [DB] Transaction สำคัญ! - ต้อง atomic เพราะมี 2 operations:
+        // 1. INSERT borrows, 2. UPDATE books.available
+        // ถ้าทำแยก อาจเกิด inconsistency (ยืมสำเร็จแต่ stock ไม่ลด)
         $pdo->beginTransaction();
         
         try {
-            // Check member's current borrows (with lock)
+            // [CONCURRENCY] ล็อคแถว borrows ของ user นี้ก่อน
+            // ป้องกันกรณี 2 staff กดยืมให้คนเดียวกันพร้อมกัน → ทะลุโควต้า
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ? AND status = 'borrowing' FOR UPDATE");
             $stmt->execute([$userId]);
             $currentBorrows = $stmt->fetchColumn();
             
+            // [BUSINESS RULE] ตรวจโควต้าการยืม - กำหนดใน config.php
             $availableSlots = MAX_BORROW_BOOKS - $currentBorrows;
             
             if ($availableSlots <= 0) {
@@ -123,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $skippedBooks = [];
             
             foreach ($bookIds as $bookId) {
-                // Lock book row
+                // [CONCURRENCY] ล็อคแถวหนังสือแต่ละเล่ม - ป้องกัน 2 คนยืมเล่มสุดท้ายพร้อมกัน
                 $stmt = $pdo->prepare("SELECT id, title, available FROM books WHERE id = ? FOR UPDATE");
                 $stmt->execute([$bookId]);
                 $book = $stmt->fetch();
@@ -133,12 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
                 
+                // [STATE CHECK] ตรวจว่ามีของเหลือหรือไม่
                 if ($book['available'] <= 0) {
                     $skippedBooks[] = $book['title'] . ' (ไม่มีเล่มว่าง)';
                     continue;
                 }
                 
-                // Check if already borrowing this book
+                // [STATE CHECK] ตรวจว่าคนนี้ยืมเล่มนี้อยู่แล้วหรือไม่ - ป้องกันยืมซ้ำ
                 $stmt = $pdo->prepare("SELECT id FROM borrows WHERE user_id = ? AND book_id = ? AND status = 'borrowing'");
                 $stmt->execute([$userId, $bookId]);
                 if ($stmt->fetch()) {
@@ -146,14 +151,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
                 
-                // Insert borrow record
+                // [DB WRITE] บันทึกการยืม - status เริ่มต้นเป็น 'borrowing'
                 $stmt = $pdo->prepare("
                     INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
                     VALUES (?, ?, ?, ?, 'borrowing')
                 ");
                 $stmt->execute([$userId, $bookId, $borrowDate, $dueDate]);
                 
-                // Update book available count
+                // [DB WRITE] ลด stock - ต้องทำใน transaction เดียวกับ INSERT
                 $stmt = $pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
                 $stmt->execute([$bookId]);
                 

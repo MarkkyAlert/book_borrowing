@@ -18,7 +18,9 @@ $phone = '';
 
 // Process registration
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Rate limiting for registration attempts
+    // [SECURITY] Rate limiting ป้องกัน spam registration
+    // ใช้ global key (ไม่ใช่ per-email) เพราะ attacker สามารถใช้ email ใหม่ทุกครั้ง
+    // Limit: 5 attempts / 15 นาที ต่อ session
     $attemptKey = 'register_attempts';
     $attemptTimeKey = 'register_time';
     
@@ -27,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION[$attemptTimeKey] = time();
     }
     
-    // Reset after 15 minutes
+    // [RATE LIMIT] Reset counter หลัง 15 นาที
     if (time() - $_SESSION[$attemptTimeKey] > 900) {
         $_SESSION[$attemptKey] = 0;
         $_SESSION[$attemptTimeKey] = time();
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ 15 นาที';
     }
     
+    // [NOTE] นับ attempt ก่อน validation - ป้องกันการ bypass ด้วย invalid data
     $_SESSION[$attemptKey]++;
     
     $name = trim($_POST['name'] ?? '');
@@ -72,21 +75,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'รหัสผ่านไม่ตรงกัน';
     }
     
-    // Check email exists
+    // [VALIDATION] ตรวจสอบ email ซ้ำใน DB
+    // ต้องทำหลังจาก validation อื่นผ่านแล้ว เพื่อลด DB queries
     if (empty($errors)) {
         $pdo = getDB();
         $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$email]);
         if ($stmt->fetch()) {
+            // [SECURITY] บอกว่า email ซ้ำ - ยอมรับความเสี่ยง user enumeration
+            // เพื่อ UX ที่ดีกว่า (ถ้าต้องการปิด ให้ return error กลางๆ)
             $errors[] = 'อีเมลนี้ถูกใช้งานแล้ว';
         }
     }
     
-    // Insert user
+    // [DB WRITE] สร้าง user ใหม่
     if (empty($errors)) {
         $pdo = getDB();
+        // [SECURITY] ใช้ PASSWORD_DEFAULT = bcrypt (ปัจจุบัน)
+        // PHP จะ upgrade algorithm อัตโนมัติเมื่อมี version ใหม่
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         
+        // [NOTE] role hardcode เป็น 'member' - ห้าม user เลือกเอง
         $stmt = $pdo->prepare("
             INSERT INTO users (name, email, password, phone, role) 
             VALUES (?, ?, ?, ?, 'member')

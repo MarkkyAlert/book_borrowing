@@ -28,7 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        // Rate limiting for login attempts
+        // [SECURITY] Rate limiting ป้องกัน brute force attack
+        // ใช้ md5(email) เป็น key เพื่อนับแยกตาม email (ไม่ใช่ IP - เพราะ IP อาจ shared)
+        // Limit: 5 attempts / 15 นาที ต่อ email
         $attemptKey = 'login_attempts_' . md5($email);
         $attemptTimeKey = 'login_time_' . md5($email);
         
@@ -37,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION[$attemptTimeKey] = time();
         }
         
-        // Reset after 15 minutes
+        // [RATE LIMIT] Reset counter หลัง 15 นาที (900 วินาที)
         if (time() - $_SESSION[$attemptTimeKey] > 900) {
             $_SESSION[$attemptKey] = 0;
             $_SESSION[$attemptTimeKey] = time();
@@ -52,13 +54,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $stmt->fetch();
             
             if ($user && password_verify($password, $user['password'])) {
-                // Reset attempts on success
+                // [SECURITY] Reset counter เมื่อ login สำเร็จ
                 $_SESSION[$attemptKey] = 0;
                 
-                // Regenerate session ID for security
+                // [SECURITY] สำคัญมาก! regenerate session ID ป้องกัน session fixation attack
+                // true = ลบ session file เก่าทิ้ง (ไม่ให้ attacker ใช้ session เดิมได้)
                 session_regenerate_id(true);
                 
-                // Set session data
+                // [AUTH] เก็บข้อมูล user ใน session - ค่าเหล่านี้มาจาก DB เท่านั้น
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_email'] = $user['email'];
@@ -73,7 +76,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     redirect(APP_URL . '/index.php');
                 }
             } else {
+                // [SECURITY] นับ attempt ก่อนแจ้ง error (ป้องกัน brute force)
                 $_SESSION[$attemptKey]++;
+                // [SECURITY] ไม่บอกว่า email หรือ password ผิด - ป้องกัน user enumeration
                 $errors[] = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
             }
         }

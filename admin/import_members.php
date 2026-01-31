@@ -11,8 +11,6 @@ require_once __DIR__ . '/../includes/db.php';
 $pdo = getDB();
 $messages = [];
 $errors = [];
-$successCount = 0;
-$failCount = 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     
@@ -41,37 +39,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     VALUES (?, ?, ?, ?, 'member')
                 ");
                 
+                // Prepare update
+                $stmtUpdate = $pdo->prepare("UPDATE users SET name = ?, phone = ? WHERE id = ?");
+                
                 $defaultPassHash = password_hash('123456', PASSWORD_DEFAULT);
+                $rowNumber = 1; // Start from 1 (header is already read)
+                $skippedDetails = [];
+                $createdCount = 0;
+                $updatedCount = 0;
                 
                 while (($row = fgetcsv($handle)) !== false) {
+                    $rowNumber++;
+                    
                     // Columns: Name, Email, Phone
-                    if (count($row) < 2) continue;
+                    if (count($row) < 2) {
+                        $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อ และ อีเมล)";
+                        continue;
+                    }
                     
                     $name = trim($row[0]);
                     $email = trim($row[1]);
                     $phone = trim($row[2] ?? '');
                     
-                    if (empty($name) || empty($email)) continue;
-                    
-                    // Check duplicate email
-                    $stmtCheck->execute([$email]);
-                    if ($stmtCheck->fetch()) {
-                        // Skip duplicate email
-                        $failCount++;
+                    if (empty($name) || empty($email)) {
+                        $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหรืออีเมลว่างเปล่า";
                         continue;
                     }
                     
-                    $stmtInsert->execute([$name, $email, $defaultPassHash, $phone]);
-                    $successCount++;
+                    // Check duplicate email
+                    $stmtCheck->execute([$email]);
+                    $existingUser = $stmtCheck->fetch();
+                    
+                    if ($existingUser) {
+                        // UPDATE: Name & Phone only
+                        $stmtUpdate->execute([$name, $phone, $existingUser['id']]);
+                        $updatedCount++;
+                    } else {
+                        // INSERT: New member
+                        $stmtInsert->execute([$name, $email, $defaultPassHash, $phone]);
+                        $createdCount++;
+                    }
                 }
                 
                 $pdo->commit();
                 
-                $msg = "นำเข้าสำเร็จ $successCount รายการ";
-                if ($failCount > 0) {
-                    $msg .= " (ข้าม $failCount รายการที่ Email ซ้ำ)";
+                $msg = "นำเข้าเสร็จสิ้น: เพิ่มใหม่ $createdCount คน, อัปเดต $updatedCount คน";
+                if (!empty($skippedDetails)) {
+                    $msg .= "<br><br><strong>รายการที่ไม่สำเร็จ (" . count($skippedDetails) . "):</strong><br>" . implode("<br>", $skippedDetails);
+                    setFlash('warning', $msg, true);
+                } else {
+                    setFlash('success', $msg);
                 }
-                setFlash('success', $msg);
                 
             } catch (Exception $e) {
                 $pdo->rollBack();

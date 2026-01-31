@@ -64,7 +64,7 @@ $categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
 
 // Handle delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
-    // CSRF validation
+    // [SECURITY] ตรวจ CSRF ก่อนทำ destructive action
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('books.php');
@@ -72,9 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     
     $id = (int) ($_POST['id'] ?? 0);
     
+    // [DB] ใช้ Transaction เพราะมีหลาย operations ที่ต้องสำเร็จพร้อมกัน
     $pdo->beginTransaction();
     try {
-        // Lock book row
+        // [CONCURRENCY] FOR UPDATE ล็อคแถวป้องกันการลบ/แก้ไขพร้อมกันจากหลาย request
+        // ถ้าไม่ล็อค อาจมีคนยืมหนังสือขณะที่กำลังลบ
         $stmt = $pdo->prepare("SELECT available, quantity FROM books WHERE id = ? FOR UPDATE");
         $stmt->execute([$id]);
         $book = $stmt->fetch();
@@ -83,21 +85,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
             throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
         }
         
-        // Check if being borrowed
+        // [STATE CHECK] ห้ามลบถ้ามีคนยืมอยู่ - ป้องกันข้อมูล orphan
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
         $stmt->execute([$id]);
         if ($stmt->fetchColumn() > 0) {
             throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้กำลังถูกยืมอยู่');
         }
         
-        // Check if has borrow history (optional: can disable this for soft delete)
+        // [BUSINESS RULE] ห้ามลบถ้ามีประวัติการยืม - เก็บไว้เพื่อ audit
+        // TODO: พิจารณาใช้ soft delete แทนถ้าต้องการลบได้
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
         $stmt->execute([$id]);
         if ($stmt->fetchColumn() > 0) {
             throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
         }
         
-        // Get cover image filename before deleting
+        // [NOTE] ดึงชื่อไฟล์ก่อนลบ record เพื่อลบไฟล์ทีหลัง
         $stmt = $pdo->prepare("SELECT cover_image FROM books WHERE id = ?");
         $stmt->execute([$id]);
         $coverImage = $stmt->fetchColumn();
@@ -106,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         $stmt->execute([$id]);
         $pdo->commit();
         
-        // Delete cover image file after successful commit
+        // [FILE] ลบไฟล์หลัง commit สำเร็จ - ถ้า commit fail ไฟล์ยังอยู่
         if (!empty($coverImage)) {
             $coverPath = __DIR__ . '/../uploads/covers/' . $coverImage;
             if (file_exists($coverPath)) {

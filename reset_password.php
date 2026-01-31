@@ -18,7 +18,8 @@ $token = $_GET['token'] ?? '';
 
 $pdo = getDB();
 
-// Validate token
+// [SECURITY] Validate token - ตรวจสอบ 3 เงื่อนไข:
+// 1. token ตรงกับใน DB, 2. ยังไม่เคยใช้ (used=0), 3. ยังไม่หมดอายุ
 if (!empty($token)) {
     $stmt = $pdo->prepare("
         SELECT pr.*, u.id as user_id 
@@ -54,14 +55,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     
     if (empty($errors)) {
         try {
+            // [DB] Transaction - ต้อง atomic: update password + mark token used
+            // ป้องกัน token ถูกใช้ซ้ำถ้า update password fail
             $pdo->beginTransaction();
             
-            // Update password
+            // [DB WRITE] Update password - ใช้ bcrypt
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
             $stmt->execute([$hashedPassword, $resetRequest['user_id']]);
             
-            // Mark token as used
+            // [SECURITY] Mark token as used ทันที - ป้องกัน token reuse
+            // ถึงแม้ยังอยู่ใน window time ก็ใช้ซ้ำไม่ได้
             $stmt = $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?");
             $stmt->execute([$resetRequest['id']]);
             

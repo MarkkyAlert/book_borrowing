@@ -86,6 +86,9 @@ function displayFlash(): void
 
 /**
  * Check if user is logged in
+ * 
+ * [SECURITY] ตรวจสอบจาก session เท่านั้น - ห้ามเชื่อ cookie หรือ header อื่น
+ * เพราะ session_id มีการ regenerate หลัง login แล้ว
  */
 function isLoggedIn(): bool
 {
@@ -94,6 +97,9 @@ function isLoggedIn(): bool
 
 /**
  * Check if user is admin
+ * 
+ * [AUTHORIZATION] ตรวจ role จาก session ที่ set ตอน login
+ * ค่า role มาจาก DB ไม่ใช่จาก user input - ปลอดภัยจากการปลอมแปลง
  */
 function isAdmin(): bool
 {
@@ -102,6 +108,9 @@ function isAdmin(): bool
 
 /**
  * Check if user is staff (Authorized personnel: Admin or Staff)
+ * 
+ * [AUTHORIZATION] staff = admin หรือ staff role
+ * ใช้สำหรับหน้า admin ที่ไม่ต้องการสิทธิ์ admin เต็ม (เช่น books, borrows)
  */
 function isStaff(): bool
 {
@@ -245,6 +254,9 @@ function getReservationStatusLabel(string $status): string
 
 /**
  * Validate email format
+ * 
+ * [VALIDATION] ใช้ PHP built-in filter - รองรับ RFC 5321
+ * ไม่ได้ตรวจว่า email มีจริงหรือไม่ (ต้องส่ง verification email เอง)
  */
 function isValidEmail(string $email): bool
 {
@@ -253,6 +265,9 @@ function isValidEmail(string $email): bool
 
 /**
  * Validate phone format (Thai)
+ * 
+ * [VALIDATION] รองรับเฉพาะเบอร์ไทย 9-10 หลัก
+ * ถ้าต้องการ international format ต้องแก้ regex
  */
 function isValidPhone(string $phone): bool
 {
@@ -261,9 +276,15 @@ function isValidPhone(string $phone): bool
 
 /**
  * Generate CSRF token
+ * 
+ * [SECURITY] ป้องกัน Cross-Site Request Forgery
+ * - ใช้ random_bytes (cryptographically secure)
+ * - Token เดียวต่อ session (ไม่สร้างใหม่ทุกครั้ง)
+ * - ถ้าต้องการ per-request token ต้องแก้ logic ตรงนี้
  */
 function generateCSRFToken(): string
 {
+    // [NOTE] Token ถูกสร้างครั้งเดียวต่อ session - ถ้า session หมดอายุ token ก็หมดด้วย
     if (!isset($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
@@ -272,6 +293,9 @@ function generateCSRFToken(): string
 
 /**
  * Validate CSRF token
+ * 
+ * [SECURITY] ใช้ hash_equals() ป้องกัน timing attack
+ * - ห้ามใช้ == หรือ === เปรียบเทียบ token โดยตรง
  */
 function validateCSRFToken(string $token): bool
 {
