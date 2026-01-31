@@ -33,12 +33,12 @@ class ReservationService
         $this->pdo->beginTransaction();
 
         try {
-            // 1. Check if user already reserved this book (pending)
+            // 1. ตรวจสอบว่า User เคยจองเล่มนี้ไว้แล้วหรือยัง (สถานะ pending)
             if ($this->hasPendingReservation($userId, $bookId)) {
                 throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
             }
 
-            // 2. Check book availability
+            // 2. ตรวจสอบว่าหนังสือว่างไหม (พร้อมล็อคแถวเพื่อกันแย่งกันจอง)
             $stmt = $this->pdo->prepare("
                 SELECT available, quantity, title FROM books WHERE id = ? FOR UPDATE
             ");
@@ -53,7 +53,7 @@ class ReservationService
                 throw new Exception('หนังสือหมด ไม่สามารถจองได้');
             }
 
-            // 3. Create Reservation
+            // 3. สร้างรายการจอง (Create Reservation)
             $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
 
             $stmt = $this->pdo->prepare("
@@ -62,7 +62,7 @@ class ReservationService
             ");
             $stmt->execute([$userId, $bookId, $expiresAt]);
 
-            // 4. Decrement Stock
+            // 4. ตัดสต็อกหนังสือ (Decrement Stock)
             $stmt = $this->pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
             $stmt->execute([$bookId]);
 

@@ -27,8 +27,8 @@ class BorrowService
      * 
      * @param int $userId ID ผู้ยืม
      * @param array $bookIds รายการ ID หนังสือที่ต้องการยืม
-     * @param int $borrowDays จำนวนวันที่ยืม
-     * @return array ['success' => bool, 'borrowed' => [], 'skipped' => [], 'message' => string]
+     * @param int $borrowDays จำนวนวันที่ยืม (ถ้าไม่ระบุจะใช้ค่า Default)
+     * @return array ผลลัพธ์ ['success' => bool, 'borrowed' => [], 'skipped' => [], 'message' => string]
      * @throws Exception
      */
     public function createBorrow(int $userId, array $bookIds, int $borrowDays = null): array
@@ -61,7 +61,13 @@ class BorrowService
         $this->pdo->beginTransaction();
 
         try {
-            // Check member's current borrows
+            // 🔒 Critical Fix: ล็อคแถวข้อมูลผู้ใช้งาน (User Row) ก่อนเป็นอันดับแรก เพื่อป้องกัน Race Condition
+            // เพื่อให้แน่ใจว่าจะมี Transaction เดียวเท่านั้นที่ทำงานกับ User นี้ได้ในช่วงเวลานั้น
+            // (ป้องกันกรณีเปิด 2 แท็บแล้วกดยืมพร้อมกันจนทะลุโควต้า)
+            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = ? FOR UPDATE");
+            $stmt->execute([$userId]);
+
+            // ตรวจสอบจำนวนหนังสือที่ยืมอยู่ปัจจุบัน
             $currentBorrows = $this->countActiveBorrows($userId);
             $availableSlots = MAX_BORROW_BOOKS - $currentBorrows;
 
@@ -108,7 +114,7 @@ class BorrowService
      * @param int $borrowId ID รายการยืม
      * @param bool $payNow ชำระค่าปรับทันทีหรือไม่
      * @param int|null $recordedBy ID ผู้บันทึก (สำหรับ payment)
-     * @return array ['success' => bool, 'fine' => array, 'message' => string]
+     * @return array ผลลัพธ์ ['success' => bool, 'fine' => array, 'message' => string]
      * @throws Exception
      */
     public function returnBook(int $borrowId, bool $payNow = false, ?int $recordedBy = null): array
