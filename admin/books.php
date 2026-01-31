@@ -13,6 +13,7 @@ $pdo = getDB();
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
+$sort = $_GET['sort'] ?? 'newest';
 
 // Build query
 $where = [];
@@ -32,11 +33,19 @@ if ($categoryId > 0) {
 
 if ($status === 'available') {
     $where[] = "b.available > 0";
-} elseif ($status === 'borrowed') {
-    $where[] = "b.available < b.quantity";
+} elseif ($status === 'out_of_stock') {
+    $where[] = "b.available = 0";
 }
 
 $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+// Sort map
+$orderBy = 'b.created_at DESC';
+switch ($sort) {
+    case 'oldest': $orderBy = 'b.created_at ASC'; break;
+    case 'az': $orderBy = 'b.title ASC'; break;
+    default: $orderBy = 'b.created_at DESC'; break;
+}
 
 // Get books
 $sql = "
@@ -44,7 +53,7 @@ $sql = "
     FROM books b
     LEFT JOIN categories c ON b.category_id = c.id
     $whereSQL
-    ORDER BY b.created_at DESC
+    ORDER BY $orderBy
 ";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -123,9 +132,14 @@ require_once __DIR__ . '/header.php';
         <h3 class="text-lg font-bold text-gray-800">รายการหนังสือทั้งหมด</h3>
         <p class="text-sm text-gray-500">ทั้งหมด <?= count($books) ?> เล่ม</p>
     </div>
-    <a href="book_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
-        <i class="bi bi-plus-circle mr-2"></i>เพิ่มหนังสือใหม่
-    </a>
+    <div class="flex gap-2">
+        <a href="import_books.php" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm">
+            <i class="bi bi-file-earmark-spreadsheet mr-2 text-green-600"></i>Import CSV
+        </a>
+        <a href="book_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+            <i class="bi bi-plus-circle mr-2"></i>เพิ่มหนังสือใหม่
+        </a>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -133,12 +147,12 @@ require_once __DIR__ . '/header.php';
     <div class="text-sm font-bold text-gray-700 mb-4 flex items-center">
         <i class="bi bi-funnel mr-2"></i>ตัวกรอง
     </div>
-    <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-        <div class="md:col-span-1">
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        <div class="md:col-span-3">
             <label class="block text-xs font-medium text-gray-700 mb-1">ค้นหา</label>
             <input type="text" class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="search" value="<?= e($search) ?>" placeholder="ชื่อ, ผู้แต่ง, ISBN...">
         </div>
-        <div>
+        <div class="md:col-span-3">
             <label class="block text-xs font-medium text-gray-700 mb-1">หมวดหมู่</label>
             <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="category">
                 <option value="">ทั้งหมด</option>
@@ -149,15 +163,23 @@ require_once __DIR__ . '/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <div>
+        <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">สถานะ</label>
             <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="status">
                 <option value="">ทั้งหมด</option>
-                <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>ว่าง</option>
-                <option value="borrowed" <?= $status === 'borrowed' ? 'selected' : '' ?>>ถูกยืม</option>
+                <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>มีของ</option>
+                <option value="out_of_stock" <?= $status === 'out_of_stock' ? 'selected' : '' ?>>หนังสือหมด</option>
             </select>
         </div>
-        <div class="flex gap-2">
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-700 mb-1">เรียงลำดับ</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="sort">
+                <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>ใหม่ล่าสุด</option>
+                <option value="oldest" <?= $sort === 'oldest' ? 'selected' : '' ?>>เก่าที่สุด</option>
+                <option value="az" <?= $sort === 'az' ? 'selected' : '' ?>>ชื่อ (A-Z, ก-ฮ)</option>
+            </select>
+        </div>
+        <div class="md:col-span-2 flex gap-2">
             <button type="submit" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                 <i class="bi bi-search mr-1"></i>ค้นหา
             </button>

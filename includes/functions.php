@@ -25,11 +25,12 @@ function redirect(string $url): void
 /**
  * Set flash message
  */
-function setFlash(string $type, string $message): void
+function setFlash(string $type, string $message, bool $isHtml = false): void
 {
     $_SESSION['flash'] = [
         'type' => $type,
-        'message' => $message
+        'message' => $message,
+        'isHtml' => $isHtml
     ];
 }
 
@@ -71,7 +72,10 @@ function displayFlash(): void
 
         echo '<div class="' . $colorClass . ' border-l-4 p-4 mb-6 rounded-r-lg shadow-sm flex items-start animate-fade-in-down" role="alert">';
         echo '<div class="flex-shrink-0 mr-3"><i class="bi ' . $icon . '"></i></div>';
-        echo '<div class="flex-grow">' . e($flash['message']) . '</div>';
+        
+        $content = $flash['isHtml'] ? $flash['message'] : e($flash['message']);
+        
+        echo '<div class="flex-grow">' . $content . '</div>';
         echo '<button type="button" class="ml-auto -mx-1.5 -my-1.5 rounded-lg p-1.5 inline-flex h-8 w-8 hover:bg-white/25 focus:ring-2 focus:ring-offset-2 focus:ring-offset-' . str_replace(['bg-', '-50'], ['text-', '-500'], $colorClass) . '" onclick="this.parentElement.remove()">';
         echo '<span class="sr-only">Close</span>';
         echo '<i class="bi bi-x text-lg"></i>';

@@ -9,29 +9,55 @@ require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
 
-// Get search parameter
+// Get parameters
 $search = trim($_GET['search'] ?? '');
+$status = $_GET['status'] ?? '';
+$sort = $_GET['sort'] ?? 'newest';
 
-// Build query
-$where = "role = 'member'";
+// Base params
 $params = [];
+$whereClauses = ["role = 'member'"];
 
+// Search
 if (!empty($search)) {
-    $where .= " AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+    $whereClauses[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
 
-// Get members with borrow stats
+// Build WHERE SQL
+$whereSQL = implode(' AND ', $whereClauses);
+
+// Sort mapping
+$orderBy = 'u.created_at DESC';
+switch ($sort) {
+    case 'oldest': $orderBy = 'u.created_at ASC'; break;
+    case 'az': $orderBy = 'u.name ASC'; break;
+    case 'za': $orderBy = 'u.name DESC'; break;
+    case 'most_borrows': $orderBy = 'total_borrows DESC'; break;
+    default: $orderBy = 'u.created_at DESC'; break;
+}
+
+// Helper filter for status needs HAVING or Subquery
+// To keep it simple, we'll use HAVING
+$havingSQL = "";
+if ($status === 'has_borrow') {
+    $havingSQL = "HAVING active_borrows > 0";
+} elseif ($status === 'no_borrow') {
+    $havingSQL = "HAVING active_borrows = 0";
+}
+
 $sql = "
     SELECT u.*,
            (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
            (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
     FROM users u
-    WHERE $where
-    ORDER BY u.created_at DESC
+    WHERE $whereSQL
+    $havingSQL
+    ORDER BY $orderBy
 ";
+
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $members = $stmt->fetchAll();
@@ -46,26 +72,48 @@ require_once __DIR__ . '/header.php';
         <h3 class="text-lg font-bold text-gray-800">จัดการสมาชิก</h3>
         <p class="text-sm text-gray-500">ทั้งหมด <?= count($members) ?> คน</p>
     </div>
-    <a href="member_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
-        <i class="bi bi-person-plus-fill mr-2"></i>เพิ่มสมาชิก
-    </a>
+    <div class="flex gap-2">
+        <a href="import_members.php" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm">
+            <i class="bi bi-file-earmark-spreadsheet mr-2 text-blue-600"></i>Import CSV
+        </a>
+        <a href="member_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+            <i class="bi bi-person-plus-fill mr-2"></i>เพิ่มสมาชิก
+        </a>
+    </div>
 </div>
 
-<!-- Search -->
+<!-- Search & Filter -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <div class="text-sm font-bold text-gray-700 mb-4 flex items-center">
-        <i class="bi bi-search mr-2"></i>ค้นหาสมาชิก
+        <i class="bi bi-funnel mr-2"></i>ตัวกรอง
     </div>
     <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-        <div class="md:col-span-8">
+        <div class="md:col-span-4">
             <label class="block text-xs font-medium text-gray-700 mb-1">ค้นหา</label>
             <input type="text" class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="search" value="<?= e($search) ?>" placeholder="ชื่อ, อีเมล, เบอร์โทร...">
         </div>
-        <div class="md:col-span-4 flex gap-2">
-            <button type="submit" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <div class="md:col-span-3">
+            <label class="block text-xs font-medium text-gray-700 mb-1">สถานะ</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="status">
+                <option value="">ทั้งหมด</option>
+                <option value="has_borrow" <?= $status === 'has_borrow' ? 'selected' : '' ?>>กำลังยืมหนังสือ</option>
+                <option value="no_borrow" <?= $status === 'no_borrow' ? 'selected' : '' ?>>ปกติ (ไม่ได้ยืม)</option>
+            </select>
+        </div>
+        <div class="md:col-span-3">
+            <label class="block text-xs font-medium text-gray-700 mb-1">เรียงลำดับ</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="sort">
+                <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>สมัครล่าสุด</option>
+                <option value="oldest" <?= $sort === 'oldest' ? 'selected' : '' ?>>เก่าที่สุด</option>
+                <option value="az" <?= $sort === 'az' ? 'selected' : '' ?>>ชื่อ (A-Z, ก-ฮ)</option>
+                <option value="most_borrows" <?= $sort === 'most_borrows' ? 'selected' : '' ?>>ยืมบ่อยสุด</option>
+            </select>
+        </div>
+        <div class="md:col-span-2 flex gap-2">
+            <button type="submit" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                 <i class="bi bi-search mr-1"></i>ค้นหา
             </button>
-            <a href="members.php" class="px-3 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors border border-gray-200">ล้าง</a>
+            <a href="members.php" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors">ล้าง</a>
         </div>
     </form>
 </div>
