@@ -3,10 +3,8 @@
  * Borrows Management - จัดการยืม-คืน
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../app/Services/BorrowService.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
 
 use App\Services\BorrowService;
 

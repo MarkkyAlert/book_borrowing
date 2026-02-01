@@ -3,13 +3,14 @@
  * Admin: Advanced Reports
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 requireAdmin(); // Reports are for Admin only
 
-$pdo = getDB();
-$reportType = $_GET['report'] ?? 'books'; // books, members, revenue
+use App\Repositories\ReportRepository;
+
+$reportRepo = new ReportRepository(getDB());
+$reportType = $_GET['report'] ?? 'books';
 $isExport = isset($_GET['export']) && $_GET['export'] === 'csv';
 
 // Prepare Data based on Report Type
@@ -18,65 +19,24 @@ $headers = [];
 $filename = "report_" . date('Y-m-d');
 
 if ($reportType === 'books') {
-    // Top Borrowed Books
-    $sql = "
-        SELECT b.title, c.name as category, COUNT(br.id) as borrow_count,
-               (b.quantity - b.available) as currently_borrowed
-        FROM books b
-        LEFT JOIN categories c ON b.category_id = c.id
-        LEFT JOIN borrows br ON b.id = br.book_id
-        GROUP BY b.id
-        ORDER BY borrow_count DESC
-        LIMIT 50
-    ";
+    $data = $reportRepo->getTopBooksReport(50);
     $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม (ครั้ง)', 'กำลังถูกยืม (เล่ม)'];
     $filename = "top_books_" . date('Y-m-d');
     
 } elseif ($reportType === 'members') {
-    // Top Active Members
-    $sql = "
-        SELECT u.name, u.email, u.role, COUNT(br.id) as borrow_count,
-               SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
-        FROM users u
-        JOIN borrows br ON u.id = br.user_id
-        WHERE u.role != 'admin'
-        GROUP BY u.id
-        ORDER BY borrow_count DESC
-        LIMIT 50
-    ";
+    $data = $reportRepo->getTopMembersReport(50);
     $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม (เล่ม)', 'กำลังยืมอยู่ (เล่ม)'];
     $filename = "top_members_" . date('Y-m-d');
 
 } elseif ($reportType === 'revenue') {
-    // Daily Revenue
-    $sql = "
-        SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
-        FROM payments
-        GROUP BY DATE(payment_date)
-        ORDER BY payment_day DESC
-        LIMIT 30
-    ";
+    $data = $reportRepo->getDailyRevenueReport(30);
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
     $filename = "daily_revenue_" . date('Y-m-d');
 
 } elseif ($reportType === 'overdue') {
-    // Overdue Books
-    $sql = "
-        SELECT u.name, u.phone, bk.title, b.borrow_date, b.due_date,
-               DATEDIFF(CURDATE(), b.due_date) as days_overdue
-        FROM borrows b
-        JOIN users u ON b.user_id = u.id
-        JOIN books bk ON b.book_id = bk.id
-        WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-        ORDER BY b.due_date ASC
-    ";
+    $data = $reportRepo->getOverdueReport();
     $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
     $filename = "overdue_books_" . date('Y-m-d');
-}
-
-if (isset($sql)) {
-    $stmt = $pdo->query($sql);
-    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Handle Export

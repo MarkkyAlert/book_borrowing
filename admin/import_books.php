@@ -4,11 +4,16 @@
  * นำเข้าหนังสือจากไฟล์ CSV
  */
 
-require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
-require_once __DIR__ . '/../includes/db.php';
+
+use App\Repositories\BookRepository;
+use App\Repositories\CategoryRepository;
 
 $pdo = getDB();
+$bookRepo = new BookRepository($pdo);
+$categoryRepo = new CategoryRepository($pdo);
+
 $messages = [];
 $errors = [];
 $successCount = 0;
@@ -36,17 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             $pdo->beginTransaction();
             
             try {
-                // Prepare statements
-                $stmtCheck = $pdo->prepare("SELECT id FROM books WHERE title = ? AND author = ?");
-                $stmtUpdate = $pdo->prepare("UPDATE books SET quantity = quantity + ?, available = available + ? WHERE id = ?");
-                $stmtInsert = $pdo->prepare("INSERT INTO books (title, author, isbn, category_id, quantity, available) VALUES (?, ?, ?, ?, ?, ?)");
-                
-                $stmtCatCheck = $pdo->prepare("SELECT id FROM categories WHERE name = ?");
-                $stmtCatInsert = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
-                
                 $createdCount = 0;
                 $updatedCount = 0;
-                $rowNumber = 1; // Start from 1 (header is already read)
+                $rowNumber = 1;
                 $skippedDetails = [];
                 
                 while (($row = fgetcsv($handle)) !== false) {
@@ -69,30 +66,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         continue;
                     }
                     
-                    // 1. Check if Book Exists (Merge Strategy)
-                    $stmtCheck->execute([$title, $author]);
-                    $existingBook = $stmtCheck->fetch();
+                    // 1. Check if Book Exists (Merge Strategy) using repository
+                    $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
                     
                     if ($existingBook) {
-                        // UPDATE: Add to existing quantity
-                        $stmtUpdate->execute([$qty, $qty, $existingBook['id']]);
+                        // UPDATE: Add to existing quantity using repository
+                        $bookRepo->addQuantity($existingBook['id'], $qty);
                         $updatedCount++;
                     } else {
                         // INSERT: Create new book
-                        // Handle Category first
+                        // Handle Category first using repository
                         $categoryId = null;
                         if (!empty($categoryName)) {
-                            $stmtCatCheck->execute([$categoryName]);
-                            $cat = $stmtCatCheck->fetch();
+                            $cat = $categoryRepo->findByName($categoryName);
                             if ($cat) {
                                 $categoryId = $cat['id'];
                             } else {
-                                $stmtCatInsert->execute([$categoryName]);
-                                $categoryId = $pdo->lastInsertId();
+                                $categoryId = $categoryRepo->create($categoryName);
                             }
                         }
                         
-                        $stmtInsert->execute([$title, $author, $isbn, $categoryId, $qty, $qty]);
+                        // Create book using repository
+                        $bookRepo->create([
+                            'title' => $title,
+                            'author' => $author,
+                            'isbn' => $isbn ?: null,
+                            'category_id' => $categoryId,
+                            'quantity' => $qty
+                        ]);
                         $createdCount++;
                     }
                 }

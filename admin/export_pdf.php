@@ -4,12 +4,13 @@
  * ใช้ window.print() เพื่อแปลงเป็น PDF โดยไม่ต้องติดตั้ง library
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 requireAdmin();
 
-$pdo = getDB();
+use App\Repositories\ReportRepository;
+
+$reportRepo = new ReportRepository(getDB());
 $reportType = $_GET['report'] ?? 'books';
 
 // Prepare Data
@@ -19,63 +20,25 @@ $reportTitle = '';
 $filename = "report_" . date('Y-m-d');
 
 if ($reportType === 'books') {
-    $sql = "
-        SELECT b.title, c.name as category, COUNT(br.id) as borrow_count,
-               (b.quantity - b.available) as currently_borrowed
-        FROM books b
-        LEFT JOIN categories c ON b.category_id = c.id
-        LEFT JOIN borrows br ON b.id = br.book_id
-        GROUP BY b.id
-        ORDER BY borrow_count DESC
-        LIMIT 50
-    ";
+    $data = $reportRepo->getTopBooksReport(50);
     $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม', 'กำลังถูกยืม'];
     $reportTitle = 'รายงานหนังสือยอดนิยม';
     $filename = "top_books_" . date('Y-m-d');
     
 } elseif ($reportType === 'members') {
-    $sql = "
-        SELECT u.name, u.email, 
-               CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,
-               COUNT(br.id) as borrow_count,
-               SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
-        FROM users u
-        JOIN borrows br ON u.id = br.user_id
-        WHERE u.role != 'admin'
-        GROUP BY u.id
-        ORDER BY borrow_count DESC
-        LIMIT 50
-    ";
+    $data = $reportRepo->getTopMembersReportForPdf(50);
     $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม', 'กำลังยืมอยู่'];
     $reportTitle = 'รายงานสมาชิกที่ใช้บริการบ่อย';
     $filename = "top_members_" . date('Y-m-d');
 
 } elseif ($reportType === 'revenue') {
-    $sql = "
-        SELECT DATE_FORMAT(payment_date, '%d/%m/%Y') as payment_day, 
-               COUNT(id) as transaction_count, 
-               SUM(amount) as total_amount
-        FROM payments
-        GROUP BY DATE(payment_date)
-        ORDER BY payment_date DESC
-        LIMIT 30
-    ";
+    $data = $reportRepo->getDailyRevenueReportForPdf(30);
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
     $reportTitle = 'รายงานสรุปรายได้ค่าปรับ';
     $filename = "daily_revenue_" . date('Y-m-d');
 
 } elseif ($reportType === 'overdue') {
-    $sql = "
-        SELECT u.name, u.phone, bk.title, 
-               DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date,
-               DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date,
-               DATEDIFF(CURDATE(), b.due_date) as days_overdue
-        FROM borrows b
-        JOIN users u ON b.user_id = u.id
-        JOIN books bk ON b.book_id = bk.id
-        WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-        ORDER BY b.due_date ASC
-    ";
+    $data = $reportRepo->getOverdueReportForPdf();
     $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
     $reportTitle = 'รายงานหนังสือค้างส่ง';
     $filename = "overdue_" . date('Y-m-d');
@@ -84,31 +47,11 @@ if ($reportType === 'books') {
     $dateFrom = $_GET['from'] ?? date('Y-m-01');
     $dateTo = $_GET['to'] ?? date('Y-m-d');
     
-    $sql = "
-        SELECT u.name, bk.title, 
-               DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date,
-               DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date,
-               CASE b.status WHEN 'returned' THEN 'คืนแล้ว' ELSE 'กำลังยืม' END as status_text,
-               COALESCE(b.fine_amount, 0) as fine
-        FROM borrows b
-        JOIN users u ON b.user_id = u.id
-        JOIN books bk ON b.book_id = bk.id
-        WHERE b.borrow_date BETWEEN ? AND ?
-        ORDER BY b.borrow_date DESC
-    ";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$dateFrom, $dateTo]);
-    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $data = $reportRepo->getBorrowsReport($dateFrom, $dateTo);
     
     $headers = ['ผู้ยืม', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'สถานะ', 'ค่าปรับ'];
     $reportTitle = 'รายงานการยืม-คืน (' . formatDate($dateFrom) . ' - ' . formatDate($dateTo) . ')';
     $filename = "borrows_" . date('Y-m-d');
-}
-
-// Execute query if not already done
-if (empty($data) && isset($sql)) {
-    $stmt = $pdo->query($sql);
-    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $orgName = getSetting('org_name', 'ระบบห้องสมุด');

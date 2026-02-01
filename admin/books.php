@@ -3,17 +3,15 @@
  * Books Management - จัดการหนังสือ
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Services\BookService;
+use App\Repositories\CategoryRepository;
 
 $pdo = getDB();
-
-// [REFACTORED] ใช้ Services แทน SQL Query โดยตรง
-require_once __DIR__ . '/../app/Services/BookService.php';
-require_once __DIR__ . '/../app/Repositories/CategoryRepository.php';
-$bookService = new \App\Services\BookService($pdo);
-$categoryRepo = new \App\Repositories\CategoryRepository($pdo);
+$bookService = new BookService($pdo);
+$categoryRepo = new CategoryRepository($pdo);
 
 // Get filter parameters
 $search = trim($_GET['search'] ?? '');

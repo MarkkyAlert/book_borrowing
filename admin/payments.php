@@ -3,14 +3,13 @@
  * Admin: Payment History
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../app/Repositories/PaymentRepository.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
 
-requireStaff(); // Staff can view payments
+use App\Repositories\PaymentRepository;
 
 $pdo = getDB();
-$paymentRepo = new \App\Repositories\PaymentRepository($pdo);
+$paymentRepo = new PaymentRepository($pdo);
 
 // Calculate Total Revenue via Repository
 $totalRevenue = $paymentRepo->getTotalCollected();

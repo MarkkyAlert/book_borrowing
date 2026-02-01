@@ -3,23 +3,25 @@
  * Borrow Form - บันทึกการยืม (Enhanced UX)
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Repositories\BookRepository;
+use App\Repositories\UserRepository;
+use App\Services\BorrowService;
 
 $pdo = getDB();
+$bookRepo = new BookRepository($pdo);
+$userRepo = new UserRepository($pdo);
+$borrowService = new BorrowService($pdo);
+
 $errors = [];
-$successCount = 0;
 
-// Get available books (with at least 1 copy available)
-$availableBooks = $pdo->query("
-    SELECT * FROM books WHERE available > 0 ORDER BY title
-")->fetchAll();
+// Get available books using repository
+$availableBooks = $bookRepo->findAvailable();
 
-// Get members
-$members = $pdo->query("
-    SELECT id, name, email, phone FROM users WHERE role = 'member' ORDER BY name
-")->fetchAll();
+// Get members using repository
+$members = $userRepo->findAllMembers();
 
 // Handle AJAX Scan Requests
 if (isset($_POST['action']) && $_POST['action'] === 'scan') {
@@ -29,15 +31,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'scan') {
 
     try {
         if ($type === 'user') {
-            $stmt = $pdo->prepare("SELECT id, name, email FROM users WHERE id = ? AND role = 'member'");
-            $stmt->execute([$id]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $user = $userRepo->findMemberById((int)$id);
             echo json_encode(['success' => !!$user, 'data' => $user, 'message' => $user ? 'พบสมาชิก' : 'ไม่พบสมาชิก']);
         } elseif ($type === 'book') {
-            // Find book by ID (Barcode often used as ID in simple systems, or dedicated barcode field if exists. Here using ID)
-            $stmt = $pdo->prepare("SELECT id, title, author, available FROM books WHERE (id = ? OR isbn = ?)");
-            $stmt->execute([$id, $id]);
-            $book = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Find book by ID or ISBN
+            $book = $bookRepo->findByIdOrIsbn($id);
             
             if ($book) {
                 if ($book['available'] > 0) {
@@ -86,102 +84,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'จำนวนวันยืมต้องอยู่ระหว่าง 1-30 วัน';
     }
     
-    // Validate user exists and is member
+    // Validate user exists and is member using repository
     if (empty($errors)) {
-        $stmt = $pdo->prepare("SELECT id, name FROM users WHERE id = ? AND role = 'member'");
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
+        $user = $userRepo->findMemberById($userId);
         if (!$user) {
             $errors[] = 'ไม่พบสมาชิกที่เลือก';
         }
     }
-    
+    // Use BorrowService for transaction logic
     if (empty($errors)) {
-        $borrowDate = date('Y-m-d');
-        $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
-        
-        // [DB] Transaction สำคัญ! - ต้อง atomic เพราะมี 2 operations:
-        // 1. INSERT borrows, 2. UPDATE books.available
-        // ถ้าทำแยก อาจเกิด inconsistency (ยืมสำเร็จแต่ stock ไม่ลด)
-        $pdo->beginTransaction();
-        
         try {
-            // [CONCURRENCY] ล็อคแถว borrows ของ user นี้ก่อน
-            // ป้องกันกรณี 2 staff กดยืมให้คนเดียวกันพร้อมกัน → ทะลุโควต้า
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ? AND status = 'borrowing' FOR UPDATE");
-            $stmt->execute([$userId]);
-            $currentBorrows = $stmt->fetchColumn();
+            $result = $borrowService->createBorrow($userId, $bookIds, $borrowDays);
             
-            // [BUSINESS RULE] ตรวจโควต้าการยืม - กำหนดใน config.php
-            $availableSlots = MAX_BORROW_BOOKS - $currentBorrows;
-            
-            if ($availableSlots <= 0) {
-                throw new Exception('ผู้ยืมถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
-            }
-            
-            if (count($bookIds) > $availableSlots) {
-                throw new Exception("ผู้ยืมสามารถยืมได้อีก {$availableSlots} เล่มเท่านั้น");
-            }
-            
-            $borrowedBooks = [];
-            $skippedBooks = [];
-            
-            foreach ($bookIds as $bookId) {
-                // [CONCURRENCY] ล็อคแถวหนังสือแต่ละเล่ม - ป้องกัน 2 คนยืมเล่มสุดท้ายพร้อมกัน
-                $stmt = $pdo->prepare("SELECT id, title, available FROM books WHERE id = ? FOR UPDATE");
-                $stmt->execute([$bookId]);
-                $book = $stmt->fetch();
-                
-                if (!$book) {
-                    $skippedBooks[] = "หนังสือ ID: {$bookId} ไม่พบ";
-                    continue;
-                }
-                
-                // [STATE CHECK] ตรวจว่ามีของเหลือหรือไม่
-                if ($book['available'] <= 0) {
-                    $skippedBooks[] = $book['title'] . ' (ไม่มีเล่มว่าง)';
-                    continue;
-                }
-                
-                // [STATE CHECK] ตรวจว่าคนนี้ยืมเล่มนี้อยู่แล้วหรือไม่ - ป้องกันยืมซ้ำ
-                $stmt = $pdo->prepare("SELECT id FROM borrows WHERE user_id = ? AND book_id = ? AND status = 'borrowing'");
-                $stmt->execute([$userId, $bookId]);
-                if ($stmt->fetch()) {
-                    $skippedBooks[] = $book['title'] . ' (ยืมอยู่แล้ว)';
-                    continue;
-                }
-                
-                // [DB WRITE] บันทึกการยืม - status เริ่มต้นเป็น 'borrowing'
-                $stmt = $pdo->prepare("
-                    INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
-                    VALUES (?, ?, ?, ?, 'borrowing')
-                ");
-                $stmt->execute([$userId, $bookId, $borrowDate, $dueDate]);
-                
-                // [DB WRITE] ลด stock - ต้องทำใน transaction เดียวกับ INSERT
-                $stmt = $pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
-                $stmt->execute([$bookId]);
-                
-                $borrowedBooks[] = $book['title'];
-                $successCount++;
-            }
-            
-            $pdo->commit();
-            
-            if ($successCount > 0) {
-                $message = "บันทึกการยืมสำเร็จ {$successCount} เล่ม";
-                if (!empty($skippedBooks)) {
-                    $message .= " (ข้าม: " . implode(', ', $skippedBooks) . ")";
-                }
-                $message .= " | กำหนดคืน: " . formatDate($dueDate);
-                setFlash('success', $message);
+            if ($result['success']) {
+                setFlash('success', $result['message']);
             } else {
-                setFlash('warning', 'ไม่สามารถยืมหนังสือได้: ' . implode(', ', $skippedBooks));
+                setFlash('warning', $result['message']);
             }
             
             redirect('borrows.php');
         } catch (Exception $e) {
-            $pdo->rollBack();
             $errors[] = $e->getMessage();
         }
     }

@@ -3,11 +3,16 @@
  * Book Form - เพิ่ม/แก้ไขหนังสือ
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Repositories\BookRepository;
+use App\Repositories\CategoryRepository;
 
 $pdo = getDB();
+$bookRepo = new BookRepository($pdo);
+$categoryRepo = new CategoryRepository($pdo);
+
 $errors = [];
 $book = [
     'id' => 0,
@@ -25,9 +30,7 @@ $isEdit = false;
 // Get book for editing
 if (isset($_GET['id'])) {
     $id = (int) $_GET['id'];
-    $stmt = $pdo->prepare("SELECT * FROM books WHERE id = ?");
-    $stmt->execute([$id]);
-    $existingBook = $stmt->fetch();
+    $existingBook = $bookRepo->findById($id);
     
     if ($existingBook) {
         $book = $existingBook;
@@ -68,11 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'ชื่อผู้แต่งต้องไม่เกิน 100 ตัวอักษร';
     }
     
-    // Check ISBN duplicate
+    // Check ISBN duplicate using repository
     if (!empty($book['isbn'])) {
-        $stmt = $pdo->prepare("SELECT id FROM books WHERE isbn = ? AND id != ?");
-        $stmt->execute([$book['isbn'], $book['id']]);
-        if ($stmt->fetch()) {
+        if ($bookRepo->isbnExists($book['isbn'], $book['id'] ?: null)) {
             $errors[] = 'ISBN นี้มีในระบบแล้ว';
         }
     }
@@ -126,44 +127,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
+        $bookData = [
+            'title' => $book['title'],
+            'author' => $book['author'],
+            'isbn' => $book['isbn'] ?: null,
+            'category_id' => $book['category_id'],
+            'description' => $book['description'] ?: null,
+            'cover_image' => $coverImage,
+            'quantity' => $book['quantity']
+        ];
+        
         if ($isEdit) {
-            $stmt = $pdo->prepare("
-                UPDATE books SET title = ?, author = ?, isbn = ?, category_id = ?, description = ?, cover_image = ?
-                WHERE id = ?
-            ");
-            $stmt->execute([
-                $book['title'],
-                $book['author'],
-                $book['isbn'] ?: null,
-                $book['category_id'],
-                $book['description'] ?: null,
-                $coverImage,
-                $book['id']
-            ]);
+            $bookRepo->update($book['id'], $bookData);
             setFlash('success', 'อัปเดตหนังสือสำเร็จ');
         } else {
-            $stmt = $pdo->prepare("
-                INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $book['title'],
-                $book['author'],
-                $book['isbn'] ?: null,
-                $book['category_id'],
-                $book['description'] ?: null,
-                $coverImage,
-                $book['quantity'],
-                $book['quantity']
-            ]);
+            $bookRepo->create($bookData);
             setFlash('success', 'เพิ่มหนังสือสำเร็จ');
         }
         redirect('books.php');
     }
 }
 
-// Get categories
-$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+// Get categories using repository
+$categories = $categoryRepo->findAll();
 
 $pageTitle = $isEdit ? 'แก้ไขหนังสือ' : 'เพิ่มหนังสือ';
 require_once __DIR__ . '/header.php';

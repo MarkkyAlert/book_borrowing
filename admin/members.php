@@ -3,15 +3,15 @@
  * Members Management - จัดการสมาชิก
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Services\MemberService;
+use App\Repositories\BorrowRepository;
 
 $pdo = getDB();
-
-// [REFACTORED] ใช้ MemberService แทน SQL Query โดยตรง
-require_once __DIR__ . '/../app/Services/MemberService.php';
-$memberService = new \App\Services\MemberService($pdo);
+$memberService = new MemberService($pdo);
+$borrowRepo = new BorrowRepository($pdo);
 
 // Get parameters
 $search = trim($_GET['search'] ?? '');
@@ -163,16 +163,8 @@ require_once __DIR__ . '/header.php';
 <!-- Borrow History Modals -->
 <?php foreach ($members as $member): ?>
     <?php
-    $stmt = $pdo->prepare("
-        SELECT b.*, bk.title as book_title
-        FROM borrows b
-        JOIN books bk ON b.book_id = bk.id
-        WHERE b.user_id = ?
-        ORDER BY b.created_at DESC
-        LIMIT 10
-    ");
-    $stmt->execute([$member['id']]);
-    $history = $stmt->fetchAll();
+    // Use repository instead of raw SQL
+    $history = $borrowRepo->findByUserId($member['id'], 10);
     ?>
     
     <div id="historyModal<?= $member['id'] ?>" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

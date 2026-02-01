@@ -3,17 +3,16 @@
  * Admin: Member Card Generator
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 requireAdmin();
 
-$id = (int)($_GET['id'] ?? 0);
-$pdo = getDB();
+use App\Repositories\UserRepository;
 
-$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role = 'member'");
-$stmt->execute([$id]);
-$member = $stmt->fetch();
+$id = (int)($_GET['id'] ?? 0);
+$userRepo = new UserRepository(getDB());
+
+$member = $userRepo->findMemberById($id);
 
 if (!$member) {
     die("ไม่พบสมาชิก");

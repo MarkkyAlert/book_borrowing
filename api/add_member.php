@@ -1,10 +1,18 @@
 <?php
 /**
  * AJAX: Quick Add Member
+ * 
+ * ⚠️ กติกา: ไฟล์นี้ทำหน้าที่ Controller เท่านั้น
+ * - ตรวจ method / auth / validate input
+ * - เรียก Repository
+ * - ส่ง JSON response
+ * - ห้ามใส่ business logic
+ * - ห้ามเขียน SQL โดยตรง
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+
+use App\Repositories\UserRepository;
 
 header('Content-Type: application/json');
 
@@ -31,6 +39,7 @@ if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
 }
 
 $pdo = getDB();
+$userRepo = new UserRepository($pdo);
 
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
@@ -50,10 +59,8 @@ if (empty($email)) {
 } elseif (!isValidEmail($email)) {
     $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
 } else {
-    // Check duplicate email
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
+    // Check duplicate email using Repository
+    if ($userRepo->emailExists($email)) {
         $errors[] = 'อีเมลนี้ถูกใช้งานแล้ว';
     }
 }
@@ -63,6 +70,7 @@ if (!empty($phone) && !isValidPhone($phone)) {
 }
 
 if (!empty($errors)) {
+    http_response_code(400);
     echo json_encode(['success' => false, 'message' => implode(', ', $errors)]);
     exit;
 }
@@ -74,13 +82,14 @@ try {
     $hashedPassword = password_hash($randomPassword, PASSWORD_DEFAULT);
     
     // [NOTE] role hardcode เป็น 'member' - ห้าม admin สร้าง admin ผ่าน quick add
-    $stmt = $pdo->prepare("
-        INSERT INTO users (name, email, phone, password, role, created_at)
-        VALUES (?, ?, ?, ?, 'member', NOW())
-    ");
-    $stmt->execute([$name, $email, $phone ?: null, $hashedPassword]);
-    
-    $newId = $pdo->lastInsertId();
+    // Create member using Repository
+    $newId = $userRepo->create([
+        'name' => $name,
+        'email' => $email,
+        'password' => $hashedPassword,
+        'phone' => $phone ?: null,
+        'role' => 'member'
+    ]);
     
     echo json_encode([
         'success' => true,

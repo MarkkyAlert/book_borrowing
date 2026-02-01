@@ -3,8 +3,7 @@
  * Login Page - เข้าสู่ระบบ
  */
 
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/bootstrap.php';
 
 // Redirect if already logged in
 if (isLoggedIn()) {

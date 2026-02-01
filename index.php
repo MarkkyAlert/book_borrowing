@@ -3,14 +3,12 @@
  * Homepage - หน้าแรก
  */
 
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/bootstrap.php';
+
+use App\Services\HomeService;
 
 $pdo = getDB();
-
-// [REFACTORED] ใช้ HomeService แทน SQL Query โดยตรง
-require_once __DIR__ . '/app/Services/HomeService.php';
-$homeService = new \App\Services\HomeService($pdo);
+$homeService = new HomeService($pdo);
 
 // Get search/filter parameters
 $search = trim($_GET['search'] ?? '');

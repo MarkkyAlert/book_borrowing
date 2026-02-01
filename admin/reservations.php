@@ -3,20 +3,15 @@
  * Admin: Reservations Management
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
-
-// [AUTHORIZATION] เฉพาะ admin เท่านั้น - staff ไม่มีสิทธิ์จัดการ reservation
-// เหตุผล: การอนุมัติ/ยกเลิกมีผลต่อ stock และเริ่มการยืมทันที
+require_once __DIR__ . '/../bootstrap.php';
 requireAdmin();
 
-$pdo = getDB();
+use App\Services\ReservationService;
+use App\Repositories\ReservationRepository;
 
-// [REFACTORED] ใช้ ReservationService แทน SQL Query โดยตรง
-require_once __DIR__ . '/../app/Services/ReservationService.php';
-require_once __DIR__ . '/../app/Repositories/ReservationRepository.php';
-$reservationService = new \App\Services\ReservationService($pdo);
-$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
+$pdo = getDB();
+$reservationService = new ReservationService($pdo);
+$reservationRepo = new ReservationRepository($pdo);
 
 // Handle Actions (Approve / Cancel)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

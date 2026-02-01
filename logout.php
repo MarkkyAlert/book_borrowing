@@ -3,7 +3,7 @@
  * Logout - ออกจากระบบ
  */
 
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/bootstrap.php';
 
 // Clear all session data
 $_SESSION = [];

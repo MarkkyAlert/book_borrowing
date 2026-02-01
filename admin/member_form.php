@@ -3,11 +3,13 @@
  * Member Form - เพิ่ม/แก้ไขสมาชิก
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
 
-$pdo = getDB();
+use App\Repositories\UserRepository;
+
+$userRepo = new UserRepository(getDB());
+
 $errors = [];
 $member = [
     'id' => 0,
@@ -21,9 +23,7 @@ $isEdit = false;
 // Get member for editing
 if (isset($_GET['id'])) {
     $id = (int) $_GET['id'];
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role = 'member'");
-    $stmt->execute([$id]);
-    $existingMember = $stmt->fetch();
+    $existingMember = $userRepo->findMemberById($id);
     
     if ($existingMember) {
         $member = $existingMember;
@@ -63,11 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     
-    // Check Email duplicate
+    // Check Email duplicate using repository
     if (!empty($member['email'])) {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-        $stmt->execute([$member['email'], $member['id']]);
-        if ($stmt->fetch()) {
+        if ($userRepo->emailExists($member['email'], $member['id'] ?: null)) {
             $errors[] = 'อีเมลนี้มีในระบบแล้ว';
         }
     }
@@ -80,38 +78,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
+        $memberData = [
+            'name' => $member['name'],
+            'email' => $member['email'],
+            'phone' => $member['phone']
+        ];
+        
         if ($isEdit) {
             // Update
-            $sql = "UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?";
-            $params = [$member['name'], $member['email'], $member['phone'], $member['id']];
+            $userRepo->update($member['id'], $memberData);
             
             // Update password only if provided
             if (!empty($password)) {
-                $sql = "UPDATE users SET name = ?, email = ?, phone = ?, password = ? WHERE id = ?";
-                $params = [
-                    $member['name'], 
-                    $member['email'], 
-                    $member['phone'], 
-                    password_hash($password, PASSWORD_DEFAULT),
-                    $member['id']
-                ];
+                $userRepo->updatePassword($member['id'], password_hash($password, PASSWORD_DEFAULT));
             }
             
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
             setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');
         } else {
-            // Insert
-            $stmt = $pdo->prepare("
-                INSERT INTO users (name, email, password, phone, role)
-                VALUES (?, ?, ?, ?, 'member')
-            ");
-            $stmt->execute([
-                $member['name'],
-                $member['email'],
-                password_hash($password, PASSWORD_DEFAULT),
-                $member['phone']
-            ]);
+            // Create new member
+            $memberData['password'] = password_hash($password, PASSWORD_DEFAULT);
+            $memberData['role'] = 'member';
+            $userRepo->create($memberData);
             setFlash('success', 'เพิ่มสมาชิกสำเร็จ');
         }
         redirect('members.php');

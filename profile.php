@@ -3,8 +3,7 @@
  * Profile Page - โปรไฟล์ผู้ใช้
  */
 
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/bootstrap.php';
 
 requireLogin();
 

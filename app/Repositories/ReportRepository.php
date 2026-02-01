@@ -187,4 +187,153 @@ class ReportRepository
             'new_members' => $newMembers,
         ];
     }
+
+    /**
+     * รายงานหนังสือยอดนิยม (สำหรับหน้า reports)
+     */
+    public function getTopBooksReport(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.title, c.name as category, COUNT(br.id) as borrow_count,
+                   (b.quantity - b.available) as currently_borrowed
+            FROM books b
+            LEFT JOIN categories c ON b.category_id = c.id
+            LEFT JOIN borrows br ON b.id = br.book_id
+            GROUP BY b.id
+            ORDER BY borrow_count DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานสมาชิกที่ใช้บริการบ่อย (สำหรับหน้า reports)
+     */
+    public function getTopMembersReport(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT u.name, u.email, u.role, COUNT(br.id) as borrow_count,
+                   SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
+            FROM users u
+            JOIN borrows br ON u.id = br.user_id
+            WHERE u.role != 'admin'
+            GROUP BY u.id
+            ORDER BY borrow_count DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานรายได้รายวัน (สำหรับหน้า reports)
+     */
+    public function getDailyRevenueReport(int $limit = 30): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
+            FROM payments
+            GROUP BY DATE(payment_date)
+            ORDER BY payment_day DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานหนังสือเกินกำหนด (สำหรับหน้า reports)
+     */
+    public function getOverdueReport(): array
+    {
+        return $this->pdo->query("
+            SELECT u.name, u.phone, bk.title, b.borrow_date, b.due_date,
+                   DATEDIFF(CURDATE(), b.due_date) as days_overdue
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
+            ORDER BY b.due_date ASC
+        ")->fetchAll();
+    }
+
+    /**
+     * รายงานการยืมตามช่วงวันที่ (สำหรับ export_pdf)
+     */
+    public function getBorrowsReport(string $dateFrom, string $dateTo): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT u.name, bk.title, 
+                   DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date,
+                   DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date,
+                   CASE b.status WHEN 'returned' THEN 'คืนแล้ว' ELSE 'กำลังยืม' END as status_text,
+                   COALESCE(b.fine_amount, 0) as fine
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.borrow_date BETWEEN ? AND ?
+            ORDER BY b.borrow_date DESC
+        ");
+        $stmt->execute([$dateFrom, $dateTo]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานหนังสือยอดนิยม (สำหรับ PDF - รวม role_name)
+     */
+    public function getTopMembersReportForPdf(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT u.name, u.email, 
+                   CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,
+                   COUNT(br.id) as borrow_count,
+                   SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
+            FROM users u
+            JOIN borrows br ON u.id = br.user_id
+            WHERE u.role != 'admin'
+            GROUP BY u.id
+            ORDER BY borrow_count DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานรายได้รายวัน (สำหรับ PDF - format วันที่)
+     */
+    public function getDailyRevenueReportForPdf(int $limit = 30): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT DATE_FORMAT(payment_date, '%d/%m/%Y') as payment_day, 
+                   COUNT(id) as transaction_count, 
+                   SUM(amount) as total_amount
+            FROM payments
+            GROUP BY DATE(payment_date)
+            ORDER BY payment_date DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * รายงานหนังสือเกินกำหนด (สำหรับ PDF - format วันที่)
+     */
+    public function getOverdueReportForPdf(): array
+    {
+        return $this->pdo->query("
+            SELECT u.name, u.phone, bk.title, 
+                   DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date,
+                   DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date,
+                   DATEDIFF(CURDATE(), b.due_date) as days_overdue
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
+            ORDER BY b.due_date ASC
+        ")->fetchAll();
+    }
 }
+

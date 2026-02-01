@@ -3,15 +3,13 @@
  * Categories Management - จัดการหมวดหมู่
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // Auth check ก่อนทำงานใดๆ
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Repositories\CategoryRepository;
 
 $pdo = getDB();
-
-// [REFACTORED] ใช้ CategoryRepository แทน SQL Query โดยตรง
-require_once __DIR__ . '/../app/Repositories/CategoryRepository.php';
-$categoryRepo = new \App\Repositories\CategoryRepository($pdo);
+$categoryRepo = new CategoryRepository($pdo);
 
 $errors = [];
 $editCategory = null;

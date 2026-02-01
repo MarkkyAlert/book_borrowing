@@ -111,6 +111,35 @@ class BookRepository
     }
 
     /**
+     * ดึงหนังสือทั้งหมดสำหรับพิมพ์ barcode labels
+     */
+    public function findAllForLabels(): array
+    {
+        return $this->pdo->query("
+            SELECT id, title, isbn FROM books ORDER BY id DESC
+        ")->fetchAll();
+    }
+
+    /**
+     * ค้นหาหนังสือตามชื่อและผู้แต่ง (สำหรับ import)
+     */
+    public function findByTitleAndAuthor(string $title, string $author): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT id FROM books WHERE title = ? AND author = ?");
+        $stmt->execute([$title, $author]);
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * เพิ่มจำนวน quantity และ available (สำหรับ import)
+     */
+    public function addQuantity(int $id, int $quantity): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE books SET quantity = quantity + ?, available = available + ? WHERE id = ?");
+        return $stmt->execute([$quantity, $quantity, $id]);
+    }
+
+    /**
      * สร้างหนังสือใหม่
      * 
      * @param array $data {

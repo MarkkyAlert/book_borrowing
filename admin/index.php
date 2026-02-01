@@ -3,14 +3,13 @@
  * Admin Dashboard
  */
 
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();
+
+use App\Services\DashboardService;
 
 $pdo = getDB();
-
-// [REFACTORED] ใช้ DashboardService แทน SQL Query โดยตรง
-require_once __DIR__ . '/../app/Services/DashboardService.php';
-$dashboardService = new \App\Services\DashboardService($pdo);
+$dashboardService = new DashboardService($pdo);
 
 // Get card statistics
 $stats = $dashboardService->getCardStats();

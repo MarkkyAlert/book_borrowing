@@ -4,11 +4,14 @@
  * นำเขาสมาชิกจากไฟล์ CSV
  */
 
-require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
-require_once __DIR__ . '/../includes/db.php';
+
+use App\Repositories\UserRepository;
 
 $pdo = getDB();
+$userRepo = new UserRepository($pdo);
+
 $messages = [];
 $errors = [];
 
@@ -30,20 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             $pdo->beginTransaction();
             
             try {
-                // Prepare check email
-                $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-                
-                // Prepare insert
-                $stmtInsert = $pdo->prepare("
-                    INSERT INTO users (name, email, password, phone, role) 
-                    VALUES (?, ?, ?, ?, 'member')
-                ");
-                
-                // Prepare update
-                $stmtUpdate = $pdo->prepare("UPDATE users SET name = ?, phone = ? WHERE id = ?");
-                
                 $defaultPassHash = password_hash('123456', PASSWORD_DEFAULT);
-                $rowNumber = 1; // Start from 1 (header is already read)
+                $rowNumber = 1;
                 $skippedDetails = [];
                 $createdCount = 0;
                 $updatedCount = 0;
@@ -66,17 +57,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         continue;
                     }
                     
-                    // Check duplicate email
-                    $stmtCheck->execute([$email]);
-                    $existingUser = $stmtCheck->fetch();
+                    // Check duplicate email using repository
+                    $existingUser = $userRepo->findByEmail($email);
                     
                     if ($existingUser) {
                         // UPDATE: Name & Phone only
-                        $stmtUpdate->execute([$name, $phone, $existingUser['id']]);
+                        $userRepo->update($existingUser['id'], [
+                            'name' => $name,
+                            'phone' => $phone
+                        ]);
                         $updatedCount++;
                     } else {
                         // INSERT: New member
-                        $stmtInsert->execute([$name, $email, $defaultPassHash, $phone]);
+                        $userRepo->create([
+                            'name' => $name,
+                            'email' => $email,
+                            'password' => $defaultPassHash,
+                            'phone' => $phone,
+                            'role' => 'member'
+                        ]);
                         $createdCount++;
                     }
                 }
