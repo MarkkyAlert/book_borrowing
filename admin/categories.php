@@ -203,7 +203,7 @@ require_once __DIR__ . '/header.php';
                                             <i class="bi bi-pencil-square"></i>
                                         </a>
                                         <?php if ($cat['book_count'] == 0): ?>
-                                            <form method="POST" class="inline-block" onsubmit="return confirm('ยืนยันการลบหมวดหมู่นี้?')">
+                                            <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบหมวดหมู่นี้?', {title: 'ลบหมวดหมู่', confirmText: 'ลบ', confirmClass: 'danger'})">
                                                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="id" value="<?= $cat['id'] ?>">

@@ -2,11 +2,21 @@
 /**
  * AuthService - Authentication & Authorization Business Logic
  * 
- * Service นี้จัดการ:
- * - Login/Logout
- * - Registration
- * - Password Reset
- * - Profile Update
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้จัดการ Login/Register/Password Reset
+ * - ห้ามแก้ไขโดยไม่เข้าใจ - กระทบความปลอดภัยทั้งระบบ
+ * 
+ * 📍 Entrypoints:
+ * - login.php          → login()
+ * - register.php       → register()
+ * - forgot_password.php→ requestPasswordReset()
+ * - reset_password.php → resetPassword()
+ * - profile.php        → updateProfile(), changePassword()
+ * 
+ * ⚠️ ห้ามแก้ (Security Critical):
+ * - login()     - ตรวจ password, ป้องกัน user enumeration
+ * - register()  - สร้าง user, hash password
+ * - requestPasswordReset() - สร้าง token, ป้องกัน enumeration
  * 
  * @package App\Services
  */

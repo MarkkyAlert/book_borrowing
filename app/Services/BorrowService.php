@@ -2,8 +2,18 @@
 /**
  * BorrowService - Business Logic สำหรับการยืม-คืนหนังสือ
  * 
- * ไฟล์นี้รวม business logic ทั้งหมดที่เกี่ยวข้องกับการยืม-คืน
- * ลูกค้าที่ต้องการแก้ไขกฎการยืม ให้แก้ไขที่ไฟล์นี้
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้คือ "สมอง" ของระบบยืม-คืน
+ * - ถูกเรียกจาก admin/borrow_form.php, admin/borrows.php
+ * - ห้ามเรียก Repository โดยตรงจากหน้าเว็บ ให้เรียกผ่าน Service นี้
+ * 
+ * 🔄 Flow หลัก:
+ * 1. createBorrow() → สร้างรายการยืม (หักสต็อก)
+ * 2. returnBook()   → คืนหนังสือ (คืนสต็อก + คำนวณค่าปรับ)
+ * 
+ * ⚙️ ถ้าต้องการแก้กฎ:
+ * - จำนวนวันยืม/เล่มสูงสุด → แก้ที่ includes/config.php (MAX_BORROW_BOOKS, DEFAULT_BORROW_DAYS)
+ * - สูตรค่าปรับ           → แก้ที่ calculateFine() ในไฟล์นี้
  * 
  * @package App\Services
  */

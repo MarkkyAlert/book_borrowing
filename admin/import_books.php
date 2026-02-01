@@ -35,85 +35,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             // Read CSV
             $handle = fopen($file['tmp_name'], 'r');
             
-            // Skip header row
-            fgetcsv($handle);
-            
-            $pdo->beginTransaction();
-            
-            try {
-                $createdCount = 0;
-                $updatedCount = 0;
-                $rowNumber = 1;
-                $skippedDetails = [];
+            if (!$handle) {
+                $errors[] = 'ไม่สามารถอ่านไฟล์ได้';
+            } else {
+                // Skip header row
+                fgetcsv($handle);
                 
-                while (($row = fgetcsv($handle)) !== false) {
-                    $rowNumber++;
+                $pdo->beginTransaction();
+                
+                try {
+                    $createdCount = 0;
+                    $updatedCount = 0;
+                    $rowNumber = 1;
+                    $skippedDetails = [];
                     
-                    // Validate basic column count
-                    if (count($row) < 2) {
-                        $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อหนังสือ และ ผู้แต่ง)";
-                        continue;
-                    }
-                    
-                    $title = trim($row[0]);
-                    $author = trim($row[1]);
-                    $isbn = trim($row[2] ?? '');
-                    $categoryName = trim($row[3] ?? 'General');
-                    $qty = max(1, (int)($row[4] ?? 1));
-                    
-                    if (empty($title)) {
-                        $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหนังสือว่างเปล่า";
-                        continue;
-                    }
-                    
-                    // 1. Check if Book Exists (Merge Strategy) using repository
-                    $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
-                    
-                    if ($existingBook) {
-                        // UPDATE: Add to existing quantity using repository
-                        $bookRepo->addQuantity($existingBook['id'], $qty);
-                        $updatedCount++;
-                    } else {
-                        // INSERT: Create new book
-                        // Handle Category first using repository
-                        $categoryId = null;
-                        if (!empty($categoryName)) {
-                            $cat = $categoryRepo->findByName($categoryName);
-                            if ($cat) {
-                                $categoryId = $cat['id'];
-                            } else {
-                                $categoryId = $categoryRepo->create($categoryName);
-                            }
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rowNumber++;
+                        
+                        // Validate basic column count
+                        if (count($row) < 2) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อหนังสือ และ ผู้แต่ง)";
+                            continue;
                         }
                         
-                        // Create book using repository
-                        $bookRepo->create([
-                            'title' => $title,
-                            'author' => $author,
-                            'isbn' => $isbn ?: null,
-                            'category_id' => $categoryId,
-                            'quantity' => $qty
-                        ]);
-                        $createdCount++;
+                        $title = trim($row[0]);
+                        $author = trim($row[1]);
+                        $isbn = trim($row[2] ?? '');
+                        $categoryName = trim($row[3] ?? 'General');
+                        $qty = max(1, (int)($row[4] ?? 1));
+                        
+                        if (empty($title)) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหนังสือว่างเปล่า";
+                            continue;
+                        }
+                        
+                        // 1. Check if Book Exists (Merge Strategy) using repository
+                        $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
+                        
+                        if ($existingBook) {
+                            // UPDATE: Add to existing quantity using repository
+                            $bookRepo->addQuantity($existingBook['id'], $qty);
+                            $updatedCount++;
+                        } else {
+                            // INSERT: Create new book
+                            // Handle Category first using repository
+                            $categoryId = null;
+                            if (!empty($categoryName)) {
+                                $cat = $categoryRepo->findByName($categoryName);
+                                if ($cat) {
+                                    $categoryId = $cat['id'];
+                                } else {
+                                    $categoryId = $categoryRepo->create($categoryName);
+                                }
+                            }
+                            
+                            // Create book using repository
+                            $bookRepo->create([
+                                'title' => $title,
+                                'author' => $author,
+                                'isbn' => $isbn ?: null,
+                                'category_id' => $categoryId,
+                                'quantity' => $qty
+                            ]);
+                            $createdCount++;
+                        }
+                    }
+                    
+                    $pdo->commit();
+                    
+                    $msg = "นำเข้าเสร็จสิ้น: เพิ่มใหม่ $createdCount รายการ, อัปเดต $updatedCount รายการ";
+                    if (!empty($skippedDetails)) {
+                        $msg .= "<br><br><strong>รายการที่ไม่สำเร็จ (" . count($skippedDetails) . "):</strong><br>" . implode("<br>", $skippedDetails);
+                        setFlash('warning', $msg, true);
+                    } else {
+                        setFlash('success', $msg);
+                    }
+                    
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $errors[] = "เกิดข้อผิดพลาด: " . $e->getMessage();
+                } finally {
+                    // [CLEANUP] ปิด file handle เสมอไม่ว่าจะสำเร็จหรือไม่
+                    if (is_resource($handle)) {
+                        fclose($handle);
                     }
                 }
-                
-                $pdo->commit();
-                
-                $msg = "นำเข้าเสร็จสิ้น: เพิ่มใหม่ $createdCount รายการ, อัปเดต $updatedCount รายการ";
-                if (!empty($skippedDetails)) {
-                    $msg .= "<br><br><strong>รายการที่ไม่สำเร็จ (" . count($skippedDetails) . "):</strong><br>" . implode("<br>", $skippedDetails);
-                    setFlash('warning', $msg, true);
-                } else {
-                    setFlash('success', $msg);
-                }
-                
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                $errors[] = "เกิดข้อผิดพลาด: " . $e->getMessage();
             }
-            
-            fclose($handle);
         }
     }
 }

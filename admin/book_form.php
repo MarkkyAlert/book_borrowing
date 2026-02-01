@@ -78,14 +78,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Handle cover image upload
+    // [FILE UPLOAD] จัดการรูปปก - มีความเสี่ยงสูงถ้าไม่ validate ถูกต้อง
     $coverImage = $book['cover_image'] ?? null;
     if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['cover_image'];
+        // [SECURITY] whitelist MIME types - ป้องกัน upload shell/malware
         $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         $maxSize = 2 * 1024 * 1024; // 2MB
         
-        // Use finfo for secure MIME type detection (server-side)
+        // [SECURITY] ใช้ finfo ตรวจ MIME จาก file content จริง - ไม่เชื่อ $_FILES['type'] (client ส่งมา)
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mimeType = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
@@ -100,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 mkdir($uploadDir, 0755, true);
             }
             
-            // Sanitize extension based on actual MIME type (not user input)
+            // [SECURITY] กำหนด extension จาก MIME ที่ตรวจแล้ว - ไม่ใช้ชื่อไฟล์จาก user
             $mimeToExt = [
                 'image/jpeg' => 'jpg',
                 'image/png' => 'png',
@@ -108,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'image/webp' => 'webp'
             ];
             $ext = $mimeToExt[$mimeType] ?? 'jpg';
+            // [SECURITY] สร้างชื่อไฟล์ใหม่ด้วย uniqid - ป้องกัน path traversal และ overwrite
             $newFilename = 'cover_' . time() . '_' . uniqid() . '.' . $ext;
             $targetPath = $uploadDir . $newFilename;
             

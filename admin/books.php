@@ -183,7 +183,7 @@ require_once __DIR__ . '/header.php';
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 <?php if ($book['available'] == $book['quantity']): ?>
-                                    <form method="POST" class="d-inline inline-block" onsubmit="return confirm('ยืนยันการลบหนังสือเล่มนี้?')">
+                                    <form method="POST" class="d-inline inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบหนังสือเล่มนี้?', {title: 'ลบหนังสือ', confirmText: 'ลบ', confirmClass: 'danger'})">
                                         <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= $book['id'] ?>">

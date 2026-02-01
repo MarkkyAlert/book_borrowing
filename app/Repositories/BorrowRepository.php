@@ -2,6 +2,20 @@
 /**
  * BorrowRepository - Database Access สำหรับการยืม-คืน
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้จัดการ SQL queries สำหรับตาราง borrows
+ * - ห้ามเรียกจากหน้าเว็บโดยตรง ให้เรียกผ่าน BorrowService
+ * - ทุก method ใช้ prepared statements (ป้องกัน SQL Injection)
+ * 
+ * 📌 Methods สำคัญ:
+ * - create()            → INSERT borrow record
+ * - markAsReturned()    → UPDATE status='returned'
+ * - findByIdForUpdate() → SELECT ... FOR UPDATE (ป้องกัน race condition)
+ * 
+ * ⚠️ ห้ามแก้:
+ * - findByIdForUpdate() - มี FOR UPDATE lock ที่สำคัญ
+ * - countActiveBorrowsForUpdate() - ป้องกันยืมเกินโควต้า
+ * 
  * @package App\Repositories
  */
 
@@ -86,6 +100,12 @@ class BorrowRepository
 
     /**
      * Lock row สำหรับ transaction
+     * 
+     * [CONCURRENCY] FOR UPDATE ป้องกัน:
+     * - คืนหนังสือซ้ำ (กดปุ่มคืน 2 ครั้ง)
+     * - Race condition ระหว่าง staff 2 คน
+     * 
+     * @note ต้องเรียกภายใน transaction เท่านั้น
      */
     public function findByIdForUpdate(int $id): ?array
     {

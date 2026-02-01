@@ -87,6 +87,9 @@ class BookService
 
     /**
      * ดึงหนังสือตาม ID
+     * 
+     * @param int $id ID หนังสือ
+     * @return array|null ข้อมูลหนังสือพร้อม category_name, null ถ้าไม่พบ
      */
     public function getBookById(int $id): ?array
     {
@@ -103,6 +106,18 @@ class BookService
 
     /**
      * สร้างหนังสือใหม่
+     * 
+     * @param array $data {
+     *     title: string,        // ชื่อหนังสือ (required)
+     *     author: string,       // ผู้แต่ง (required)
+     *     isbn?: string,        // ISBN
+     *     category_id?: int,    // ID หมวดหมู่
+     *     description?: string, // รายละเอียด
+     *     cover_image?: string, // ชื่อไฟล์รูปปก
+     *     quantity?: int        // จำนวน (default: 1)
+     * }
+     * @return int ID หนังสือที่สร้าง
+     * @sideeffect INSERT ลง books table
      */
     public function createBook(array $data): int
     {
@@ -111,6 +126,12 @@ class BookService
 
     /**
      * อัปเดตหนังสือ
+     * 
+     * @param int $id ID หนังสือ
+     * @param array $data ข้อมูลที่ต้องการอัปเดต (ดูโครงสร้างใน createBook)
+     * @return bool true = สำเร็จ
+     * @throws Exception ถ้าไม่พบหนังสือ
+     * @sideeffect UPDATE books table, available จะถูกคำนวณใหม่ตาม quantity diff
      */
     public function updateBook(int $id, array $data): bool
     {

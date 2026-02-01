@@ -224,6 +224,12 @@ class UserRepository
 
     /**
      * Lock user row สำหรับ transaction
+     * 
+     * @param int $id ID ผู้ใช้
+     * @return array|null ข้อมูลผู้ใช้ (ถูก lock จน commit/rollback)
+     * 
+     * @note ต้องเรียกภายใน transaction เท่านั้น
+     * @security FOR UPDATE ป้องกัน race condition เช่น ยืมเกินโควต้า
      */
     public function lockById(int $id): ?array
     {

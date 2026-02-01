@@ -1,6 +1,22 @@
 <?php
 /**
- * Helper Functions
+ * Helper Functions - ฟังก์ชันช่วยเหลือทั่วไป
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้ถูกโหลดอัตโนมัติผ่าน bootstrap.php
+ * - ใช้ได้ทุกที่โดยไม่ต้อง require
+ * 
+ * 📌 ฟังก์ชันที่ใช้บ่อย:
+ * - e($str)              → escape HTML (ป้องกัน XSS) ⚠️ ต้องใช้ทุกครั้งที่แสดงผล
+ * - redirect($url)       → redirect + exit
+ * - setFlash() / getFlash() → flash messages
+ * - requireLogin/Staff/Admin() → access control
+ * - generateCSRFToken() / validateCSRFToken() → CSRF protection
+ * - checkRateLimit()     → brute force protection
+ * 
+ * ⚠️ ห้ามแก้:
+ * - e() - ป้องกัน XSS ทั้งระบบ
+ * - generateCSRFToken() / validateCSRFToken() - ป้องกัน CSRF
  */
 
 require_once __DIR__ . '/config.php';
@@ -375,6 +391,48 @@ function isValidPhone(string $phone): bool
 }
 
 /**
+ * ตรวจสอบความถูกต้องของชื่อ (Single Source of Truth)
+ * 
+ * @param string $name    ชื่อที่ต้องการตรวจสอบ
+ * @param int    $maxLen  ความยาวสูงสุด (default: 100)
+ * @return string|null    null = valid, string = error message
+ * 
+ * @example $error = validateName($name);
+ *          if ($error) $errors[] = $error;
+ */
+function validateName(string $name, int $maxLen = 100): ?string
+{
+    if (empty(trim($name))) {
+        return 'กรุณากรอกชื่อ';
+    }
+    if (mb_strlen($name) > $maxLen) {
+        return "ชื่อต้องไม่เกิน $maxLen ตัวอักษร";
+    }
+    return null;
+}
+
+/**
+ * ตรวจสอบความถูกต้องของรหัสผ่าน (Single Source of Truth)
+ * 
+ * @param string $password   รหัสผ่านที่ต้องการตรวจสอบ
+ * @param bool   $allowEmpty true = อนุญาตให้ว่างได้ (สำหรับ edit mode)
+ * @return string|null       null = valid, string = error message
+ * 
+ * @example $error = validatePassword($password);
+ *          if ($error) $errors[] = $error;
+ */
+function validatePassword(string $password, bool $allowEmpty = false): ?string
+{
+    if (!$allowEmpty && empty($password)) {
+        return 'กรุณากรอกรหัสผ่าน';
+    }
+    if (!empty($password) && strlen($password) < MIN_PASSWORD_LENGTH) {
+        return 'รหัสผ่านต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
+    }
+    return null;
+}
+
+/**
  * สร้าง CSRF token สำหรับป้องกันการโจมตี Cross-Site Request Forgery
  * 
  * @return string token 64 ตัวอักษร (hex)
@@ -414,11 +472,22 @@ function validateCSRFToken(string $token): bool
 }
 
 /**
- * Start secure session
+ * Start secure session พร้อมตั้งค่า cookie flags
+ * 
+ * @security ตั้ง HttpOnly, SameSite=Lax, Secure (เมื่อใช้ HTTPS)
  */
 function startSession(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        // [SECURITY] ตั้งค่า session cookie ให้ปลอดภัย
+        session_set_cookie_params([
+            'lifetime' => defined('SESSION_LIFETIME') ? SESSION_LIFETIME : 3600,
+            'path' => '/',
+            'domain' => '',
+            'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ]);
         session_start();
     }
 }

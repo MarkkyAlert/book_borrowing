@@ -1,7 +1,19 @@
 <?php
 /**
- * Bootstrap File
- * จุดเริ่มต้นของ Application - โหลด dependencies และ initialize
+ * Bootstrap File - จุดเริ่มต้นของ Application
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้ถูก require ที่บรรทัดแรกของทุกหน้า
+ * - โหลด config, database, helper functions
+ * - ตั้งค่า autoloader สำหรับ class ใน app/
+ * 
+ * 📂 โครงสร้างโปรเจค:
+ * - *.php (root)     → หน้าเว็บสำหรับ user ทั่วไป
+ * - admin/*.php      → หน้า admin/staff
+ * - api/*.php        → JSON API endpoints
+ * - app/Services/    → Business logic (ห้ามเข้าถึง DB โดยตรง)
+ * - app/Repositories/→ Database access (SQL queries)
+ * - includes/        → Config, DB connection, helper functions
  * 
  * การใช้งาน:
  * require_once __DIR__ . '/bootstrap.php';

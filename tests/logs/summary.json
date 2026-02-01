@@ -5,7 +5,7 @@
     "details": [
         {
             "test_id": "HP-01",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -13,7 +13,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "Test User QA",
-                    "email": "testuser_qa_1769803004@test.com",
+                    "email": "testuser_qa_1769958244@test.com",
                     "password": "***",
                     "confirm_password": "***",
                     "csrf_token": null
@@ -27,14 +27,14 @@
         },
         {
             "test_id": "HP-02",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
-                    "email": "testuser_qa_1769803004@test.com",
+                    "email": "testuser_qa_1769958244@test.com",
                     "password": "***"
                 }
             },
@@ -46,7 +46,7 @@
         },
         {
             "test_id": "HP-03",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -65,7 +65,7 @@
         },
         {
             "test_id": "HP-04",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -81,7 +81,7 @@
         },
         {
             "test_id": "HP-05",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -91,13 +91,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 19294,
+                "body_length": 49065,
                 "body_preview": "    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                    <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-gray-100\">\r\n                                            <div class=\"flex flex-col it"
             }
         },
         {
             "test_id": "HP-06",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -109,13 +109,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 5539,
+                "body_length": 8252,
                 "body_preview": "    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                    <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-gray-100\">\r\n                                            <div class=\"flex flex-col it"
             }
         },
         {
             "test_id": "HP-07",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:04+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -127,13 +127,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 15439,
+                "body_length": 16861,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เกมล่าสังหาร - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@"
             }
         },
         {
             "test_id": "HP-08",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": false,
             "message": "Expected 200\/400, got 403",
             "request": {
@@ -152,7 +152,7 @@
         },
         {
             "test_id": "HP-09",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -162,7 +162,7 @@
                     "action": "update_profile",
                     "name": "Test User QA Updated",
                     "phone": "0812345678",
-                    "csrf_token": "3d9b93649eb07c08baa69c2a5243adfb6c913c1f4a907ae08ecac4a03fe63a49"
+                    "csrf_token": "6b3926d334c94e9e155200c0155fe5427818720f64ff58c7faa3c6d97cdcfde8"
                 }
             },
             "response": {
@@ -173,7 +173,7 @@
         },
         {
             "test_id": "HP-10",
-            "timestamp": "2026-01-31T02:56:44+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -184,7 +184,7 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "3d9b93649eb07c08baa69c2a5243adfb6c913c1f4a907ae08ecac4a03fe63a49"
+                    "csrf_token": "6b3926d334c94e9e155200c0155fe5427818720f64ff58c7faa3c6d97cdcfde8"
                 }
             },
             "response": {
@@ -195,17 +195,17 @@
         },
         {
             "test_id": "HP-11",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/book_form.php",
                 "body": {
-                    "title": "QA Test Book 1769803004",
+                    "title": "QA Test Book 1769958244",
                     "author": "QA Author",
                     "quantity": 5,
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
@@ -216,7 +216,7 @@
         },
         {
             "test_id": "HP-16",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -224,8 +224,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA Category 1769803004",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "name": "QA Category 1769958244",
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
@@ -236,7 +236,7 @@
         },
         {
             "test_id": "HP-13",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -244,9 +244,9 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/member_form.php",
                 "body": {
                     "name": "QA Test Member",
-                    "email": "member_qa_1769803004@test.com",
+                    "email": "member_qa_1769958244@test.com",
                     "password": "***",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
@@ -257,7 +257,7 @@
         },
         {
             "test_id": "HP-17",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -267,7 +267,7 @@
                     "org_name": "QA Test Library",
                     "card_color_primary": "#1e3a8a",
                     "card_color_secondary": "#3b82f6",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
@@ -278,7 +278,7 @@
         },
         {
             "test_id": "VL-01",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -293,13 +293,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 16788,
+                "body_length": 16897,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-02",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -314,13 +314,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 16822,
+                "body_length": 16931,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-03",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -335,13 +335,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 16855,
+                "body_length": 16964,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-04",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -356,13 +356,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 16811,
+                "body_length": 16920,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-05",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -370,39 +370,39 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "Test",
-                    "email": "testuser_qa_1769803004@test.com",
+                    "email": "testuser_qa_1769958244@test.com",
                     "password": "***",
                     "confirm_password": "***"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 16840,
+                "body_length": 16949,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-06",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
-                    "email": "testuser_qa_1769803004@test.com",
+                    "email": "testuser_qa_1769958244@test.com",
                     "password": "***"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 14632,
+                "body_length": 14741,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-07",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -415,13 +415,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 14621,
+                "body_length": 14730,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300"
             }
         },
         {
             "test_id": "VL-08",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": false,
             "message": "Expected 400, got 403",
             "request": {
@@ -440,7 +440,7 @@
         },
         {
             "test_id": "VL-10",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -449,18 +449,18 @@
                 "body": {
                     "action": "update_profile",
                     "name": "",
-                    "csrf_token": "3d9b93649eb07c08baa69c2a5243adfb6c913c1f4a907ae08ecac4a03fe63a49"
+                    "csrf_token": "6b3926d334c94e9e155200c0155fe5427818720f64ff58c7faa3c6d97cdcfde8"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 19466,
+                "body_length": 19575,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600"
             }
         },
         {
             "test_id": "VL-11",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -471,18 +471,18 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "3d9b93649eb07c08baa69c2a5243adfb6c913c1f4a907ae08ecac4a03fe63a49"
+                    "csrf_token": "6b3926d334c94e9e155200c0155fe5427818720f64ff58c7faa3c6d97cdcfde8"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 19483,
+                "body_length": 19592,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600"
             }
         },
         {
             "test_id": "VL-12",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -491,18 +491,18 @@
                 "body": {
                     "title": "",
                     "author": "Test Author",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 24183,
+                "body_length": 25352,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เพิ่มหนังสือ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarab"
             }
         },
         {
             "test_id": "VL-13",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -511,18 +511,18 @@
                 "body": {
                     "title": "Test Title",
                     "author": "",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 24182,
+                "body_length": 25351,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เพิ่มหนังสือ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarab"
             }
         },
         {
             "test_id": "VL-15",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -531,18 +531,18 @@
                 "body": {
                     "action": "add",
                     "name": "",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 30975,
+                "body_length": 42535,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>จัดการหมวดหมู่ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family"
             }
         },
         {
             "test_id": "VL-16",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -550,19 +550,19 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA Category 1769803004",
-                    "csrf_token": "87ab7b7415b053e7939885288ee5df974f3e0c729ee656a3317b0a878e213562"
+                    "name": "QA Category 1769958244",
+                    "csrf_token": "471d2850e782a30fd97ba49d692a8b6ec19b2f7cd08bf78aedb4ec07c0553bac"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 30987,
+                "body_length": 42547,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>จัดการหมวดหมู่ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family"
             }
         },
         {
             "test_id": "EC-01",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -580,7 +580,7 @@
         },
         {
             "test_id": "EC-02",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -598,7 +598,7 @@
         },
         {
             "test_id": "EC-03",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -616,7 +616,7 @@
         },
         {
             "test_id": "EC-04",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -634,7 +634,7 @@
         },
         {
             "test_id": "EC-05",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -652,7 +652,7 @@
         },
         {
             "test_id": "EC-06",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": false,
             "message": "Expected 200\/400, got 403",
             "request": {
@@ -671,7 +671,7 @@
         },
         {
             "test_id": "EC-09",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -680,7 +680,7 @@
                 "body": {
                     "action": "update_profile",
                     "name": "<script>alert(1)<\/script>Test",
-                    "csrf_token": "3d9b93649eb07c08baa69c2a5243adfb6c913c1f4a907ae08ecac4a03fe63a49"
+                    "csrf_token": "6b3926d334c94e9e155200c0155fe5427818720f64ff58c7faa3c6d97cdcfde8"
                 }
             },
             "response": {
@@ -691,7 +691,7 @@
         },
         {
             "test_id": "SC-01",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -710,7 +710,7 @@
         },
         {
             "test_id": "SC-02",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -730,7 +730,7 @@
         },
         {
             "test_id": "SC-03",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -746,7 +746,7 @@
         },
         {
             "test_id": "SC-04",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -762,7 +762,7 @@
         },
         {
             "test_id": "SC-05",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 405 OK",
             "request": {
@@ -778,7 +778,7 @@
         },
         {
             "test_id": "SC-08",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -794,7 +794,7 @@
         },
         {
             "test_id": "SC-09",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 401 OK",
             "request": {
@@ -812,12 +812,12 @@
         },
         {
             "test_id": "SC-10",
-            "timestamp": "2026-01-31T02:56:45+07:00",
+            "timestamp": "2026-02-01T22:04:05+07:00",
             "passed": true,
             "message": "Status 403 OK",
             "request": {
                 "method": "POST",
-                "url": "http:\/\/localhost\/book_borrowing\/admin\/ajax_add_member.php",
+                "url": "http:\/\/localhost\/book_borrowing\/api\/add_member.php",
                 "body": {
                     "name": "Test",
                     "email": "test@test.com"

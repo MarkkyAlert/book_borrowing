@@ -2,8 +2,20 @@
 /**
  * ระบบยืมคืนหนังสือ - Configuration
  * 
- * ⭐ ไฟล์นี้จะอ่านค่าจาก .env ถ้ามี หรือใช้ค่า default ถ้าไม่มี
- * สำหรับการตั้งค่า ให้สร้างไฟล์ .env จาก .env.example
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้กำหนดค่าคงที่ทั้งระบบ (constants)
+ * - ค่าจะถูกอ่านจาก .env ถ้ามี หรือใช้ default ถ้าไม่มี
+ * - ลูกค้าแก้ค่าได้โดยสร้างไฟล์ .env จาก .env.example
+ * 
+ * ⚙️ ค่าที่ลูกค้ามักต้องการแก้:
+ * - DEFAULT_BORROW_DAYS  → จำนวนวันยืมเริ่มต้น (default: 7)
+ * - MAX_BORROW_BOOKS     → ยืมได้สูงสุดกี่เล่ม (default: 3)
+ * - FINE_PER_DAY         → ค่าปรับต่อวัน (default: 10 บาท)
+ * - MIN_PASSWORD_LENGTH  → รหัสผ่านขั้นต่ำ (default: 6)
+ * 
+ * ⚠️ ห้ามแก้โดยไม่เข้าใจ:
+ * - RATE_LIMIT_* → ป้องกัน brute force
+ * - SESSION_LIFETIME → อายุ session
  */
 
 // Load .env parser

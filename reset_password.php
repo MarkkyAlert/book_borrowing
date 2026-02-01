@@ -30,14 +30,19 @@ if (!empty($token)) {
 
 // Process form
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
+    // [SECURITY] CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
+    }
+    
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation
-    if (empty($password)) {
+    // Validation (ใช้ค่าคงที่ MIN_PASSWORD_LENGTH เดียวกับทั้งระบบ)
+    if (empty($errors) && empty($password)) {
         $errors[] = 'กรุณากรอกรหัสผ่านใหม่';
-    } elseif (strlen($password) < 6) {
-        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    } elseif (strlen($password) < MIN_PASSWORD_LENGTH) {
+        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
     }
     
     if ($password !== $confirmPassword) {
@@ -146,6 +151,7 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
                 
                 <form class="space-y-6" method="POST" novalidate>
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                     <div>
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
                             รหัสผ่านใหม่

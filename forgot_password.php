@@ -19,10 +19,17 @@ $email = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     
+    // [SECURITY] Rate limiting ป้องกัน spam/enumeration
+    $rateLimitKey = 'forgot_password';
+    if (!checkRateLimit($rateLimitKey)) {
+        $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
+    }
+    incrementRateLimit($rateLimitKey);
+    
     // Validation
-    if (empty($email)) {
+    if (empty($errors) && empty($email)) {
         $errors[] = 'กรุณากรอกอีเมล';
-    } elseif (!isValidEmail($email)) {
+    } elseif (empty($errors) && !isValidEmail($email)) {
         $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     

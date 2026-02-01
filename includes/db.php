@@ -40,7 +40,13 @@ function getDB(): PDO
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
-            die("Database connection failed: " . $e->getMessage());
+            // [SECURITY] ซ่อน error details ใน production
+            if (defined('APP_DEBUG') && APP_DEBUG) {
+                die("Database connection failed: " . $e->getMessage());
+            } else {
+                error_log("DB Connection Error: " . $e->getMessage());
+                die("ระบบขัดข้อง กรุณาติดต่อผู้ดูแลระบบ");
+            }
         }
     }
     

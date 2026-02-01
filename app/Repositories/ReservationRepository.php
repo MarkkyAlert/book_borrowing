@@ -181,6 +181,12 @@ class ReservationRepository
 
     /**
      * ดึงการจอง pending พร้อม lock (สำหรับ transaction)
+     * 
+     * [CONCURRENCY] FOR UPDATE ป้องกัน:
+     * - Double approve (admin 2 คนกดอนุมัติพร้อมกัน)
+     * - Cancel หลัง approve (race condition)
+     * 
+     * @note ต้องเรียกภายใน transaction เท่านั้น
      */
     public function findPendingForUpdate(int $id, ?int $userId = null): ?array
     {

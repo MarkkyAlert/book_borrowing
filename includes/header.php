@@ -64,6 +64,8 @@ $user = isLoggedIn() ? getCurrentUser() : null;
             background: #94a3b8; 
         }
     </style>
+    <!-- Modal Component -->
+    <script src="<?= APP_URL ?>/includes/modal.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased flex flex-col min-h-screen">
     

@@ -1,23 +1,25 @@
 <?php
 /**
  * Import Members from CSV
- * นำเขาสมาชิกจากไฟล์ CSV
+ * นำเข้าสมาชิกจากไฟล์ CSV
+ * 
+ * ใช้ MemberService::importMember() เป็น Single Source of Truth
  */
 
 require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
 
-use App\Repositories\UserRepository;
+use App\Services\MemberService;
 
 $pdo = getDB();
-$userRepo = new UserRepository($pdo);
+$memberService = new MemberService($pdo);
 
 $messages = [];
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     
-    // Validate CSRF
+    // [SECURITY] Validate CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'Invalid Request (CSRF)';
     } else {
@@ -28,74 +30,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             $errors[] = 'กรุณาอัปโหลดไฟล์ .csv เท่านั้น';
         } else {
             $handle = fopen($file['tmp_name'], 'r');
-            fgetcsv($handle); // Skip header
             
-            $pdo->beginTransaction();
-            
-            try {
-                $defaultPassHash = password_hash('123456', PASSWORD_DEFAULT);
-                $rowNumber = 1;
-                $skippedDetails = [];
-                $createdCount = 0;
-                $updatedCount = 0;
+            if (!$handle) {
+                $errors[] = 'ไม่สามารถอ่านไฟล์ได้';
+            } else {
+                fgetcsv($handle); // Skip header
                 
-                while (($row = fgetcsv($handle)) !== false) {
-                    $rowNumber++;
+                $pdo->beginTransaction();
+                
+                try {
+                    $rowNumber = 1;
+                    $skippedDetails = [];
+                    $createdCount = 0;
+                    $updatedCount = 0;
                     
-                    // Columns: Name, Email, Phone
-                    if (count($row) < 2) {
-                        $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อ และ อีเมล)";
-                        continue;
-                    }
-                    
-                    $name = trim($row[0]);
-                    $email = trim($row[1]);
-                    $phone = trim($row[2] ?? '');
-                    
-                    if (empty($name) || empty($email)) {
-                        $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหรืออีเมลว่างเปล่า";
-                        continue;
-                    }
-                    
-                    // Check duplicate email using repository
-                    $existingUser = $userRepo->findByEmail($email);
-                    
-                    if ($existingUser) {
-                        // UPDATE: Name & Phone only
-                        $userRepo->update($existingUser['id'], [
-                            'name' => $name,
-                            'phone' => $phone
-                        ]);
-                        $updatedCount++;
-                    } else {
-                        // INSERT: New member
-                        $userRepo->create([
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rowNumber++;
+                        
+                        // Columns: Name, Email, Phone
+                        if (count($row) < 2) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อ และ อีเมล)";
+                            continue;
+                        }
+                        
+                        $name = trim($row[0]);
+                        $email = trim($row[1]);
+                        $phone = trim($row[2] ?? '');
+                        
+                        if (empty($name) || empty($email)) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหรืออีเมลว่างเปล่า";
+                            continue;
+                        }
+                        
+                        // [REFACTOR] ใช้ MemberService เป็น single source of truth
+                        $result = $memberService->importMember([
                             'name' => $name,
                             'email' => $email,
-                            'password' => $defaultPassHash,
-                            'phone' => $phone,
-                            'role' => 'member'
+                            'phone' => $phone
                         ]);
-                        $createdCount++;
+                        
+                        if ($result['action'] === 'created') {
+                            $createdCount++;
+                        } else {
+                            $updatedCount++;
+                        }
+                    }
+                    
+                    $pdo->commit();
+                    
+                    $msg = "นำเข้าเสร็จสิ้น: เพิ่มใหม่ $createdCount คน, อัปเดต $updatedCount คน";
+                    if (!empty($skippedDetails)) {
+                        $msg .= "<br><br><strong>รายการที่ไม่สำเร็จ (" . count($skippedDetails) . "):</strong><br>" . implode("<br>", $skippedDetails);
+                        setFlash('warning', $msg, true);
+                    } else {
+                        setFlash('success', $msg);
+                    }
+                    
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $errors[] = "เกิดข้อผิดพลาด: " . $e->getMessage();
+                } finally {
+                    // [CLEANUP] ปิด file handle เสมอ
+                    if (is_resource($handle)) {
+                        fclose($handle);
                     }
                 }
-                
-                $pdo->commit();
-                
-                $msg = "นำเข้าเสร็จสิ้น: เพิ่มใหม่ $createdCount คน, อัปเดต $updatedCount คน";
-                if (!empty($skippedDetails)) {
-                    $msg .= "<br><br><strong>รายการที่ไม่สำเร็จ (" . count($skippedDetails) . "):</strong><br>" . implode("<br>", $skippedDetails);
-                    setFlash('warning', $msg, true);
-                } else {
-                    setFlash('success', $msg);
-                }
-                
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                $errors[] = "เกิดข้อผิดพลาด: " . $e->getMessage();
             }
-            
-            fclose($handle);
         }
     }
 }

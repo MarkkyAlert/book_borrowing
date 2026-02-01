@@ -142,7 +142,7 @@ function selectAll() {
 function generateLabels() {
     const selected = document.querySelectorAll('.book-checkbox:checked');
     if (selected.length === 0) {
-        alert('กรุณาเลือกหนังสืออย่างน้อย 1 เล่ม');
+        modalAlert('กรุณาเลือกหนังสืออย่างน้อย 1 เล่ม', {title: 'แจ้งเตือน', type: 'warning'});
         return;
     }
     

@@ -76,7 +76,12 @@ if (!$user) {
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8; 
         }
-        
+    </style>
+    
+    <!-- Modal Component -->
+    <script src="<?= APP_URL ?>/includes/modal.js"></script>
+    
+    <style>
         .sidebar-link {
             transition: all 0.2s;
         }

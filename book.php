@@ -146,39 +146,46 @@ require_once __DIR__ . '/includes/header.php';
 
                 <script>
                 function reserveBook(bookId) {
-                    if (!confirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน 2 วัน)')) {
-                        return;
-                    }
+                    modalConfirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน 2 วัน)', {
+                        title: 'ยืนยันการจอง',
+                        confirmText: 'จองเลย',
+                        confirmClass: 'primary'
+                    }).then(function(confirmed) {
+                        if (!confirmed) return;
 
-                    // [UX] Disable button to prevent double-submit
-                    const btn = event.target;
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังจอง...';
-
-                    fetch('api/reserve_book.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: 'book_id=' + bookId + '&csrf_token=<?= generateCSRFToken() ?>'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert(data.message);
-                            location.reload();
-                        } else {
-                            // [FIX High #5] Refresh page on error to get fresh data
-                            alert(data.message || 'เกิดข้อผิดพลาด');
-                            location.reload();
+                        // [UX] Disable button to prevent double-submit
+                        const btn = document.querySelector('[onclick*="reserveBook"]');
+                        if (btn) {
+                            btn.disabled = true;
+                            btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังจอง...';
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
-                        // Re-enable button on network error
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
+
+                        fetch('api/reserve_book.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'book_id=' + bookId + '&csrf_token=<?= generateCSRFToken() ?>'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                modalSuccess(data.message).then(() => location.reload());
+                            } else {
+                                // [FIX High #5] Refresh page on error to get fresh data
+                                modalError(data.message || 'เกิดข้อผิดพลาด').then(() => location.reload());
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            modalError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่').then(() => {
+                                // Re-enable button on network error
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
+                                }
+                            });
+                        });
                     });
                 }
                 </script>

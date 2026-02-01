@@ -177,6 +177,45 @@ class MemberService
     }
 
     /**
+     * Import สมาชิก (Create หรือ Update ถ้า email มีอยู่แล้ว)
+     * 
+     * ใช้สำหรับ bulk import จาก CSV - Single Source of Truth สำหรับ import logic
+     * 
+     * @param array $data { name: string, email: string, phone?: string }
+     * @param string $defaultPassword รหัสผ่านเริ่มต้นสำหรับสมาชิกใหม่
+     * @return array ['action' => 'created'|'updated', 'id' => int]
+     */
+    public function importMember(array $data, string $defaultPassword = '123456'): array
+    {
+        $email = trim($data['email']);
+        $name = trim($data['name']);
+        $phone = trim($data['phone'] ?? '');
+        
+        // Check if exists
+        $existing = $this->userRepo->findByEmail($email);
+        
+        if ($existing) {
+            // UPDATE: Name & Phone only (keep existing password)
+            $this->userRepo->update($existing['id'], [
+                'name' => $name,
+                'phone' => $phone
+            ]);
+            return ['action' => 'updated', 'id' => $existing['id']];
+        } else {
+            // INSERT: New member with default password
+            $hashedPassword = password_hash($defaultPassword, PASSWORD_DEFAULT);
+            $memberId = $this->userRepo->create([
+                'name' => $name,
+                'email' => $email,
+                'password' => $hashedPassword,
+                'phone' => $phone,
+                'role' => 'member'
+            ]);
+            return ['action' => 'created', 'id' => $memberId];
+        }
+    }
+
+    /**
      * สร้างรหัสผ่านแบบสุ่ม
      */
     private function generateRandomPassword(int $length = 8): string

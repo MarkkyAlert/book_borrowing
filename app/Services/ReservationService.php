@@ -2,6 +2,21 @@
 /**
  * ReservationService - Business Logic สำหรับการจองหนังสือ
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ระบบจองให้ user จองหนังสือแล้วมารับทีหลัง
+ * - สต็อกถูกหักทันทีตอนจอง (กัน stock ไว้)
+ * - ถ้าไม่มารับภายในกำหนด → หมดอายุ → คืน stock
+ * 
+ * 🔄 State Transitions:
+ * - pending   → fulfilled (admin อนุมัติ → สร้าง borrow)
+ * - pending   → cancelled (user/admin ยกเลิก → คืน stock)
+ * - pending   → expired   (cron job → คืน stock)
+ * 
+ * 📍 Entrypoints:
+ * - api/reserve_book.php    → createReservation()
+ * - admin/reservations.php  → fulfillReservation(), cancelReservation()
+ * - cron/expire_reservations.php → expireOverdueReservations()
+ * 
  * @package App\Services
  */
 

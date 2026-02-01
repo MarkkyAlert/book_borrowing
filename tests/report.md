@@ -1,6 +1,6 @@
 # QA Test Report - Book Borrowing System
 
-**Run Date:** 2026-01-31 02:56:44  
+**Run Date:** 2026-02-01 22:04:04  
 **Environment:** http://localhost/book_borrowing  
 **Test Runner:** PHP cURL  
 
@@ -137,7 +137,7 @@ All security tests passed:
 | File | Description |
 |------|-------------|
 | `tests/test_cases.md` | รายการ test cases ทั้งหมด |
-| `tests/logs/qa_run_2026-01-31_025644.jsonl` | Raw request/response logs |
+| `tests/logs/qa_run_2026-02-01_220404.jsonl` | Raw request/response logs |
 | `tests/logs/summary.json` | JSON summary |
 | `tests/report.md` | รายงานนี้ |
 
@@ -155,4 +155,4 @@ All security tests passed:
 
 ---
 
-*Report generated: 2026-01-31 02:56:45 ICT*
+*Report generated: 2026-02-01 22:04:05 ICT*

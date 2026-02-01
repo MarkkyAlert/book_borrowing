@@ -152,7 +152,7 @@ require_once __DIR__ . '/header.php';
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <?php if ($res['status'] === 'pending'): ?>
                                     <div class="flex justify-end space-x-2">
-                                        <form method="POST" class="inline" onsubmit="return confirm('ยืนยันอนุมัติการยืม?');">
+                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, 'ยืนยันอนุมัติการยืม?', {title: 'อนุมัติการจอง', confirmText: 'อนุมัติ', confirmClass: 'success'});">
                                             <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                             <input type="hidden" name="id" value="<?= $res['id'] ?>">
                                             <input type="hidden" name="action" value="approve">
@@ -160,7 +160,7 @@ require_once __DIR__ . '/header.php';
                                                 <i class="bi bi-check-lg mr-1"></i> อนุมัติ
                                             </button>
                                         </form>
-                                        <form method="POST" class="inline" onsubmit="return confirm('ยืนยันยกเลิกการจอง? (สต็อกจะคืนกลับ)');">
+                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, 'ยืนยันยกเลิกการจอง?\n(สต็อกจะคืนกลับ)', {title: 'ยกเลิกการจอง', confirmText: 'ยกเลิกการจอง', confirmClass: 'danger'});">
                                             <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                             <input type="hidden" name="id" value="<?= $res['id'] ?>">
                                             <input type="hidden" name="action" value="cancel">

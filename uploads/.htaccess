@@ -1,0 +1,18 @@
+# ===================================
+# Security: Disable PHP execution in uploads folder
+# ===================================
+# ป้องกันการ execute PHP ใน folder นี้
+# แม้ attacker upload ไฟล์ .php มาได้ ก็จะไม่สามารถรันได้
+
+# Disable PHP engine
+php_flag engine off
+
+# Block PHP files directly
+<FilesMatch "\.(php|php5|phtml|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Allow only images
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|svg)$">
+    Require all granted
+</FilesMatch>
