@@ -75,38 +75,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'รหัสผ่านไม่ตรงกัน';
     }
     
-    // [VALIDATION] ตรวจสอบ email ซ้ำใน DB
-    // ต้องทำหลังจาก validation อื่นผ่านแล้ว เพื่อลด DB queries
+    // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
     if (empty($errors)) {
-        $pdo = getDB();
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        if ($stmt->fetch()) {
-            // [SECURITY] บอกว่า email ซ้ำ - ยอมรับความเสี่ยง user enumeration
-            // เพื่อ UX ที่ดีกว่า (ถ้าต้องการปิด ให้ return error กลางๆ)
-            $errors[] = 'อีเมลนี้ถูกใช้งานแล้ว';
-        }
-    }
-    
-    // [DB WRITE] สร้าง user ใหม่
-    if (empty($errors)) {
-        $pdo = getDB();
-        // [SECURITY] ใช้ PASSWORD_DEFAULT = bcrypt (ปัจจุบัน)
-        // PHP จะ upgrade algorithm อัตโนมัติเมื่อมี version ใหม่
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        require_once __DIR__ . '/app/Services/AuthService.php';
+        $authService = new \App\Services\AuthService(getDB());
         
-        // [NOTE] role hardcode เป็น 'member' - ห้าม user เลือกเอง
-        $stmt = $pdo->prepare("
-            INSERT INTO users (name, email, password, phone, role) 
-            VALUES (?, ?, ?, ?, 'member')
-        ");
+        $result = $authService->register([
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone,
+            'password' => $password
+        ]);
         
-        try {
-            $stmt->execute([$name, $email, $hashedPassword, $phone ?: null]);
+        if ($result['success']) {
             setFlash('success', 'สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ');
             redirect(APP_URL . '/login.php');
-        } catch (PDOException $e) {
-            $errors[] = 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+        } else {
+            $errors[] = $result['error'];
         }
     }
 }

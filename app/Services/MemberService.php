@@ -7,44 +7,39 @@
 
 namespace App\Services;
 
+require_once __DIR__ . '/../Repositories/UserRepository.php';
+require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+
+use App\Repositories\UserRepository;
+use App\Repositories\BorrowRepository;
 use PDO;
 use Exception;
 
 class MemberService
 {
     private PDO $pdo;
+    private UserRepository $userRepo;
+    private BorrowRepository $borrowRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->userRepo = new UserRepository($pdo);
+        $this->borrowRepo = new BorrowRepository($pdo);
     }
 
     /**
      * ดึงรายการสมาชิกทั้งหมด
+     * 
+     * @param array $filters {
+     *     search?: string,
+     *     status?: string ('has_borrow', 'no_borrow'),
+     *     sort?: string ('newest', 'oldest', 'az', 'za', 'most_borrows')
+     * }
      */
     public function getMembers(array $filters = []): array
     {
-        $where = ["role = 'member'"];
-        $params = [];
-
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $where[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
-            $params[] = "%{$search}%";
-            $params[] = "%{$search}%";
-            $params[] = "%{$search}%";
-        }
-
-        $whereSQL = 'WHERE ' . implode(' AND ', $where);
-
-        $stmt = $this->pdo->prepare("
-            SELECT id, name, email, phone, created_at 
-            FROM users 
-            {$whereSQL}
-            ORDER BY name
-        ");
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        return $this->userRepo->findMembers($filters);
     }
 
     /**
@@ -52,12 +47,7 @@ class MemberService
      */
     public function getMemberById(int $id): ?array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT id, name, email, phone, role, created_at 
-            FROM users WHERE id = ? AND role = 'member'
-        ");
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        return $this->userRepo->findMemberById($id);
     }
 
     /**
@@ -90,19 +80,13 @@ class MemberService
         $password = $this->generateRandomPassword();
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-        $stmt = $this->pdo->prepare("
-            INSERT INTO users (name, email, phone, password, role)
-            VALUES (?, ?, ?, ?, 'member')
-        ");
-
-        $stmt->execute([
-            trim($data['name']),
-            trim($data['email']),
-            trim($data['phone'] ?? ''),
-            $hashedPassword
+        $memberId = $this->userRepo->create([
+            'name' => trim($data['name']),
+            'email' => trim($data['email']),
+            'phone' => trim($data['phone'] ?? ''),
+            'password' => $hashedPassword,
+            'role' => 'member'
         ]);
-
-        $memberId = (int) $this->pdo->lastInsertId();
 
         return [
             'id' => $memberId,
@@ -129,16 +113,10 @@ class MemberService
             }
         }
 
-        $stmt = $this->pdo->prepare("
-            UPDATE users SET name = ?, email = ?, phone = ?
-            WHERE id = ? AND role = 'member'
-        ");
-
-        return $stmt->execute([
-            trim($data['name']),
-            trim($data['email']),
-            trim($data['phone'] ?? ''),
-            $id
+        return $this->userRepo->update($id, [
+            'name' => trim($data['name']),
+            'email' => trim($data['email']),
+            'phone' => trim($data['phone'] ?? '')
         ]);
     }
 
@@ -150,15 +128,11 @@ class MemberService
     public function deleteMember(int $id): bool
     {
         // Check if has borrow history
-        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ?");
-        $stmt->execute([$id]);
-        
-        if ($stmt->fetchColumn() > 0) {
+        if ($this->borrowRepo->countByUser($id) > 0) {
             throw new Exception('ไม่สามารถลบได้ สมาชิกมีประวัติการยืม');
         }
 
-        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'member'");
-        return $stmt->execute([$id]);
+        return $this->userRepo->deleteMember($id);
     }
 
     /**
@@ -166,17 +140,7 @@ class MemberService
      */
     public function emailExists(string $email, ?int $excludeId = null): bool
     {
-        $sql = "SELECT COUNT(*) FROM users WHERE email = ?";
-        $params = [$email];
-
-        if ($excludeId) {
-            $sql .= " AND id != ?";
-            $params[] = $excludeId;
-        }
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchColumn() > 0;
+        return $this->userRepo->emailExists($email, $excludeId);
     }
 
     /**
@@ -184,16 +148,7 @@ class MemberService
      */
     public function getBorrowHistory(int $memberId, int $limit = 20): array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT b.*, bk.title as book_title, bk.author as book_author
-            FROM borrows b
-            JOIN books bk ON b.book_id = bk.id
-            WHERE b.user_id = ?
-            ORDER BY b.created_at DESC
-            LIMIT ?
-        ");
-        $stmt->execute([$memberId, $limit]);
-        return $stmt->fetchAll();
+        return $this->borrowRepo->findByUserId($memberId, $limit);
     }
 
     /**
@@ -201,17 +156,7 @@ class MemberService
      */
     public function getMemberStatistics(int $memberId): array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT 
-                COUNT(*) as total_borrows,
-                SUM(CASE WHEN status = 'borrowing' THEN 1 ELSE 0 END) as active_borrows,
-                SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
-                SUM(fine_amount) as total_fines
-            FROM borrows
-            WHERE user_id = ?
-        ");
-        $stmt->execute([$memberId]);
-        return $stmt->fetch();
+        return $this->borrowRepo->getStatsByUser($memberId);
     }
 
     /**
@@ -219,7 +164,7 @@ class MemberService
      */
     public function countMembers(): int
     {
-        return (int) $this->pdo->query("SELECT COUNT(*) FROM users WHERE role = 'member'")->fetchColumn();
+        return $this->userRepo->countMembers();
     }
 
     /**

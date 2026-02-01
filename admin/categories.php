@@ -8,6 +8,11 @@ requireStaff(); // Auth check ก่อนทำงานใดๆ
 require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
+
+// [REFACTORED] ใช้ CategoryRepository แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Repositories/CategoryRepository.php';
+$categoryRepo = new \App\Repositories\CategoryRepository($pdo);
+
 $errors = [];
 $editCategory = null;
 
@@ -31,18 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'ชื่อหมวดหมู่ต้องไม่เกิน 100 ตัวอักษร';
         }
         
-        // Check duplicate
+        // Check duplicate via repository
         if (empty($errors)) {
-            $stmt = $pdo->prepare("SELECT id FROM categories WHERE name = ?");
-            $stmt->execute([$name]);
-            if ($stmt->fetch()) {
+            if ($categoryRepo->nameExists($name)) {
                 $errors[] = 'ชื่อหมวดหมู่นี้มีอยู่แล้ว';
             }
         }
         
         if (empty($errors)) {
-            $stmt = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
-            $stmt->execute([$name]);
+            $categoryRepo->create($name);
             setFlash('success', 'เพิ่มหมวดหมู่สำเร็จ');
             redirect('categories.php');
         }
@@ -57,18 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'กรุณากรอกชื่อหมวดหมู่';
         }
         
-        // Check duplicate (exclude current)
+        // Check duplicate (exclude current) via repository
         if (empty($errors)) {
-            $stmt = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND id != ?");
-            $stmt->execute([$name, $id]);
-            if ($stmt->fetch()) {
+            if ($categoryRepo->nameExists($name, $id)) {
                 $errors[] = 'ชื่อหมวดหมู่นี้มีอยู่แล้ว';
             }
         }
         
         if (empty($errors)) {
-            $stmt = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ?");
-            $stmt->execute([$name, $id]);
+            $categoryRepo->update($id, $name);
             setFlash('success', 'อัปเดตหมวดหมู่สำเร็จ');
             redirect('categories.php');
         } else {
@@ -80,49 +79,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
         
-        $pdo->beginTransaction();
         try {
-            // Lock category row
-            $stmt = $pdo->prepare("SELECT id FROM categories WHERE id = ? FOR UPDATE");
-            $stmt->execute([$id]);
-            
-            // Check if has books
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM books WHERE category_id = ?");
-            $stmt->execute([$id]);
-            $bookCount = $stmt->fetchColumn();
-            
-            if ($bookCount > 0) {
-                throw new Exception("ไม่สามารถลบได้ หมวดหมู่นี้มีหนังสือ $bookCount เล่ม");
+            // Check if has books via repository
+            if ($categoryRepo->hasBooks($id)) {
+                throw new Exception('ไม่สามารถลบได้ หมวดหมู่นี้มีหนังสือ');
             }
             
-            $stmt = $pdo->prepare("DELETE FROM categories WHERE id = ?");
-            $stmt->execute([$id]);
-            $pdo->commit();
+            $categoryRepo->delete($id);
             setFlash('success', 'ลบหมวดหมู่สำเร็จ');
         } catch (Exception $e) {
-            $pdo->rollBack();
             setFlash('error', $e->getMessage());
         }
         redirect('categories.php');
     }
 }
 
-// Get for edit
+// Get for edit via repository
 if (isset($_GET['edit'])) {
     $editId = (int) $_GET['edit'];
-    $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
-    $stmt->execute([$editId]);
-    $editCategory = $stmt->fetch();
+    $editCategory = $categoryRepo->findById($editId);
 }
 
-// Get all categories with book count
-$categories = $pdo->query("
-    SELECT c.*, COUNT(b.id) as book_count
-    FROM categories c
-    LEFT JOIN books b ON c.id = b.category_id
-    GROUP BY c.id
-    ORDER BY c.name
-")->fetchAll();
+// Get all categories with book count via repository
+$categories = $categoryRepo->findAllWithBookCount();
 
 $pageTitle = 'จัดการหมวดหมู่';
 require_once __DIR__ . '/header.php';

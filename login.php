@@ -48,12 +48,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($_SESSION[$attemptKey] >= 5) {
             $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที';
         } else {
-            $pdo = getDB();
-            $stmt = $pdo->prepare("SELECT id, name, email, password, role FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
+            // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
+            require_once __DIR__ . '/app/Services/AuthService.php';
+            $authService = new \App\Services\AuthService(getDB());
+            $user = $authService->login($email, $password);
             
-            if ($user && password_verify($password, $user['password'])) {
+            if ($user) {
                 // [SECURITY] Reset counter เมื่อ login สำเร็จ
                 $_SESSION[$attemptKey] = 0;
                 

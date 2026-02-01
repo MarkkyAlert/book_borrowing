@@ -8,82 +8,29 @@ require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
 
-// Get statistics (using quantity/available columns)
-$totalBooks = $pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM books")->fetchColumn();
-$availableBooks = $pdo->query("SELECT COALESCE(SUM(available), 0) FROM books")->fetchColumn();
-$borrowedBooks = $pdo->query("SELECT COALESCE(SUM(quantity - available), 0) FROM books")->fetchColumn();
-$totalMembers = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'member'")->fetchColumn();
-$activeBorrows = $pdo->query("SELECT COUNT(*) FROM borrows WHERE status = 'borrowing'")->fetchColumn();
+// [REFACTORED] ใช้ DashboardService แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Services/DashboardService.php';
+$dashboardService = new \App\Services\DashboardService($pdo);
 
-// Overdue borrows
-$overdueBorrows = $pdo->query("
-    SELECT COUNT(*) FROM borrows 
-    WHERE status = 'borrowing' AND due_date < CURDATE()
-")->fetchColumn();
+// Get card statistics
+$stats = $dashboardService->getCardStats();
+$totalBooks = $stats['total_books'];
+$availableBooks = $stats['available_books'];
+$borrowedBooks = $stats['borrowed_books'];
+$totalMembers = $stats['total_members'];
+$activeBorrows = $stats['active_borrows'];
+$overdueBorrows = $stats['overdue_borrows'];
+$pendingReservations = $stats['pending_reservations'];
 
-// Recent borrows
-$recentBorrows = $pdo->query("
-    SELECT b.*, u.name as user_name, bk.title as book_title
-    FROM borrows b
-    JOIN users u ON b.user_id = u.id
-    JOIN books bk ON b.book_id = bk.id
-    ORDER BY b.created_at DESC
-    LIMIT 5
-")->fetchAll();
+// Get lists
+$recentBorrows = $dashboardService->getRecentBorrows(5);
+$recentReservations = $dashboardService->getRecentReservations(5);
+$overdueList = $dashboardService->getOverdueList(10);
 
-// Pending Reservations Count
-$pendingReservations = $pdo->query("SELECT COUNT(*) FROM reservations WHERE status = 'pending'")->fetchColumn();
-
-// Recent Reservations List
-$recentReservations = $pdo->query("
-    SELECT r.*, u.name as user_name, b.title as book_title
-    FROM reservations r
-    JOIN users u ON r.user_id = u.id
-    JOIN books b ON r.book_id = b.id
-    WHERE r.status = 'pending'
-    ORDER BY r.created_at DESC
-    LIMIT 5
-")->fetchAll();
-
-// Overdue list
-$overdueList = $pdo->query("
-    SELECT b.*, u.name as user_name, u.phone, bk.title as book_title
-    FROM borrows b
-    JOIN users u ON b.user_id = u.id
-    JOIN books bk ON b.book_id = bk.id
-    WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-    ORDER BY b.due_date ASC
-    LIMIT 10
-")->fetchAll();
-
-// ========== Chart Data ==========
-
-// Monthly borrow statistics (last 6 months)
-$monthlyBorrows = $pdo->query("
-    SELECT 
-        DATE_FORMAT(borrow_date, '%Y-%m') as month,
-        DATE_FORMAT(borrow_date, '%b') as month_name,
-        COUNT(*) as total_borrows,
-        SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
-        SUM(fine_amount) as total_fines
-    FROM borrows 
-    WHERE borrow_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-    GROUP BY DATE_FORMAT(borrow_date, '%Y-%m')
-    ORDER BY month ASC
-")->fetchAll();
-
-// Category distribution
-$categoryStats = $pdo->query("
-    SELECT c.name, COUNT(b.id) as book_count
-    FROM categories c
-    LEFT JOIN books b ON c.id = b.category_id
-    GROUP BY c.id, c.name
-    ORDER BY book_count DESC
-    LIMIT 6
-")->fetchAll();
-
-// Total Revenue collected (from payments table)
-$totalFines = $pdo->query("SELECT COALESCE(SUM(amount), 0) FROM payments")->fetchColumn();
+// Chart data
+$monthlyBorrows = $dashboardService->getMonthlyStats(6);
+$categoryStats = $dashboardService->getCategoryStats(6);
+$totalFines = $dashboardService->getTotalFinesCollected();
 
 // Books status for pie chart
 $bookStatusData = [

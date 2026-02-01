@@ -47,7 +47,9 @@ class BookRepository
             $params[] = $filters['category_id'];
         }
 
-        if (isset($filters['available_only']) && $filters['available_only']) {
+        // Support both 'available_only' and 'available' filter keys
+        if ((isset($filters['available_only']) && $filters['available_only']) 
+            || (isset($filters['available']) && $filters['available'])) {
             $where[] = "b.available > 0";
         }
 
@@ -221,6 +223,22 @@ class BookRepository
         ");
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * เพิ่ม available + 1 (คืนหนังสือ)
+     */
+    public function incrementAvailable(int $id): bool
+    {
+        return $this->updateAvailable($id, 1);
+    }
+
+    /**
+     * ลด available - 1 (ยืมหนังสือ)
+     */
+    public function decrementAvailable(int $id): bool
+    {
+        return $this->updateAvailable($id, -1);
     }
 
     /**

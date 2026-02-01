@@ -8,51 +8,29 @@ require_once __DIR__ . '/includes/db.php';
 
 $pdo = getDB();
 
+// [REFACTORED] ใช้ HomeService แทน SQL Query โดยตรง
+require_once __DIR__ . '/app/Services/HomeService.php';
+$homeService = new \App\Services\HomeService($pdo);
+
 // Get search/filter parameters
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
 
-// Build query
-$where = [];
-$params = [];
+// Get data via Service
+$data = $homeService->getBooks([
+    'search' => $search,
+    'category_id' => $categoryId,
+    'status' => $status
+]);
+$books = $data['books'];
+$categories = $data['categories'];
 
-if (!empty($search)) {
-    $where[] = "(b.title LIKE ? OR b.author LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-
-if ($categoryId > 0) {
-    $where[] = "b.category_id = ?";
-    $params[] = $categoryId;
-}
-
-if ($status === 'available') {
-    $where[] = "b.available > 0";
-}
-
-$whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-// Get books
-$sql = "
-    SELECT b.*, c.name as category_name 
-    FROM books b
-    LEFT JOIN categories c ON b.category_id = c.id
-    $whereSQL
-    ORDER BY b.created_at DESC
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$books = $stmt->fetchAll();
-
-// Get categories for filter
-$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
-
-// Get stats (using available column now)
-$totalBooks = $pdo->query("SELECT SUM(quantity) FROM books")->fetchColumn() ?: 0;
-$availableBooks = $pdo->query("SELECT SUM(available) FROM books")->fetchColumn() ?: 0;
-$totalMembers = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'member'")->fetchColumn();
+// Get stats
+$stats = $homeService->getStats();
+$totalBooks = $stats['total_books'];
+$availableBooks = $stats['available_books'];
+$totalMembers = $stats['total_members'];
 
 $pageTitle = 'หน้าแรก';
 require_once __DIR__ . '/includes/header.php';

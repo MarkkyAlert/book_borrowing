@@ -45,6 +45,10 @@ class BorrowRepository
         if (isset($filters['overdue']) && $filters['overdue']) {
             $where[] = "b.status = 'borrowing' AND b.due_date < CURDATE()";
         }
+        
+        if (isset($filters['due_today']) && $filters['due_today']) {
+            $where[] = "b.status = 'borrowing' AND b.due_date = CURDATE()";
+        }
 
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -212,6 +216,46 @@ class BorrowRepository
         $stmt->execute([$userId, $limit]);
         return $stmt->fetchAll();
     }
+    
+    /**
+     * ดึงรายการยืมปัจจุบันของหนังสือ (ยังไม่คืน)
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return array รายการ borrow พร้อมชื่อ borrower
+     */
+    public function findCurrentByBook(int $bookId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.*, u.name as borrower_name
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.book_id = ? AND b.status = 'borrowing'
+            ORDER BY b.created_at DESC
+        ");
+        $stmt->execute([$bookId]);
+        return $stmt->fetchAll();
+    }
+    
+    /**
+     * ดึงประวัติการยืมของหนังสือ
+     * 
+     * @param int $bookId ID หนังสือ
+     * @param int $limit  จำนวนรายการ
+     * @return array รายการ borrow พร้อมชื่อ borrower
+     */
+    public function findHistoryByBook(int $bookId, int $limit = 5): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.*, u.name as borrower_name
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.book_id = ?
+            ORDER BY b.created_at DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$bookId, $limit]);
+        return $stmt->fetchAll();
+    }
 
     /**
      * นับจำนวนเกินกำหนด
@@ -254,4 +298,53 @@ class BorrowRepository
         $stmt->execute([$months]);
         return $stmt->fetchAll();
     }
+
+    /**
+     * นับจำนวนการยืมของหนังสือ
+     */
+    public function countByBook(int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
+        $stmt->execute([$bookId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * นับจำนวนการยืมทั้งหมดของ user
+     */
+    public function countByUser(int $userId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ?");
+        $stmt->execute([$userId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ดึงสถิติการยืมของ user
+     */
+    public function getStatsByUser(int $userId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT 
+                COUNT(*) as total_borrows,
+                SUM(CASE WHEN status = 'borrowing' THEN 1 ELSE 0 END) as active_borrows,
+                SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
+                COALESCE(SUM(fine_amount), 0) as total_fines
+            FROM borrows
+            WHERE user_id = ?
+        ");
+        $stmt->execute([$userId]);
+        return $stmt->fetch();
+    }
+
+    /**
+     * นับการยืมที่ active ของหนังสือ
+     */
+    public function countActiveByBook(int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
+        $stmt->execute([$bookId]);
+        return (int) $stmt->fetchColumn();
+    }
 }
+

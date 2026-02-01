@@ -521,7 +521,7 @@ $(document).ready(function() {
         btn.prop('disabled', true).html('<span class="inline-block animate-spin mr-2">&#9696;</span>กำลังบันทึก...');
         
         $.ajax({
-            url: 'ajax_add_member.php',
+            url: '../api/add_member.php',
             method: 'POST',
             data: { name: name, email: email, phone: phone, csrf_token: '<?= generateCSRFToken() ?>' },
             dataType: 'json',

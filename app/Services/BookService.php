@@ -7,60 +7,82 @@
 
 namespace App\Services;
 
+require_once __DIR__ . '/../Repositories/BookRepository.php';
+require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+
+use App\Repositories\BookRepository;
+use App\Repositories\BorrowRepository;
 use PDO;
 use Exception;
 
 class BookService
 {
     private PDO $pdo;
+    private BookRepository $bookRepo;
+    private BorrowRepository $borrowRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->bookRepo = new BookRepository($pdo);
+        $this->borrowRepo = new BorrowRepository($pdo);
     }
 
     /**
      * ดึงรายการหนังสือทั้งหมด พร้อม filter
+     * 
+     * @param array $filters {
+     *     search?: string,
+     *     category_id?: int,
+     *     status?: string ('available', 'borrowed', 'out_of_stock'),
+     *     sort?: string ('newest', 'oldest', 'az')
+     * }
      */
     public function getBooks(array $filters = []): array
     {
-        $where = [];
-        $params = [];
+        // แปลง filters สำหรับ repository
+        $repoFilters = [];
 
         if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
-            $params[] = "%{$search}%";
-            $params[] = "%{$search}%";
-            $params[] = "%{$search}%";
+            $repoFilters['search'] = $filters['search'];
         }
 
         if (!empty($filters['category_id'])) {
-            $where[] = "b.category_id = ?";
-            $params[] = $filters['category_id'];
+            $repoFilters['category_id'] = $filters['category_id'];
         }
 
-        if (isset($filters['status'])) {
-            if ($filters['status'] === 'available') {
-                $where[] = "b.available > 0";
-            } elseif ($filters['status'] === 'borrowed') {
-                $where[] = "b.available < b.quantity";
+        // Status filter - ใช้ repository findAll แล้วกรอง
+        // หรือสร้าง method ใหม่ใน repo ถ้าต้องการ performance ดีกว่า
+        $books = $this->bookRepo->findAll($repoFilters);
+
+        if (!empty($filters['status'])) {
+            $status = $filters['status'];
+            $books = array_filter($books, function ($book) use ($status) {
+                if ($status === 'available') {
+                    return $book['available'] > 0;
+                } elseif ($status === 'borrowed') {
+                    return $book['available'] < $book['quantity'];
+                } elseif ($status === 'out_of_stock') {
+                    return $book['available'] === 0;
+                }
+                return true;
+            });
+        }
+
+        // Sort
+        $sort = $filters['sort'] ?? 'newest';
+        usort($books, function ($a, $b) use ($sort) {
+            switch ($sort) {
+                case 'oldest':
+                    return strtotime($a['created_at']) - strtotime($b['created_at']);
+                case 'az':
+                    return strcmp($a['title'], $b['title']);
+                default: // newest
+                    return strtotime($b['created_at']) - strtotime($a['created_at']);
             }
-        }
+        });
 
-        $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-        $sql = "
-            SELECT b.*, c.name as category_name 
-            FROM books b
-            LEFT JOIN categories c ON b.category_id = c.id
-            {$whereSQL}
-            ORDER BY b.created_at DESC
-        ";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        return array_values($books);
     }
 
     /**
@@ -68,14 +90,7 @@ class BookService
      */
     public function getBookById(int $id): ?array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT b.*, c.name as category_name 
-            FROM books b
-            LEFT JOIN categories c ON b.category_id = c.id
-            WHERE b.id = ?
-        ");
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        return $this->bookRepo->findById($id);
     }
 
     /**
@@ -83,9 +98,7 @@ class BookService
      */
     public function getAvailableBooks(): array
     {
-        return $this->pdo->query("
-            SELECT * FROM books WHERE available > 0 ORDER BY title
-        ")->fetchAll();
+        return $this->bookRepo->findAvailable();
     }
 
     /**
@@ -93,25 +106,7 @@ class BookService
      */
     public function createBook(array $data): int
     {
-        $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        $quantity = $data['quantity'] ?? 1;
-
-        $stmt->execute([
-            $data['title'],
-            $data['author'],
-            $data['isbn'] ?? null,
-            $data['category_id'] ?? null,
-            $data['description'] ?? null,
-            $data['cover_image'] ?? null,
-            $quantity,
-            $quantity // available = quantity for new books
-        ]);
-
-        return (int) $this->pdo->lastInsertId();
+        return $this->bookRepo->create($data);
     }
 
     /**
@@ -130,24 +125,15 @@ class BookService
         $quantityDiff = $newQuantity - $oldQuantity;
         $newAvailable = max(0, $book['available'] + $quantityDiff);
 
-        $stmt = $this->pdo->prepare("
-            UPDATE books SET 
-                title = ?, author = ?, isbn = ?, category_id = ?, 
-                description = ?, cover_image = COALESCE(?, cover_image), 
-                quantity = ?, available = ?
-            WHERE id = ?
-        ");
-
-        return $stmt->execute([
-            $data['title'],
-            $data['author'],
-            $data['isbn'] ?? null,
-            $data['category_id'] ?? null,
-            $data['description'] ?? null,
-            $data['cover_image'] ?? null,
-            $newQuantity,
-            $newAvailable,
-            $id
+        return $this->bookRepo->update($id, [
+            'title' => $data['title'],
+            'author' => $data['author'],
+            'isbn' => $data['isbn'] ?? null,
+            'category_id' => $data['category_id'] ?? null,
+            'description' => $data['description'] ?? null,
+            'cover_image' => $data['cover_image'] ?? null,
+            'quantity' => $newQuantity,
+            'available' => $newAvailable
         ]);
     }
 
@@ -162,9 +148,7 @@ class BookService
 
         try {
             // Lock book row
-            $stmt = $this->pdo->prepare("SELECT available, quantity, cover_image FROM books WHERE id = ? FOR UPDATE");
-            $stmt->execute([$id]);
-            $book = $stmt->fetch();
+            $book = $this->bookRepo->findByIdForUpdate($id);
 
             if (!$book) {
                 throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
@@ -181,8 +165,7 @@ class BookService
             }
 
             // Delete book
-            $stmt = $this->pdo->prepare("DELETE FROM books WHERE id = ?");
-            $stmt->execute([$id]);
+            $this->bookRepo->delete($id);
 
             $this->pdo->commit();
 
@@ -204,9 +187,7 @@ class BookService
      */
     public function isBeingBorrowed(int $bookId): bool
     {
-        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
-        $stmt->execute([$bookId]);
-        return $stmt->fetchColumn() > 0;
+        return $this->borrowRepo->countActiveByBook($bookId) > 0;
     }
 
     /**
@@ -214,9 +195,7 @@ class BookService
      */
     public function hasBorrowHistory(int $bookId): bool
     {
-        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
-        $stmt->execute([$bookId]);
-        return $stmt->fetchColumn() > 0;
+        return $this->borrowRepo->countByBook($bookId) > 0;
     }
 
     /**
@@ -224,9 +203,7 @@ class BookService
      */
     public function findByIdOrIsbn(string $identifier): ?array
     {
-        $stmt = $this->pdo->prepare("SELECT id, title, author, available FROM books WHERE id = ? OR isbn = ?");
-        $stmt->execute([$identifier, $identifier]);
-        return $stmt->fetch() ?: null;
+        return $this->bookRepo->findByIdOrIsbn($identifier);
     }
 
     /**
@@ -234,12 +211,7 @@ class BookService
      */
     public function getStatistics(): array
     {
-        return [
-            'total' => (int) $this->pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM books")->fetchColumn(),
-            'available' => (int) $this->pdo->query("SELECT COALESCE(SUM(available), 0) FROM books")->fetchColumn(),
-            'borrowed' => (int) $this->pdo->query("SELECT COALESCE(SUM(quantity - available), 0) FROM books")->fetchColumn(),
-            'titles' => (int) $this->pdo->query("SELECT COUNT(*) FROM books")->fetchColumn(),
-        ];
+        return $this->bookRepo->getStatistics();
     }
 
     /**

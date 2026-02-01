@@ -12,6 +12,12 @@ requireAdmin();
 
 $pdo = getDB();
 
+// [REFACTORED] ใช้ ReservationService แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Services/ReservationService.php';
+require_once __DIR__ . '/../app/Repositories/ReservationRepository.php';
+$reservationService = new \App\Services\ReservationService($pdo);
+$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
+
 // Handle Actions (Approve / Cancel)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // [SECURITY] CSRF check
@@ -24,78 +30,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'];
 
     try {
-        // [DB] Transaction สำคัญ - approve/cancel มีหลาย operations
-        $pdo->beginTransaction();
-
-        // [CONCURRENCY] FOR UPDATE ล็อคแถว - ป้องกัน approve/cancel พร้อมกัน
-        $stmt = $pdo->prepare("SELECT * FROM reservations WHERE id = ? FOR UPDATE");
-        $stmt->execute([$resId]);
-        $reservation = $stmt->fetch();
-
-        // [STATE CHECK] ต้องเป็น pending เท่านั้นถึงดำเนินการได้
-        // ป้องกัน double action (กด approve 2 ครั้ง, multi-tab)
-        if (!$reservation || $reservation['status'] !== 'pending') {
-            throw new Exception("ไม่พบรายการจองหรือสถานะไม่ถูกต้อง");
-        }
-
         if ($action === 'approve') {
-            // [STATE TRANSITION] pending → fulfilled + สร้าง borrow
-            // NOTE: stock ถูกหักไปแล้วตอนจอง จึงไม่ต้องหักซ้ำ
-            $stmt = $pdo->prepare("
-                INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
-                VALUES (?, ?, CURDATE(), CURDATE() + INTERVAL 7 DAY, 'borrowing')
-            ");
-            $stmt->execute([$reservation['user_id'], $reservation['book_id']]);
-
-            $stmt = $pdo->prepare("UPDATE reservations SET status = 'fulfilled' WHERE id = ?");
-            $stmt->execute([$resId]);
-
+            // ReservationService จัดการ: validate status, สร้าง borrow, update status
+            $reservationService->fulfill($resId);
             setFlash('success', 'อนุมัติการจองสำเร็จ! บันทึกเป็น "กำลังยืม" เรียบร้อยแล้ว');
 
         } elseif ($action === 'cancel') {
-            // [STATE TRANSITION] pending → cancelled + คืน stock
-            // สำคัญ: ต้องคืน stock เพราะตอนจองได้หักไปแล้ว
-            $stmt = $pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
-            $stmt->execute([$reservation['book_id']]);
-
-            $stmt = $pdo->prepare("UPDATE reservations SET status = 'cancelled' WHERE id = ?");
-            $stmt->execute([$resId]);
-
+            // ReservationService จัดการ: validate status, คืน stock, update status
+            $reservationService->cancel($resId);
             setFlash('success', 'ยกเลิกการจองและคืนสต็อกหนังสือเรียบร้อยแล้ว');
         }
-
-        $pdo->commit();
-
     } catch (Exception $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         setFlash('error', 'เกิดข้อผิดพลาด: ' . $e->getMessage());
     }
 
     redirect('reservations.php');
 }
 
-// Fetch Reservations
+// Fetch Reservations via Repository
 $statusFilter = $_GET['status'] ?? 'pending';
-$params = [];
-$sql = "
-    SELECT r.*, u.name as user_name, u.email, b.title as book_title, b.cover_image
-    FROM reservations r
-    JOIN users u ON r.user_id = u.id
-    JOIN books b ON r.book_id = b.id
-";
-
+$filters = [];
 if ($statusFilter !== 'all') {
-    $sql .= " WHERE r.status = ?";
-    $params[] = $statusFilter;
+    $filters['status'] = $statusFilter;
 }
-
-$sql .= " ORDER BY r.created_at DESC";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$reservations = $stmt->fetchAll();
+$reservations = $reservationRepo->findAll($filters);
 
 $pageTitle = 'จัดการการจอง';
 require_once __DIR__ . '/header.php';

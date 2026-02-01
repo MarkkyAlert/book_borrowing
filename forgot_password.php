@@ -28,55 +28,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        $pdo = getDB();
+        // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
+        require_once __DIR__ . '/app/Services/AuthService.php';
+        $authService = new \App\Services\AuthService(getDB());
         
-        // Check if email exists
-        $stmt = $pdo->prepare("SELECT id, email FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
+        $result = $authService->requestPasswordReset($email);
         
-        if ($user) {
-            // Rate limiting - max 3 requests per email per hour
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) FROM password_resets 
-                WHERE email = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-            ");
-            $stmt->execute([$email]);
-            $recentRequests = $stmt->fetchColumn();
-            
-            if ($recentRequests >= 3) {
-                $errors[] = 'คุณขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 ชั่วโมง';
-            } else {
-                // Generate secure token
-                $token = bin2hex(random_bytes(32));
-                $expiresAt = date('Y-m-d H:i:s', strtotime('+1 hour'));
-                
-                // Save token
-                $stmt = $pdo->prepare("
-                    INSERT INTO password_resets (email, token, expires_at) 
-                    VALUES (?, ?, ?)
-                ");
-                $stmt->execute([$email, $token, $expiresAt]);
-                
-                // Generate reset link
-                $resetLink = APP_URL . '/reset_password.php?token=' . $token;
-                
-                // =====================================================
-                // Production: เปิด comment ด้านล่างเพื่อส่ง email จริง
-                // และลบ/comment บรรทัด $resetLink = ... ข้างบนออก
-                // =====================================================
-                // mail($email, 'รีเซ็ตรหัสผ่าน - ' . APP_NAME, 
-                //     "คลิกลิงก์นี้เพื่อรีเซ็ตรหัสผ่าน:\n$resetLink\n\nลิงก์นี้จะหมดอายุใน 1 ชั่วโมง",
-                //     "From: noreply@" . $_SERVER['HTTP_HOST']
-                // );
-                // $resetLink = null; // ซ่อน link จากหน้าจอใน production
-                
-                $success = true;
-            }
+        if (!$result['success']) {
+            $errors[] = $result['error'];
         } else {
-            // Don't reveal if email exists (security)
             $success = true;
-            $resetLink = null;
+            
+            if ($result['token']) {
+                // Demo mode: แสดง link (production จะส่งทาง email)
+                $resetLink = APP_URL . '/reset_password.php?token=' . $result['token'];
+            }
         }
     }
 }

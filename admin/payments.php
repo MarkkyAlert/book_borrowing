@@ -5,41 +5,25 @@
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../app/Repositories/PaymentRepository.php';
 
 requireStaff(); // Staff can view payments
 
 $pdo = getDB();
+$paymentRepo = new \App\Repositories\PaymentRepository($pdo);
 
-// Calculate Total Revenue
-$totalRevenue = $pdo->query("SELECT COALESCE(SUM(amount), 0) FROM payments")->fetchColumn();
+// Calculate Total Revenue via Repository
+$totalRevenue = $paymentRepo->getTotalCollected();
 
 // Search Logic
 $search = trim($_GET['search'] ?? '');
-$params = [];
-$whereClause = "";
-
+$filters = [];
 if (!empty($search)) {
-    $whereClause = "WHERE (u.name LIKE ? OR bk.title LIKE ? OR staff.name LIKE ?)";
-    $params = ["%$search%", "%$search%", "%$search%"];
+    $filters['search'] = $search;
 }
 
-// Fetch Payments
-$sql = "
-    SELECT p.*, b.borrow_date, b.return_date, 
-           u.name as member_name, 
-           bk.title as book_title,
-           staff.name as staff_name
-    FROM payments p
-    JOIN borrows b ON p.borrow_id = b.id
-    JOIN users u ON b.user_id = u.id
-    JOIN books bk ON b.book_id = bk.id
-    LEFT JOIN users staff ON p.recorded_by = staff.id
-    $whereClause
-    ORDER BY p.payment_date DESC
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$payments = $stmt->fetchAll();
+// Fetch Payments via Repository
+$payments = $paymentRepo->findAll($filters);
 
 $pageTitle = 'ประวัติการชำระเงิน';
 require_once __DIR__ . '/header.php';

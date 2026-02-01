@@ -252,4 +252,86 @@ class UserRepository
         $stmt->execute([$userId]);
         return $stmt->fetch();
     }
+
+    /**
+     * Lock user row สำหรับ transaction
+     */
+    public function lockById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = ? FOR UPDATE");
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * ดึงรายการสมาชิกพร้อม filters และ sorting
+     */
+    public function findMembers(array $filters = []): array
+    {
+        $where = ["role = 'member'"];
+        $params = [];
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $where[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+            $params[] = "%{$search}%";
+            $params[] = "%{$search}%";
+            $params[] = "%{$search}%";
+        }
+
+        $whereSQL = 'WHERE ' . implode(' AND ', $where);
+        
+        // Status filter (requires subquery/HAVING)
+        $havingSQL = "";
+        $status = $filters['status'] ?? '';
+        if ($status === 'has_borrow') {
+            $havingSQL = "HAVING active_borrows > 0";
+        } elseif ($status === 'no_borrow') {
+            $havingSQL = "HAVING active_borrows = 0";
+        }
+        
+        // Sort mapping
+        $orderBy = 'u.created_at DESC';
+        $sort = $filters['sort'] ?? 'newest';
+        switch ($sort) {
+            case 'oldest': $orderBy = 'u.created_at ASC'; break;
+            case 'az': $orderBy = 'u.name ASC'; break;
+            case 'za': $orderBy = 'u.name DESC'; break;
+            case 'most_borrows': $orderBy = 'total_borrows DESC'; break;
+            default: $orderBy = 'u.created_at DESC'; break;
+        }
+
+        $stmt = $this->pdo->prepare("
+            SELECT u.*,
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
+            FROM users u
+            {$whereSQL}
+            {$havingSQL}
+            ORDER BY {$orderBy}
+        ");
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ลบสมาชิก
+     */
+    public function deleteMember(int $id): bool
+    {
+        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'member'");
+        return $stmt->execute([$id]);
+    }
+
+    /**
+     * นับสมาชิกใหม่เดือนนี้
+     */
+    public function countNewThisMonth(): int
+    {
+        return (int) $this->pdo->query("
+            SELECT COUNT(*) FROM users 
+            WHERE role = 'member' AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())
+        ")->fetchColumn();
+    }
 }
+

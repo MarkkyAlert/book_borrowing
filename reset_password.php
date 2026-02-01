@@ -18,20 +18,13 @@ $token = $_GET['token'] ?? '';
 
 $pdo = getDB();
 
-// [SECURITY] Validate token - ตรวจสอบ 3 เงื่อนไข:
-// 1. token ตรงกับใน DB, 2. ยังไม่เคยใช้ (used=0), 3. ยังไม่หมดอายุ
+// [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
+require_once __DIR__ . '/app/Services/AuthService.php';
+$authService = new \App\Services\AuthService($pdo);
+
+// Validate token
 if (!empty($token)) {
-    $stmt = $pdo->prepare("
-        SELECT pr.*, u.id as user_id 
-        FROM password_resets pr
-        JOIN users u ON u.email = pr.email
-        WHERE pr.token = ? 
-        AND pr.used = 0 
-        AND pr.expires_at > NOW()
-    ");
-    $stmt->execute([$token]);
-    $resetRequest = $stmt->fetch();
-    
+    $resetRequest = $authService->validateResetToken($token);
     if ($resetRequest) {
         $validToken = true;
     }
@@ -54,27 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     }
     
     if (empty($errors)) {
-        try {
-            // [DB] Transaction - ต้อง atomic: update password + mark token used
-            // ป้องกัน token ถูกใช้ซ้ำถ้า update password fail
-            $pdo->beginTransaction();
-            
-            // [DB WRITE] Update password - ใช้ bcrypt
-            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-            $stmt->execute([$hashedPassword, $resetRequest['user_id']]);
-            
-            // [SECURITY] Mark token as used ทันที - ป้องกัน token reuse
-            // ถึงแม้ยังอยู่ใน window time ก็ใช้ซ้ำไม่ได้
-            $stmt = $pdo->prepare("UPDATE password_resets SET used = 1 WHERE id = ?");
-            $stmt->execute([$resetRequest['id']]);
-            
-            $pdo->commit();
-            
+        $result = $authService->resetPassword($token, $password);
+        
+        if ($result['success']) {
             $success = true;
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            $errors[] = 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+        } else {
+            $errors[] = $result['error'];
         }
     }
 }

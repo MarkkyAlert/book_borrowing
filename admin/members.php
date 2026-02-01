@@ -9,58 +9,21 @@ require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
 
+// [REFACTORED] ใช้ MemberService แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Services/MemberService.php';
+$memberService = new \App\Services\MemberService($pdo);
+
 // Get parameters
 $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
 
-// Base params
-$params = [];
-$whereClauses = ["role = 'member'"];
-
-// Search
-if (!empty($search)) {
-    $whereClauses[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-
-// Build WHERE SQL
-$whereSQL = implode(' AND ', $whereClauses);
-
-// Sort mapping
-$orderBy = 'u.created_at DESC';
-switch ($sort) {
-    case 'oldest': $orderBy = 'u.created_at ASC'; break;
-    case 'az': $orderBy = 'u.name ASC'; break;
-    case 'za': $orderBy = 'u.name DESC'; break;
-    case 'most_borrows': $orderBy = 'total_borrows DESC'; break;
-    default: $orderBy = 'u.created_at DESC'; break;
-}
-
-// Helper filter for status needs HAVING or Subquery
-// To keep it simple, we'll use HAVING
-$havingSQL = "";
-if ($status === 'has_borrow') {
-    $havingSQL = "HAVING active_borrows > 0";
-} elseif ($status === 'no_borrow') {
-    $havingSQL = "HAVING active_borrows = 0";
-}
-
-$sql = "
-    SELECT u.*,
-           (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
-           (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
-    FROM users u
-    WHERE $whereSQL
-    $havingSQL
-    ORDER BY $orderBy
-";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$members = $stmt->fetchAll();
+// Get members via Service
+$members = $memberService->getMembers([
+    'search' => $search,
+    'status' => $status,
+    'sort' => $sort
+]);
 
 $pageTitle = 'จัดการสมาชิก';
 require_once __DIR__ . '/header.php';

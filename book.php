@@ -14,15 +14,14 @@ if ($bookId <= 0) {
     redirect(APP_URL . '/index.php');
 }
 
+// [REFACTORED] ใช้ Services แทน SQL Query โดยตรง
+require_once __DIR__ . '/app/Services/BookService.php';
+require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
+$bookService = new \App\Services\BookService($pdo);
+$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+
 // Get book details
-$stmt = $pdo->prepare("
-    SELECT b.*, c.name as category_name 
-    FROM books b
-    LEFT JOIN categories c ON b.category_id = c.id
-    WHERE b.id = ?
-");
-$stmt->execute([$bookId]);
-$book = $stmt->fetch();
+$book = $bookService->getBookById($bookId);
 
 if (!$book) {
     setFlash('error', 'ไม่พบหนังสือที่ต้องการ');
@@ -33,28 +32,11 @@ if (!$book) {
 $currentBorrowCount = $book['quantity'] - $book['available'];
 $currentBorrows = [];
 if ($currentBorrowCount > 0) {
-    $stmt = $pdo->prepare("
-        SELECT b.*, u.name as borrower_name
-        FROM borrows b
-        JOIN users u ON b.user_id = u.id
-        WHERE b.book_id = ? AND b.status = 'borrowing'
-        ORDER BY b.created_at DESC
-    ");
-    $stmt->execute([$bookId]);
-    $currentBorrows = $stmt->fetchAll();
+    $currentBorrows = $borrowRepo->findCurrentByBook($bookId);
 }
 
 // Get borrow history
-$stmt = $pdo->prepare("
-    SELECT b.*, u.name as borrower_name
-    FROM borrows b
-    JOIN users u ON b.user_id = u.id
-    WHERE b.book_id = ?
-    ORDER BY b.created_at DESC
-    LIMIT 5
-");
-$stmt->execute([$bookId]);
-$borrowHistory = $stmt->fetchAll();
+$borrowHistory = $borrowRepo->findHistoryByBook($bookId, 5);
 
 $pageTitle = $book['title'];
 require_once __DIR__ . '/includes/header.php';
@@ -113,10 +95,12 @@ require_once __DIR__ . '/includes/header.php';
                     <!-- Reservation Status -->
                     <?php 
                     $userReserved = false;
+                    $reservation = null;
                     if (isLoggedIn()) {
-                        $stmt = $pdo->prepare("SELECT * FROM reservations WHERE user_id = ? AND book_id = ? AND status = 'pending'");
-                        $stmt->execute([$_SESSION['user_id'], $bookId]);
-                        $reservation = $stmt->fetch();
+                        // [REFACTORED] ใช้ ReservationService
+                        require_once __DIR__ . '/app/Services/ReservationService.php';
+                        $reservationService = new \App\Services\ReservationService($pdo);
+                        $reservation = $reservationService->getUserPendingReservation($_SESSION['user_id'], $bookId);
                         if ($reservation) {
                             $userReserved = true;
                         }

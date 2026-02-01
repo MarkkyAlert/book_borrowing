@@ -225,15 +225,11 @@ function getCurrentUser(): ?array
         return null;
     }
     
-    global $pdo;
-    if (!isset($pdo)) {
-        require_once __DIR__ . '/db.php';
-        $pdo = getDB();
-    }
+    require_once __DIR__ . '/db.php';
+    require_once __DIR__ . '/../app/Repositories/UserRepository.php';
     
-    $stmt = $pdo->prepare("SELECT id, name, email, phone, role FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    return $stmt->fetch() ?: null;
+    $userRepo = new \App\Repositories\UserRepository(getDB());
+    return $userRepo->findById($_SESSION['user_id']);
 }
 
 /**
@@ -246,11 +242,11 @@ function getCurrentUser(): ?array
  * @example $orgName = getSetting('org_name', 'ห้องสมุด');
  */
 function getSetting($key, $default = '') {
-    $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
-    $stmt->execute([$key]);
-    $value = $stmt->fetchColumn();
-    return $value !== false ? $value : $default;
+    require_once __DIR__ . '/db.php';
+    require_once __DIR__ . '/../app/Repositories/SettingsRepository.php';
+    
+    $settingsRepo = new \App\Repositories\SettingsRepository(getDB());
+    return $settingsRepo->get($key, $default);
 }
 
 /**
@@ -263,9 +259,11 @@ function getSetting($key, $default = '') {
  * @sideeffect INSERT หรือ UPDATE ตาราง settings
  */
 function updateSetting($key, $value) {
-    $pdo = getDB();
-    $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-    return $stmt->execute([$key, $value, $value]);
+    require_once __DIR__ . '/db.php';
+    require_once __DIR__ . '/../app/Repositories/SettingsRepository.php';
+    
+    $settingsRepo = new \App\Repositories\SettingsRepository(getDB());
+    return $settingsRepo->set($key, $value);
 }
 
 /**

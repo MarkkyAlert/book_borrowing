@@ -52,43 +52,21 @@ $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';
 $filter = $_GET['filter'] ?? '';
 
-// Build query
-$where = [];
-$params = [];
+// [REFACTORED] ใช้ BorrowRepository แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Repositories/BorrowRepository.php';
+$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
 
-if (!empty($search)) {
-    $where[] = "(u.name LIKE ? OR u.email LIKE ? OR bk.title LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-
+$filters = ['search' => $search];
 if ($status === 'borrowing' || $status === 'returned') {
-    $where[] = "b.status = ?";
-    $params[] = $status;
+    $filters['status'] = $status;
 }
-
 if ($filter === 'overdue') {
-    $where[] = "b.status = 'borrowing' AND b.due_date < CURDATE()";
+    $filters['overdue'] = true;
 } elseif ($filter === 'due_today') {
-    $where[] = "b.status = 'borrowing' AND b.due_date = CURDATE()";
+    $filters['due_today'] = true;
 }
 
-$whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-// Get borrows
-$sql = "
-    SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
-           bk.title as book_title, bk.author as book_author
-    FROM borrows b
-    JOIN users u ON b.user_id = u.id
-    JOIN books bk ON b.book_id = bk.id
-    $whereSQL
-    ORDER BY b.created_at DESC
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$borrows = $stmt->fetchAll();
+$borrows = $borrowRepo->findAll($filters);
 
 $pageTitle = 'จัดการยืม-คืน';
 require_once __DIR__ . '/header.php';

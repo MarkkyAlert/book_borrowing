@@ -13,17 +13,13 @@ $user = getCurrentUser();
 $errors = [];
 $success = false;
 
-// Get user's borrow history
-$stmt = $pdo->prepare("
-    SELECT b.*, bk.title as book_title, bk.author as book_author
-    FROM borrows b
-    JOIN books bk ON b.book_id = bk.id
-    WHERE b.user_id = ?
-    ORDER BY b.created_at DESC
-    LIMIT 10
-");
-$stmt->execute([$_SESSION['user_id']]);
-$borrowHistory = $stmt->fetchAll();
+// [REFACTORED] ใช้ BorrowRepository แทน SQL Query โดยตรง
+require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
+require_once __DIR__ . '/app/Services/AuthService.php';
+$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+$authService = new \App\Services\AuthService($pdo);
+
+$borrowHistory = $borrowRepo->findByUserId($_SESSION['user_id'], 10);
 
 // Process profile update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -50,8 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (empty($errors)) {
-            $stmt = $pdo->prepare("UPDATE users SET name = ?, phone = ? WHERE id = ?");
-            $stmt->execute([$name, $phone ?: null, $_SESSION['user_id']]);
+            // [REFACTORED] ใช้ AuthService
+            $authService->updateProfile($_SESSION['user_id'], [
+                'name' => $name,
+                'phone' => $phone
+            ]);
             $_SESSION['user_name'] = $name;
             setFlash('success', 'อัปเดตข้อมูลสำเร็จ');
             redirect(APP_URL . '/profile.php');
@@ -81,16 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newPassword = $_POST['new_password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
             
-            // Get current password hash
-            $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
-            $stmt->execute([$_SESSION['user_id']]);
-            $userData = $stmt->fetch();
-            
-            if (!password_verify($currentPassword, $userData['password'])) {
-                $_SESSION[$attemptKey]++;
-                $errors[] = 'รหัสผ่านปัจจุบันไม่ถูกต้อง';
-            }
-            
+            // Validation
             if (strlen($newPassword) < 6) {
                 $errors[] = 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร';
             }
@@ -100,13 +90,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if (empty($errors)) {
-                // Reset attempts on success
-                $_SESSION[$attemptKey] = 0;
-                $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-                $stmt->execute([$hashedPassword, $_SESSION['user_id']]);
-                setFlash('success', 'เปลี่ยนรหัสผ่านสำเร็จ');
-                redirect(APP_URL . '/profile.php');
+                // [REFACTORED] ใช้ AuthService
+                $result = $authService->changePassword($_SESSION['user_id'], $currentPassword, $newPassword);
+                
+                if ($result['success']) {
+                    $_SESSION[$attemptKey] = 0; // Reset attempts on success
+                    setFlash('success', 'เปลี่ยนรหัสผ่านสำเร็จ');
+                    redirect(APP_URL . '/profile.php');
+                } else {
+                    $_SESSION[$attemptKey]++;
+                    $errors[] = $result['error'];
+                }
             }
         }
     }

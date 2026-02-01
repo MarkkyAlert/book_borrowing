@@ -10,16 +10,33 @@
 
 namespace App\Services;
 
+require_once __DIR__ . '/../Repositories/BookRepository.php';
+require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+require_once __DIR__ . '/../Repositories/UserRepository.php';
+require_once __DIR__ . '/../Repositories/PaymentRepository.php';
+
+use App\Repositories\BookRepository;
+use App\Repositories\BorrowRepository;
+use App\Repositories\UserRepository;
+use App\Repositories\PaymentRepository;
 use PDO;
 use Exception;
 
 class BorrowService
 {
     private PDO $pdo;
+    private BookRepository $bookRepo;
+    private BorrowRepository $borrowRepo;
+    private UserRepository $userRepo;
+    private PaymentRepository $paymentRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->bookRepo = new BookRepository($pdo);
+        $this->borrowRepo = new BorrowRepository($pdo);
+        $this->userRepo = new UserRepository($pdo);
+        $this->paymentRepo = new PaymentRepository($pdo);
     }
 
     /**
@@ -68,7 +85,7 @@ class BorrowService
         }
 
         // Validate user exists and is member
-        $user = $this->getValidMember($userId);
+        $user = $this->userRepo->findMemberById($userId);
         if (!$user) {
             throw new Exception('ไม่พบสมาชิกที่เลือก');
         }
@@ -79,14 +96,11 @@ class BorrowService
         $this->pdo->beginTransaction();
 
         try {
-            // 🔒 Critical Fix: ล็อคแถวข้อมูลผู้ใช้งาน (User Row) ก่อนเป็นอันดับแรก เพื่อป้องกัน Race Condition
-            // เพื่อให้แน่ใจว่าจะมี Transaction เดียวเท่านั้นที่ทำงานกับ User นี้ได้ในช่วงเวลานั้น
-            // (ป้องกันกรณีเปิด 2 แท็บแล้วกดยืมพร้อมกันจนทะลุโควต้า)
-            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = ? FOR UPDATE");
-            $stmt->execute([$userId]);
+            // 🔒 Critical Fix: ล็อคแถวข้อมูลผู้ใช้งาน (User Row) ก่อนเป็นอันดับแรก
+            $this->userRepo->lockById($userId);
 
             // ตรวจสอบจำนวนหนังสือที่ยืมอยู่ปัจจุบัน
-            $currentBorrows = $this->countActiveBorrows($userId);
+            $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
             $availableSlots = MAX_BORROW_BOOKS - $currentBorrows;
 
             if ($availableSlots <= 0) {
@@ -155,42 +169,28 @@ class BorrowService
      */
     public function returnBook(int $borrowId, bool $payNow = false, ?int $recordedBy = null): array
     {
-        // [DB] Transaction - ต้อง atomic: update status + คืน stock + บันทึก payment
         $this->pdo->beginTransaction();
 
         try {
-            // [CONCURRENCY] FOR UPDATE ล็อคแถว - ป้องกันคืนซ้ำ (กด 2 ครั้ง, multi-tab)
-            // [STATE CHECK] ต้องเป็น 'borrowing' เท่านั้นถึงคืนได้
-            $stmt = $this->pdo->prepare("SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE");
-            $stmt->execute([$borrowId]);
-            $borrow = $stmt->fetch();
+            // Lock row - ป้องกันคืนซ้ำ
+            $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
 
             if (!$borrow) {
                 throw new Exception('ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
             }
 
-            // [BUSINESS RULE] คำนวณค่าปรับตาม due_date
+            // คำนวณค่าปรับตาม due_date
             $fine = $this->calculateFine($borrow['due_date'], date('Y-m-d'));
 
-            // [DB WRITE] เปลี่ยนสถานะ + บันทึกค่าปรับ
-            $stmt = $this->pdo->prepare("
-                UPDATE borrows 
-                SET status = 'returned', return_date = CURDATE(), fine_amount = ? 
-                WHERE id = ?
-            ");
-            $stmt->execute([$fine['amount'], $borrowId]);
+            // เปลี่ยนสถานะ + บันทึกค่าปรับ
+            $this->borrowRepo->markAsReturned($borrowId, $fine['amount']);
 
-            // [DB WRITE] คืน stock - สำคัญมาก! ต้องทำใน transaction เดียวกัน
-            $stmt = $this->pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ?");
-            $stmt->execute([$borrow['book_id']]);
+            // คืน stock
+            $this->bookRepo->incrementAvailable($borrow['book_id']);
 
-            // [DB WRITE] บันทึก payment ถ้าจ่ายทันที
+            // บันทึก payment ถ้าจ่ายทันที
             if ($payNow && $fine['amount'] > 0) {
-                $stmt = $this->pdo->prepare("
-                    INSERT INTO payments (borrow_id, amount, recorded_by) 
-                    VALUES (?, ?, ?)
-                ");
-                $stmt->execute([$borrowId, $fine['amount'], $recordedBy]);
+                $this->paymentRepo->create($borrowId, $fine['amount'], $recordedBy);
             }
 
             $this->pdo->commit();
@@ -213,19 +213,6 @@ class BorrowService
      * 
      * สูตรปัจจุบัน: จำนวนวันเกิน × FINE_PER_DAY (ค่าคงที่ต่อวัน)
      * ⭐ แก้ไขสูตรคำนวณค่าปรับที่ method นี้
-     * 
-     * @param string      $dueDate    วันกำหนดคืน (Y-m-d)
-     * @param string|null $returnDate วันที่คืนจริง (null = วันนี้)
-     * 
-     * @return array {
-     *     days: int,      // จำนวนวันที่เกิน (0 ถ้าไม่เกิน)
-     *     amount: float   // ค่าปรับ (หน่วยบาท)
-     * }
-     * 
-     * @example
-     *     // เกิน 3 วัน, ค่าปรับวันละ 10 บาท
-     *     $fine = $service->calculateFine('2024-01-01', '2024-01-04');
-     *     // ['days' => 3, 'amount' => 30]
      */
     public function calculateFine(string $dueDate, ?string $returnDate = null): array
     {
@@ -236,26 +223,7 @@ class BorrowService
         // If return date is after due date (overdue)
         if ($return > $due) {
             $daysOverdue = $return->diff($due)->days;
-            
-            // =====================================================
-            // ⭐ สูตรคำนวณค่าปรับ - แก้ไขตรงนี้
-            // =====================================================
-            // ค่าปรับแบบคงที่ต่อวัน (default)
             $fineAmount = $daysOverdue * FINE_PER_DAY;
-            
-            // ตัวอย่างค่าปรับแบบขั้นบันได (uncomment เพื่อใช้):
-            // if ($daysOverdue <= 3) {
-            //     $fineAmount = $daysOverdue * 10;
-            // } elseif ($daysOverdue <= 7) {
-            //     $fineAmount = (3 * 10) + (($daysOverdue - 3) * 20);
-            // } else {
-            //     $fineAmount = (3 * 10) + (4 * 20) + (($daysOverdue - 7) * 30);
-            // }
-            
-            // ตัวอย่างค่าปรับสูงสุด (cap):
-            // $maxFine = 500;
-            // $fineAmount = min($fineAmount, $maxFine);
-            // =====================================================
 
             return ['days' => $daysOverdue, 'amount' => $fineAmount];
         }
@@ -265,105 +233,45 @@ class BorrowService
 
     /**
      * นับจำนวนหนังสือที่ผู้ใช้ยืมอยู่ (ยังไม่คืน)
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @return int จำนวนเล่มที่ยืมอยู่
-     * 
-     * @note ใช้ FOR UPDATE เพื่อ lock - ควรเรียกใน transaction เท่านั้น
      */
     public function countActiveBorrows(int $userId): int
     {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*) FROM borrows 
-            WHERE user_id = ? AND status = 'borrowing' 
-            FOR UPDATE
-        ");
-        $stmt->execute([$userId]);
-        return (int) $stmt->fetchColumn();
+        return $this->borrowRepo->countActiveBorrowsForUpdate($userId);
     }
 
     /**
      * ตรวจสอบว่าผู้ใช้ยืมหนังสือเล่มนี้อยู่หรือไม่
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @param int $bookId ID หนังสือ
-     * @return bool true = กำลังยืมเล่มนี้อยู่ (ยังไม่คืน)
-     * 
-     * @usecase ป้องกันยืมหนังสือเล่มเดียวกันซ้ำ
      */
     public function isAlreadyBorrowing(int $userId, int $bookId): bool
     {
-        $stmt = $this->pdo->prepare("
-            SELECT id FROM borrows 
-            WHERE user_id = ? AND book_id = ? AND status = 'borrowing'
-        ");
-        $stmt->execute([$userId, $bookId]);
-        return $stmt->fetch() !== false;
+        return $this->borrowRepo->isAlreadyBorrowing($userId, $bookId);
     }
 
     /**
      * ดึงรายการยืมที่เกินกำหนดคืน (สำหรับ dashboard/notification)
-     * 
-     * @param int $limit จำนวนรายการสูงสุด (default: 10)
-     * @return array รายการยืมที่เกินกำหนด เรียงจากเกินนานสุดก่อน
-     *     แต่ละรายการมี: user_name, phone, book_title, due_date, ...
      */
     public function getOverdueBorrows(int $limit = 10): array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT b.*, u.name as user_name, u.phone, bk.title as book_title
-            FROM borrows b
-            JOIN users u ON b.user_id = u.id
-            JOIN books bk ON b.book_id = bk.id
-            WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-            ORDER BY b.due_date ASC
-            LIMIT ?
-        ");
-        $stmt->execute([$limit]);
-        return $stmt->fetchAll();
+        return $this->borrowRepo->findOverdue($limit);
     }
 
     /**
      * ดึงรายการยืมล่าสุด (สำหรับ dashboard)
-     * 
-     * @param int $limit จำนวนรายการสูงสุด (default: 5)
-     * @return array รายการยืมล่าสุด เรียงจากใหม่สุดก่อน
-     *     แต่ละรายการมี: user_name, book_title, borrow_date, ...
      */
     public function getRecentBorrows(int $limit = 5): array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT b.*, u.name as user_name, bk.title as book_title
-            FROM borrows b
-            JOIN users u ON b.user_id = u.id
-            JOIN books bk ON b.book_id = bk.id
-            ORDER BY b.created_at DESC
-            LIMIT ?
-        ");
-        $stmt->execute([$limit]);
-        return $stmt->fetchAll();
+        return $this->borrowRepo->findRecent($limit);
     }
 
     // ==================== Private Methods ====================
 
     /**
      * ยืมหนังสือทีละเล่ม (internal - ใช้ภายใน transaction ของ createBorrow)
-     * 
-     * @param int    $userId     ID ผู้ยืม
-     * @param int    $bookId     ID หนังสือ
-     * @param string $borrowDate วันที่ยืม (Y-m-d)
-     * @param string $dueDate    วันกำหนดคืน (Y-m-d)
-     * 
-     * @return array {success: bool, title?: string, reason?: string}
-     * 
-     * @internal ต้องเรียกภายใน transaction เท่านั้น (มีการใช้ FOR UPDATE)
      */
     private function borrowSingleBook(int $userId, int $bookId, string $borrowDate, string $dueDate): array
     {
         // Lock book row
-        $stmt = $this->pdo->prepare("SELECT id, title, available FROM books WHERE id = ? FOR UPDATE");
-        $stmt->execute([$bookId]);
-        $book = $stmt->fetch();
+        $book = $this->bookRepo->findByIdForUpdate($bookId);
 
         if (!$book) {
             return ['success' => false, 'reason' => "หนังสือ ID: {$bookId} ไม่พบ"];
@@ -374,32 +282,22 @@ class BorrowService
         }
 
         // Check if already borrowing this book
-        if ($this->isAlreadyBorrowing($userId, $bookId)) {
+        if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
             return ['success' => false, 'reason' => $book['title'] . ' (ยืมอยู่แล้ว)'];
         }
 
         // Insert borrow record
-        $stmt = $this->pdo->prepare("
-            INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
-            VALUES (?, ?, ?, ?, 'borrowing')
-        ");
-        $stmt->execute([$userId, $bookId, $borrowDate, $dueDate]);
+        $this->borrowRepo->create([
+            'user_id' => $userId,
+            'book_id' => $bookId,
+            'borrow_date' => $borrowDate,
+            'due_date' => $dueDate
+        ]);
 
         // Update book available count
-        $stmt = $this->pdo->prepare("UPDATE books SET available = available - 1 WHERE id = ?");
-        $stmt->execute([$bookId]);
+        $this->bookRepo->decrementAvailable($bookId);
 
         return ['success' => true, 'title' => $book['title']];
-    }
-
-    /**
-     * ตรวจสอบว่า user เป็น member ที่ถูกต้อง
-     */
-    private function getValidMember(int $userId): ?array
-    {
-        $stmt = $this->pdo->prepare("SELECT id, name FROM users WHERE id = ? AND role = 'member'");
-        $stmt->execute([$userId]);
-        return $stmt->fetch() ?: null;
     }
 
     /**

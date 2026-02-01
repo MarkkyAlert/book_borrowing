@@ -590,7 +590,7 @@ $resp = runTest('SC-09', 'POST', '/api/reserve_book.php', [
 ], null, 401);
 
 // SC-10: AJAX add member without admin
-$resp = runTest('SC-10', 'POST', '/admin/ajax_add_member.php', [
+$resp = runTest('SC-10', 'POST', '/api/add_member.php', [
     'name' => 'Test',
     'email' => 'test@test.com'
 ], null, [302, 403]);

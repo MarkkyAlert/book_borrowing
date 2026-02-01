@@ -9,58 +9,28 @@ require_once __DIR__ . '/../includes/db.php';
 
 $pdo = getDB();
 
+// [REFACTORED] ใช้ Services แทน SQL Query โดยตรง
+require_once __DIR__ . '/../app/Services/BookService.php';
+require_once __DIR__ . '/../app/Repositories/CategoryRepository.php';
+$bookService = new \App\Services\BookService($pdo);
+$categoryRepo = new \App\Repositories\CategoryRepository($pdo);
+
 // Get filter parameters
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
 
-// Build query
-$where = [];
-$params = [];
-
-if (!empty($search)) {
-    $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-
-if ($categoryId > 0) {
-    $where[] = "b.category_id = ?";
-    $params[] = $categoryId;
-}
-
-if ($status === 'available') {
-    $where[] = "b.available > 0";
-} elseif ($status === 'out_of_stock') {
-    $where[] = "b.available = 0";
-}
-
-$whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-// Sort map
-$orderBy = 'b.created_at DESC';
-switch ($sort) {
-    case 'oldest': $orderBy = 'b.created_at ASC'; break;
-    case 'az': $orderBy = 'b.title ASC'; break;
-    default: $orderBy = 'b.created_at DESC'; break;
-}
-
-// Get books
-$sql = "
-    SELECT b.*, c.name as category_name 
-    FROM books b
-    LEFT JOIN categories c ON b.category_id = c.id
-    $whereSQL
-    ORDER BY $orderBy
-";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$books = $stmt->fetchAll();
+// Get books via Service
+$books = $bookService->getBooks([
+    'search' => $search,
+    'category_id' => $categoryId,
+    'status' => $status === 'available' ? 'available' : ($status === 'out_of_stock' ? 'out_of_stock' : ''),
+    'sort' => $sort
+]);
 
 // Get categories for filter
-$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+$categories = $categoryRepo->findAll();
 
 // Handle delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
@@ -72,54 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     
     $id = (int) ($_POST['id'] ?? 0);
     
-    // [DB] ใช้ Transaction เพราะมีหลาย operations ที่ต้องสำเร็จพร้อมกัน
-    $pdo->beginTransaction();
     try {
-        // [CONCURRENCY] FOR UPDATE ล็อคแถวป้องกันการลบ/แก้ไขพร้อมกันจากหลาย request
-        // ถ้าไม่ล็อค อาจมีคนยืมหนังสือขณะที่กำลังลบ
-        $stmt = $pdo->prepare("SELECT available, quantity FROM books WHERE id = ? FOR UPDATE");
-        $stmt->execute([$id]);
-        $book = $stmt->fetch();
-        
-        if (!$book) {
-            throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
-        }
-        
-        // [STATE CHECK] ห้ามลบถ้ามีคนยืมอยู่ - ป้องกันข้อมูล orphan
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
-        $stmt->execute([$id]);
-        if ($stmt->fetchColumn() > 0) {
-            throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้กำลังถูกยืมอยู่');
-        }
-        
-        // [BUSINESS RULE] ห้ามลบถ้ามีประวัติการยืม - เก็บไว้เพื่อ audit
-        // TODO: พิจารณาใช้ soft delete แทนถ้าต้องการลบได้
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
-        $stmt->execute([$id]);
-        if ($stmt->fetchColumn() > 0) {
-            throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
-        }
-        
-        // [NOTE] ดึงชื่อไฟล์ก่อนลบ record เพื่อลบไฟล์ทีหลัง
-        $stmt = $pdo->prepare("SELECT cover_image FROM books WHERE id = ?");
-        $stmt->execute([$id]);
-        $coverImage = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("DELETE FROM books WHERE id = ?");
-        $stmt->execute([$id]);
-        $pdo->commit();
-        
-        // [FILE] ลบไฟล์หลัง commit สำเร็จ - ถ้า commit fail ไฟล์ยังอยู่
-        if (!empty($coverImage)) {
-            $coverPath = __DIR__ . '/../uploads/covers/' . $coverImage;
-            if (file_exists($coverPath)) {
-                unlink($coverPath);
-            }
-        }
-        
+        // [REFACTORED] ใช้ BookService ซึ่งจัดการ transaction และ validation ให้
+        $bookService->deleteBook($id);
         setFlash('success', 'ลบหนังสือสำเร็จ');
     } catch (Exception $e) {
-        $pdo->rollBack();
         setFlash('error', $e->getMessage());
     }
     redirect('books.php');

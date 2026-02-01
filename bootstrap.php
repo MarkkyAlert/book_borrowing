@@ -5,9 +5,6 @@
  * 
  * การใช้งาน:
  * require_once __DIR__ . '/bootstrap.php';
- * 
- * หมายเหตุ: ไฟล์นี้ยังไม่ถูกใช้งานในระบบปัจจุบัน
- * เตรียมไว้สำหรับ Phase 2+ ที่จะ refactor ให้ใช้ระบบใหม่
  */
 
 // Prevent direct access
@@ -19,11 +16,7 @@ if (basename($_SERVER['PHP_SELF']) === 'bootstrap.php') {
 // Define base path
 define('BASE_PATH', __DIR__);
 
-// Load settings helper
-require_once BASE_PATH . '/app/Config/settings.php';
-
-// Load original config (for backward compatibility)
-// config.php ยังคงเป็น source of truth จนกว่าจะ migrate เสร็จ
+// Load config (single source of truth)
 require_once BASE_PATH . '/includes/config.php';
 
 // Load database connection
@@ -42,7 +35,6 @@ spl_autoload_register(function (string $class) {
         'App\\Services\\' => BASE_PATH . '/app/Services/',
         'App\\Repositories\\' => BASE_PATH . '/app/Repositories/',
         'App\\Helpers\\' => BASE_PATH . '/app/Helpers/',
-        'App\\Config\\' => BASE_PATH . '/app/Config/',
     ];
 
     foreach ($map as $prefix => $dir) {
@@ -61,16 +53,12 @@ spl_autoload_register(function (string $class) {
 });
 
 /**
- * Error handler for development
- * จะถูกใช้เมื่อ APP_DEBUG=true ใน .env
+ * Error handler based on APP_DEBUG constant
  */
-if (Settings::get('APP_DEBUG', false)) {
+if (defined('APP_DEBUG') && APP_DEBUG) {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');
 } else {
     error_reporting(0);
     ini_set('display_errors', '0');
 }
-
-// Set timezone
-date_default_timezone_set(Settings::get('TIMEZONE', 'Asia/Bangkok'));
