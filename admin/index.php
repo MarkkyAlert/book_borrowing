@@ -35,6 +35,9 @@ $overdueList = $dashboardService->getOverdueList(10);
 $monthlyBorrows = $dashboardService->getMonthlyStats(6);
 $categoryStats = $dashboardService->getCategoryStats(6);
 $totalFines = $dashboardService->getTotalFinesCollected();
+$unpaidFines = $dashboardService->getUnpaidFines();
+$topBorrowers = $dashboardService->getTopBorrowers(5);
+$popularBooks = $dashboardService->getPopularBooks(5);
 
 // Books status for pie chart
 $bookStatusData = [
@@ -56,7 +59,18 @@ require_once __DIR__ . '/header.php';
 ?>
 
 <!-- Stats Cards -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">สมาชิกทั้งหมด</p>
+                <h3 class="text-2xl font-bold text-gray-800"><?= number_format($totalMembers) ?></h3>
+            </div>
+            <div class="p-3 bg-violet-100 text-violet-600 rounded-xl">
+                <i class="bi bi-people text-xl"></i>
+            </div>
+        </div>
+    </div>
     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
         <div class="flex justify-between items-start">
             <div>
@@ -127,7 +141,14 @@ require_once __DIR__ . '/header.php';
                 <i class="bi bi-cash-coin"></i>
             </div>
             <h3 class="text-3xl font-bold mb-1"><?= number_format($totalFines) ?> ฿</h3>
-            <p class="text-green-100 text-sm font-medium">รายได้ค่าปรับ (ที่รับชำระแล้ว)</p>
+            <p class="text-green-100 text-sm font-medium mb-4">รายได้ค่าปรับ (ชำระแล้ว)</p>
+            
+            <div class="bg-white/10 rounded-xl p-3 w-full backdrop-blur-sm border border-white/20">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-green-50">ค้างชำระ:</span>
+                    <span class="font-bold text-white"><?= number_format($unpaidFines) ?> ฿</span>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -152,6 +173,92 @@ require_once __DIR__ . '/header.php';
             <div class="relative h-64">
                 <canvas id="categoryChart"></canvas>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Top Borrowers -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <h5 class="font-bold text-gray-800 flex items-center">
+                <i class="bi bi-trophy text-amber-500 mr-2"></i>
+                สมาชิกยืมสูงสุด
+            </h5>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 font-medium">สมาชิก</th>
+                        <th class="px-6 py-3 font-medium">จำนวนยืม (เล่ม)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <?php if (empty($topBorrowers)): ?>
+                        <tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">ไม่มีข้อมูล</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($topBorrowers as $idx => $user): ?>
+                            <tr class="hover:bg-gray-50/50 transition-colors">
+                                <td class="px-6 py-3 flex items-center">
+                                    <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-xs mr-3 font-bold border border-gray-200">
+                                        <?= $idx + 1 ?>
+                                    </span>
+                                    <div>
+                                        <div class="font-medium text-gray-900"><?= e($user['name']) ?></div>
+                                        <div class="text-xs text-gray-500"><?= e($user['email']) ?></div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-3 font-bold text-primary-600">
+                                    <?= number_format($user['borrow_count']) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Popular Books -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <h5 class="font-bold text-gray-800 flex items-center">
+                <i class="bi bi-fire text-red-500 mr-2"></i>
+                หนังสือยอดนิยม
+            </h5>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 font-medium">หนังสือ</th>
+                        <th class="px-6 py-3 font-medium">ถูกยืม (ครั้ง)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <?php if (empty($popularBooks)): ?>
+                        <tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">ไม่มีข้อมูล</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($popularBooks as $idx => $book): ?>
+                            <tr class="hover:bg-gray-50/50 transition-colors">
+                                <td class="px-6 py-3 flex items-center">
+                                    <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-xs mr-3 font-bold border border-gray-200">
+                                        <?= $idx + 1 ?>
+                                    </span>
+                                    <div>
+                                        <div class="font-medium text-gray-900 line-clamp-1"><?= e($book['title']) ?></div>
+                                        <div class="text-xs text-gray-500"><?= e($book['author']) ?></div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-3 font-bold text-emerald-600">
+                                    <?= number_format($book['borrow_count']) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

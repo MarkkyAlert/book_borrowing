@@ -114,4 +114,28 @@ class DashboardService
     {
         return $this->paymentRepo->getTotalCollected();
     }
+
+    /**
+     * ดึงยอดค่าปรับค้างชำระ
+     */
+    public function getUnpaidFines(): float
+    {
+        return $this->paymentRepo->getUnpaidTotal();
+    }
+
+    /**
+     * ดึงสมาชิกที่ยืมมากที่สุด
+     */
+    public function getTopBorrowers(int $limit = 5): array
+    {
+        return $this->reportRepo->getTopBorrowers($limit);
+    }
+    
+    /**
+     * ดึงหนังสือยอดนิยม
+     */
+    public function getPopularBooks(int $limit = 5): array
+    {
+        return $this->reportRepo->getPopularBooks($limit);
+    }
 }
