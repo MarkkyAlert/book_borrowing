@@ -1,14 +1,19 @@
 <?php
 /**
  * Member Form - เพิ่ม/แก้ไขสมาชิก
+ * 
+ * ใช้ MemberService เป็น single source of truth สำหรับ business logic
  */
 
 require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
 
+use App\Services\MemberService;
 use App\Repositories\UserRepository;
 
-$userRepo = new UserRepository(getDB());
+$pdo = getDB();
+$memberService = new MemberService($pdo);
+$userRepo = new UserRepository($pdo);
 
 $errors = [];
 $member = [
@@ -23,7 +28,7 @@ $isEdit = false;
 // Get member for editing
 if (isset($_GET['id'])) {
     $id = (int) $_GET['id'];
-    $existingMember = $userRepo->findMemberById($id);
+    $existingMember = $memberService->getMemberById($id);
     
     if ($existingMember) {
         $member = $existingMember;
@@ -36,7 +41,7 @@ if (isset($_GET['id'])) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF validation
+    // [SECURITY] CSRF validation
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('members.php');
@@ -50,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isEdit = !empty($_POST['id']);
     $member['id'] = (int) ($_POST['id'] ?? 0);
     
-    // Validation
+    // Validation (ใช้ helper functions เดียวกับทั้งระบบ)
     if (empty($member['name'])) {
         $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
     } elseif (mb_strlen($member['name']) > 100) {
@@ -59,13 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($member['email'])) {
         $errors[] = 'กรุณากรอกอีเมล';
-    } elseif (!filter_var($member['email'], FILTER_VALIDATE_EMAIL)) {
+    } elseif (!isValidEmail($member['email'])) {
         $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     
-    // Check Email duplicate using repository
-    if (!empty($member['email'])) {
-        if ($userRepo->emailExists($member['email'], $member['id'] ?: null)) {
+    // Check Email duplicate via Service
+    if (!empty($member['email']) && empty($errors)) {
+        if ($memberService->emailExists($member['email'], $member['id'] ?: null)) {
             $errors[] = 'อีเมลนี้มีในระบบแล้ว';
         }
     }
@@ -73,35 +78,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Password validation
     if (!$isEdit && empty($password)) {
         $errors[] = 'กรุณากรอกรหัสผ่าน';
-    } elseif (!empty($password) && strlen($password) < 6) {
-        $errors[] = 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร';
+    } elseif (!empty($password) && strlen($password) < MIN_PASSWORD_LENGTH) {
+        $errors[] = 'รหัสผ่านต้องมีความยาวอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
     }
     
     if (empty($errors)) {
-        $memberData = [
-            'name' => $member['name'],
-            'email' => $member['email'],
-            'phone' => $member['phone']
-        ];
-        
-        if ($isEdit) {
-            // Update
-            $userRepo->update($member['id'], $memberData);
-            
-            // Update password only if provided
-            if (!empty($password)) {
-                $userRepo->updatePassword($member['id'], password_hash($password, PASSWORD_DEFAULT));
+        try {
+            if ($isEdit) {
+                // Update via Service
+                $memberService->updateMember($member['id'], [
+                    'name' => $member['name'],
+                    'email' => $member['email'],
+                    'phone' => $member['phone']
+                ]);
+                
+                // Update password only if provided
+                if (!empty($password)) {
+                    $userRepo->updatePassword($member['id'], password_hash($password, PASSWORD_DEFAULT));
+                }
+                
+                setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');
+            } else {
+                // Create via Service (generates random password if not provided)
+                $memberService->createMember([
+                    'name' => $member['name'],
+                    'email' => $member['email'],
+                    'phone' => $member['phone'],
+                    'password' => $password
+                ]);
+                setFlash('success', 'เพิ่มสมาชิกสำเร็จ');
             }
-            
-            setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');
-        } else {
-            // Create new member
-            $memberData['password'] = password_hash($password, PASSWORD_DEFAULT);
-            $memberData['role'] = 'member';
-            $userRepo->create($memberData);
-            setFlash('success', 'เพิ่มสมาชิกสำเร็จ');
+            redirect('members.php');
+        } catch (Exception $e) {
+            $errors[] = $e->getMessage();
         }
-        redirect('members.php');
     }
 }
 

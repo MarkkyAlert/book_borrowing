@@ -13,7 +13,6 @@ if ($bookId <= 0) {
     redirect(APP_URL . '/index.php');
 }
 
-// [REFACTORED] ใช้ Services แทน SQL Query โดยตรง
 require_once __DIR__ . '/app/Services/BookService.php';
 require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
 $bookService = new \App\Services\BookService($pdo);
@@ -96,7 +95,6 @@ require_once __DIR__ . '/includes/header.php';
                     $userReserved = false;
                     $reservation = null;
                     if (isLoggedIn()) {
-                        // [REFACTORED] ใช้ ReservationService
                         require_once __DIR__ . '/app/Services/ReservationService.php';
                         $reservationService = new \App\Services\ReservationService($pdo);
                         $reservation = $reservationService->getUserPendingReservation($_SESSION['user_id'], $bookId);
@@ -152,6 +150,11 @@ require_once __DIR__ . '/includes/header.php';
                         return;
                     }
 
+                    // [UX] Disable button to prevent double-submit
+                    const btn = event.target;
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังจอง...';
+
                     fetch('api/reserve_book.php', {
                         method: 'POST',
                         headers: {
@@ -165,12 +168,17 @@ require_once __DIR__ . '/includes/header.php';
                             alert(data.message);
                             location.reload();
                         } else {
+                            // [FIX High #5] Refresh page on error to get fresh data
                             alert(data.message || 'เกิดข้อผิดพลาด');
+                            location.reload();
                         }
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+                        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
+                        // Re-enable button on network error
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
                     });
                 }
                 </script>

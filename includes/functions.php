@@ -365,6 +365,9 @@ function isValidEmail(string $email): bool
  * 
  * @note รองรับเฉพาะเบอร์ไทย เช่น 0812345678
  *       ถ้าต้องการ international format (+66...) ต้องแก้ regex
+ * 
+ * @example isValidPhone('0812345678'); // true
+ *          isValidPhone('081-234-5678'); // false (มีขีด)
  */
 function isValidPhone(string $phone): bool
 {
@@ -417,6 +420,85 @@ function startSession(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
+    }
+}
+
+/**
+ * ตรวจสอบ rate limit สำหรับป้องกัน brute force
+ * 
+ * @param string $key ชื่อ key สำหรับแยก limit แต่ละ action (เช่น 'login', 'register')
+ * @param int $maxAttempts จำนวนครั้งสูงสุดที่อนุญาต (default: RATE_LIMIT_MAX_ATTEMPTS)
+ * @param int $windowMinutes ช่วงเวลาที่นับ (นาที) (default: RATE_LIMIT_WINDOW_MINUTES)
+ * @return bool true = ยังไม่เกิน limit, false = เกิน limit แล้ว
+ * 
+ * @example if (!checkRateLimit('login')) {
+ *              $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
+ *          }
+ */
+function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinutes = null): bool
+{
+    $maxAttempts = $maxAttempts ?? RATE_LIMIT_MAX_ATTEMPTS;
+    $windowMinutes = $windowMinutes ?? RATE_LIMIT_WINDOW_MINUTES;
+    
+    $attemptKey = $key . '_attempts';
+    $timeKey = $key . '_time';
+    
+    if (!isset($_SESSION[$attemptKey])) {
+        $_SESSION[$attemptKey] = 0;
+        $_SESSION[$timeKey] = time();
+    }
+    
+    // Reset counter หลังหมดเวลา window
+    if (time() - $_SESSION[$timeKey] > $windowMinutes * 60) {
+        $_SESSION[$attemptKey] = 0;
+        $_SESSION[$timeKey] = time();
+    }
+    
+    return $_SESSION[$attemptKey] < $maxAttempts;
+}
+
+/**
+ * เพิ่มจำนวน attempt สำหรับ rate limit
+ * 
+ * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
+ */
+function incrementRateLimit(string $key): void
+{
+    $attemptKey = $key . '_attempts';
+    if (!isset($_SESSION[$attemptKey])) {
+        $_SESSION[$attemptKey] = 0;
+    }
+    $_SESSION[$attemptKey]++;
+}
+
+/**
+ * Reset rate limit counter (เรียกหลัง success)
+ * 
+ * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
+ */
+function resetRateLimit(string $key): void
+{
+    $attemptKey = $key . '_attempts';
+    $_SESSION[$attemptKey] = 0;
+}
+
+/**
+ * ล้าง idempotency keys ที่หมดอายุ (เรียกตอนเริ่ม session)
+ * 
+ * @param int $maxAgeSeconds อายุสูงสุดของ key (default: 300 = 5 นาที)
+ */
+function cleanupIdempotencyKeys(int $maxAgeSeconds = 300): void
+{
+    if (!isset($_SESSION['processed_actions'])) {
+        $_SESSION['processed_actions'] = [];
+        return;
+    }
+    
+    $now = time();
+    foreach ($_SESSION['processed_actions'] as $key => $timestamp) {
+        if ($now - $timestamp > $maxAgeSeconds) {
+            unset($_SESSION['processed_actions'][$key]);
+        }
     }
 }
 

@@ -12,7 +12,6 @@ $user = getCurrentUser();
 $errors = [];
 $success = false;
 
-// [REFACTORED] ใช้ BorrowRepository แทน SQL Query โดยตรง
 require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
 require_once __DIR__ . '/app/Services/AuthService.php';
 $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
@@ -45,7 +44,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (empty($errors)) {
-            // [REFACTORED] ใช้ AuthService
             $authService->updateProfile($_SESSION['user_id'], [
                 'name' => $name,
                 'phone' => $phone
@@ -57,31 +55,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if ($action === 'change_password') {
-        // Rate limiting for password attempts
-        $attemptKey = 'password_attempts';
-        $attemptTimeKey = 'password_attempt_time';
+        // [SECURITY] Rate limiting for password attempts
+        $rateLimitKey = 'password_change';
         
-        if (!isset($_SESSION[$attemptKey])) {
-            $_SESSION[$attemptKey] = 0;
-            $_SESSION[$attemptTimeKey] = time();
-        }
-        
-        // Reset after 15 minutes
-        if (time() - $_SESSION[$attemptTimeKey] > 900) {
-            $_SESSION[$attemptKey] = 0;
-            $_SESSION[$attemptTimeKey] = time();
-        }
-        
-        if ($_SESSION[$attemptKey] >= 5) {
-            $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที';
+        if (!checkRateLimit($rateLimitKey)) {
+            $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
         } else {
             $currentPassword = $_POST['current_password'] ?? '';
             $newPassword = $_POST['new_password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
             
             // Validation
-            if (strlen($newPassword) < 6) {
-                $errors[] = 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร';
+            if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
+                $errors[] = 'รหัสผ่านใหม่ต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
             }
             
             if ($newPassword !== $confirmPassword) {
@@ -89,15 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if (empty($errors)) {
-                // [REFACTORED] ใช้ AuthService
                 $result = $authService->changePassword($_SESSION['user_id'], $currentPassword, $newPassword);
                 
                 if ($result['success']) {
-                    $_SESSION[$attemptKey] = 0; // Reset attempts on success
+                    resetRateLimit($rateLimitKey);
                     setFlash('success', 'เปลี่ยนรหัสผ่านสำเร็จ');
                     redirect(APP_URL . '/profile.php');
                 } else {
-                    $_SESSION[$attemptKey]++;
+                    incrementRateLimit($rateLimitKey);
                     $errors[] = $result['error'];
                 }
             }

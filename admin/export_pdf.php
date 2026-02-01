@@ -26,19 +26,19 @@ if ($reportType === 'books') {
     $filename = "top_books_" . date('Y-m-d');
     
 } elseif ($reportType === 'members') {
-    $data = $reportRepo->getTopMembersReportForPdf(50);
+    $data = $reportRepo->getTopMembersReport(50, true);
     $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม', 'กำลังยืมอยู่'];
     $reportTitle = 'รายงานสมาชิกที่ใช้บริการบ่อย';
     $filename = "top_members_" . date('Y-m-d');
 
 } elseif ($reportType === 'revenue') {
-    $data = $reportRepo->getDailyRevenueReportForPdf(30);
+    $data = $reportRepo->getDailyRevenueReport(30, true);
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
     $reportTitle = 'รายงานสรุปรายได้ค่าปรับ';
     $filename = "daily_revenue_" . date('Y-m-d');
 
 } elseif ($reportType === 'overdue') {
-    $data = $reportRepo->getOverdueReportForPdf();
+    $data = $reportRepo->getOverdueReport(true);
     $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
     $reportTitle = 'รายงานหนังสือค้างส่ง';
     $filename = "overdue_" . date('Y-m-d');

@@ -17,7 +17,6 @@ $token = $_GET['token'] ?? '';
 
 $pdo = getDB();
 
-// [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
 require_once __DIR__ . '/app/Services/AuthService.php';
 $authService = new \App\Services\AuthService($pdo);
 

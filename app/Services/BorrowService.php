@@ -236,7 +236,7 @@ class BorrowService
      */
     public function countActiveBorrows(int $userId): int
     {
-        return $this->borrowRepo->countActiveBorrowsForUpdate($userId);
+        return $this->borrowRepo->countActiveBorrows($userId);
     }
 
     /**

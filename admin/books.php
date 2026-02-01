@@ -41,7 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     $id = (int) ($_POST['id'] ?? 0);
     
     try {
-        // [REFACTORED] ใช้ BookService ซึ่งจัดการ transaction และ validation ให้
         $bookService->deleteBook($id);
         setFlash('success', 'ลบหนังสือสำเร็จ');
     } catch (Exception $e) {

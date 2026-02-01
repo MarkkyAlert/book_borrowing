@@ -53,8 +53,9 @@ class MemberService
     /**
      * สร้างสมาชิกใหม่
      * 
-     * @return array ['id' => int, 'name' => string, 'email' => string]
-     * @throws Exception
+     * @param array $data { name: string, email: string, phone?: string, password?: string }
+     * @return array ['id' => int, 'name' => string, 'email' => string, 'password' => string]
+     * @throws Exception เมื่อข้อมูลไม่ครบ, email ซ้ำ, หรือรูปแบบไม่ถูกต้อง
      */
     public function createMember(array $data): array
     {
@@ -67,7 +68,7 @@ class MemberService
             throw new Exception('กรุณากรอกอีเมล');
         }
 
-        if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+        if (!isValidEmail($data['email'])) {
             throw new Exception('รูปแบบอีเมลไม่ถูกต้อง');
         }
 
@@ -76,8 +77,8 @@ class MemberService
             throw new Exception('อีเมลนี้ถูกใช้งานแล้ว');
         }
 
-        // Generate random password
-        $password = $this->generateRandomPassword();
+        // Use provided password or generate random
+        $password = !empty($data['password']) ? $data['password'] : $this->generateRandomPassword();
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
         $memberId = $this->userRepo->create([
@@ -98,6 +99,11 @@ class MemberService
 
     /**
      * อัปเดตข้อมูลสมาชิก
+     * 
+     * @param int $id ID สมาชิก
+     * @param array $data { name: string, email: string, phone?: string }
+     * @return bool true = สำเร็จ
+     * @throws Exception ถ้าไม่พบสมาชิก หรือ email ซ้ำ
      */
     public function updateMember(int $id, array $data): bool
     {
@@ -123,7 +129,10 @@ class MemberService
     /**
      * ลบสมาชิก
      * 
+     * @param int $id ID สมาชิก
+     * @return bool true = สำเร็จ
      * @throws Exception ถ้าสมาชิกมีประวัติการยืม
+     * @sideeffect DELETE จาก users table
      */
     public function deleteMember(int $id): bool
     {

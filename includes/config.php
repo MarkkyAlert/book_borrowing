@@ -50,6 +50,11 @@ define('DEFAULT_BORROW_DAYS', (int) env('DEFAULT_BORROW_DAYS', 7));
 define('MAX_BORROW_BOOKS', (int) env('MAX_BORROW_BOOKS', 3));
 define('FINE_PER_DAY', (int) env('FINE_PER_DAY', 10));
 
+// Security Settings
+define('MIN_PASSWORD_LENGTH', (int) env('MIN_PASSWORD_LENGTH', 6));
+define('RATE_LIMIT_MAX_ATTEMPTS', (int) env('RATE_LIMIT_MAX_ATTEMPTS', 5));
+define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15));
+
 // Session Settings
 define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));
 

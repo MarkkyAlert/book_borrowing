@@ -19,27 +19,14 @@ $phone = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // [SECURITY] Rate limiting ป้องกัน spam registration
     // ใช้ global key (ไม่ใช่ per-email) เพราะ attacker สามารถใช้ email ใหม่ทุกครั้ง
-    // Limit: 5 attempts / 15 นาที ต่อ session
-    $attemptKey = 'register_attempts';
-    $attemptTimeKey = 'register_time';
+    $rateLimitKey = 'register';
     
-    if (!isset($_SESSION[$attemptKey])) {
-        $_SESSION[$attemptKey] = 0;
-        $_SESSION[$attemptTimeKey] = time();
+    if (!checkRateLimit($rateLimitKey)) {
+        $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
     }
     
-    // [RATE LIMIT] Reset counter หลัง 15 นาที
-    if (time() - $_SESSION[$attemptTimeKey] > 900) {
-        $_SESSION[$attemptKey] = 0;
-        $_SESSION[$attemptTimeKey] = time();
-    }
-    
-    if ($_SESSION[$attemptKey] >= 5) {
-        $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ 15 นาที';
-    }
-    
-    // [NOTE] นับ attempt ก่อน validation - ป้องกันการ bypass ด้วย invalid data
-    $_SESSION[$attemptKey]++;
+    // นับ attempt ก่อน validation - ป้องกันการ bypass ด้วย invalid data
+    incrementRateLimit($rateLimitKey);
     
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -66,15 +53,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($password)) {
         $errors[] = 'กรุณากรอกรหัสผ่าน';
-    } elseif (strlen($password) < 6) {
-        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    } elseif (strlen($password) < MIN_PASSWORD_LENGTH) {
+        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
     }
     
     if ($password !== $confirmPassword) {
         $errors[] = 'รหัสผ่านไม่ตรงกัน';
     }
     
-    // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
     if (empty($errors)) {
         require_once __DIR__ . '/app/Services/AuthService.php';
         $authService = new \App\Services\AuthService(getDB());

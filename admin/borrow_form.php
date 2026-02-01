@@ -65,7 +65,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bookIds = $_POST['book_ids'] ?? [];
     $borrowDays = (int) ($_POST['borrow_days'] ?? DEFAULT_BORROW_DAYS);
     
-    // Ensure book_ids is array
     if (!is_array($bookIds)) {
         $bookIds = [$bookIds];
     }
@@ -489,9 +488,7 @@ $(document).ready(function() {
         });
     });
 
-    // ----------------------------------------------------
-    // QUICK SCAN LOGIC
-    // ----------------------------------------------------
+    // === Quick Scan Logic ===
     
     // Scan User Input
     $('#scan_user').on('keypress', function(e) {

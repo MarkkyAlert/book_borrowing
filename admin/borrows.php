@@ -26,10 +26,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         $payNow = isset($_POST['pay_now']);
         
+        // [IDEMPOTENCY] ป้องกัน double-submit ด้วย session token
+        $idempotencyKey = 'return_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            // Request นี้ถูก process ไปแล้ว - redirect โดยไม่ทำซ้ำ
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('borrows.php');
+        }
+        
         try {
             // [STATE TRANSITION] borrowing → returned
             // BorrowService จัดการ: คำนวณค่าปรับ, update status, คืน stock, บันทึก payment
             $result = $borrowService->returnBook($borrowId, $payNow, $_SESSION['user_id']);
+            
+            // [IDEMPOTENCY] บันทึกว่า process แล้ว (หมดอายุใน 5 นาที)
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
             
             if ($result['fine']['amount'] > 0) {
                 $flashType = $result['paid'] ? 'success' : 'warning';
@@ -50,7 +61,6 @@ $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';
 $filter = $_GET['filter'] ?? '';
 
-// [REFACTORED] ใช้ BorrowRepository แทน SQL Query โดยตรง
 require_once __DIR__ . '/../app/Repositories/BorrowRepository.php';
 $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
 

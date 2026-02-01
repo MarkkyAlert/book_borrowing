@@ -15,6 +15,7 @@ require_once __DIR__ . '/../Repositories/UserRepository.php';
 require_once __DIR__ . '/../Repositories/CategoryRepository.php';
 require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 require_once __DIR__ . '/../Repositories/PaymentRepository.php';
+require_once __DIR__ . '/../Repositories/ReportRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\BorrowRepository;
@@ -22,6 +23,7 @@ use App\Repositories\UserRepository;
 use App\Repositories\CategoryRepository;
 use App\Repositories\ReservationRepository;
 use App\Repositories\PaymentRepository;
+use App\Repositories\ReportRepository;
 use PDO;
 
 class DashboardService
@@ -33,6 +35,7 @@ class DashboardService
     private CategoryRepository $categoryRepo;
     private ReservationRepository $reservationRepo;
     private PaymentRepository $paymentRepo;
+    private ReportRepository $reportRepo;
     
     public function __construct(PDO $pdo)
     {
@@ -43,6 +46,7 @@ class DashboardService
         $this->categoryRepo = new CategoryRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
         $this->paymentRepo = new PaymentRepository($pdo);
+        $this->reportRepo = new ReportRepository($pdo);
     }
     
     /**
@@ -88,10 +92,11 @@ class DashboardService
     
     /**
      * ดึงสถิติรายเดือน (สำหรับ Chart)
+     * ใช้ ReportRepository เป็น single source of truth
      */
     public function getMonthlyStats(int $months = 6): array
     {
-        return $this->borrowRepo->getMonthlyStatistics($months);
+        return $this->reportRepo->getMonthlyReport($months);
     }
     
     /**

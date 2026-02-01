@@ -19,7 +19,10 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมทั้งหมด
+     * ดึงรายการยืมทั้งหมด พร้อม user_name, book_title
+     * 
+     * @param array $filters { search?: string, status?: string, user_id?: int, overdue?: bool, due_today?: bool }
+     * @return array รายการยืมพร้อมข้อมูล user และ book
      */
     public function findAll(array $filters = []): array
     {
@@ -66,7 +69,7 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมตาม ID
+     * ดึงรายการยืมตาม ID พร้อม user_name, book_title
      */
     public function findById(int $id): ?array
     {
@@ -95,6 +98,10 @@ class BorrowRepository
 
     /**
      * สร้างรายการยืม
+     * 
+     * @param array $data { user_id: int, book_id: int, borrow_date: string, due_date: string }
+     * @return int ID ของรายการที่สร้าง
+     * @sideeffect INSERT ลง borrows table (status = 'borrowing')
      */
     public function create(array $data): int
     {
@@ -115,6 +122,8 @@ class BorrowRepository
 
     /**
      * อัปเดตเป็นคืนแล้ว
+     * 
+     * @sideeffect UPDATE borrows: status='returned', return_date, fine_amount
      */
     public function markAsReturned(int $id, float $fineAmount): bool
     {
@@ -258,7 +267,7 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนเกินกำหนด
+     * นับจำนวนรายการที่เกินกำหนดคืน (status='borrowing' AND due_date < today)
      */
     public function countOverdue(): int
     {
@@ -278,26 +287,8 @@ class BorrowRepository
         ")->fetchColumn();
     }
 
-    /**
-     * ดึงสถิติรายเดือน
-     */
-    public function getMonthlyStatistics(int $months = 6): array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT 
-                DATE_FORMAT(borrow_date, '%Y-%m') as month,
-                DATE_FORMAT(borrow_date, '%b') as month_name,
-                COUNT(*) as total_borrows,
-                SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
-                SUM(fine_amount) as total_fines
-            FROM borrows 
-            WHERE borrow_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-            GROUP BY DATE_FORMAT(borrow_date, '%Y-%m')
-            ORDER BY month ASC
-        ");
-        $stmt->execute([$months]);
-        return $stmt->fetchAll();
-    }
+    // NOTE: getMonthlyStatistics() removed - use ReportRepository::getMonthlyReport()
+    // เหตุผล: ReportRepository เป็น owner ของ report logic
 
     /**
      * นับจำนวนการยืมของหนังสือ

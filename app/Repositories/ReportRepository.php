@@ -18,35 +18,8 @@ class ReportRepository
         $this->pdo = $pdo;
     }
 
-    /**
-     * สถิติหนังสือ
-     */
-    public function getBookStats(): array
-    {
-        $total = (int) $this->pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM books")->fetchColumn();
-        $available = (int) $this->pdo->query("SELECT COALESCE(SUM(available), 0) FROM books")->fetchColumn();
-
-        return [
-            'total' => $total,
-            'available' => $available,
-            'borrowed' => $total - $available,
-            'titles' => (int) $this->pdo->query("SELECT COUNT(*) FROM books")->fetchColumn(),
-        ];
-    }
-
-    /**
-     * สถิติสมาชิก
-     */
-    public function getMemberStats(): array
-    {
-        return [
-            'total' => (int) $this->pdo->query("SELECT COUNT(*) FROM users WHERE role = 'member'")->fetchColumn(),
-            'new_this_month' => (int) $this->pdo->query("
-                SELECT COUNT(*) FROM users 
-                WHERE role = 'member' AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())
-            ")->fetchColumn(),
-        ];
-    }
+    // NOTE: getBookStats() removed - use BookRepository::getStatistics()
+    // NOTE: getMemberStats() removed - use UserRepository::countMembers() + countNewThisMonth()
 
     /**
      * สถิติการยืม
@@ -208,12 +181,18 @@ class ReportRepository
     }
 
     /**
-     * รายงานสมาชิกที่ใช้บริการบ่อย (สำหรับหน้า reports)
+     * รายงานสมาชิกที่ใช้บริการบ่อย
+     * 
+     * @param bool $translateRole true = แปลง role เป็นภาษาไทย (สำหรับ PDF)
      */
-    public function getTopMembersReport(int $limit = 50): array
+    public function getTopMembersReport(int $limit = 50, bool $translateRole = false): array
     {
+        $roleCol = $translateRole 
+            ? "CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,"
+            : "u.role,";
+        
         $stmt = $this->pdo->prepare("
-            SELECT u.name, u.email, u.role, COUNT(br.id) as borrow_count,
+            SELECT u.name, u.email, {$roleCol} COUNT(br.id) as borrow_count,
                    SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
             FROM users u
             JOIN borrows br ON u.id = br.user_id
@@ -227,15 +206,21 @@ class ReportRepository
     }
 
     /**
-     * รายงานรายได้รายวัน (สำหรับหน้า reports)
+     * รายงานรายได้รายวัน
+     * 
+     * @param bool $formatDate true = format วันที่เป็น d/m/Y (สำหรับ PDF)
      */
-    public function getDailyRevenueReport(int $limit = 30): array
+    public function getDailyRevenueReport(int $limit = 30, bool $formatDate = false): array
     {
+        $dateCol = $formatDate 
+            ? "DATE_FORMAT(payment_date, '%d/%m/%Y') as payment_day"
+            : "DATE(payment_date) as payment_day";
+        
         $stmt = $this->pdo->prepare("
-            SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
+            SELECT {$dateCol}, COUNT(id) as transaction_count, SUM(amount) as total_amount
             FROM payments
             GROUP BY DATE(payment_date)
-            ORDER BY payment_day DESC
+            ORDER BY payment_date DESC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -243,12 +228,21 @@ class ReportRepository
     }
 
     /**
-     * รายงานหนังสือเกินกำหนด (สำหรับหน้า reports)
+     * รายงานหนังสือเกินกำหนด
+     * 
+     * @param bool $formatDate true = format วันที่เป็น d/m/Y (สำหรับ PDF)
      */
-    public function getOverdueReport(): array
+    public function getOverdueReport(bool $formatDate = false): array
     {
+        $borrowDateCol = $formatDate 
+            ? "DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date"
+            : "b.borrow_date";
+        $dueDateCol = $formatDate 
+            ? "DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date"
+            : "b.due_date";
+        
         return $this->pdo->query("
-            SELECT u.name, u.phone, bk.title, b.borrow_date, b.due_date,
+            SELECT u.name, u.phone, bk.title, {$borrowDateCol}, {$dueDateCol},
                    DATEDIFF(CURDATE(), b.due_date) as days_overdue
             FROM borrows b
             JOIN users u ON b.user_id = u.id
@@ -279,61 +273,8 @@ class ReportRepository
         return $stmt->fetchAll();
     }
 
-    /**
-     * รายงานหนังสือยอดนิยม (สำหรับ PDF - รวม role_name)
-     */
-    public function getTopMembersReportForPdf(int $limit = 50): array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT u.name, u.email, 
-                   CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,
-                   COUNT(br.id) as borrow_count,
-                   SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
-            FROM users u
-            JOIN borrows br ON u.id = br.user_id
-            WHERE u.role != 'admin'
-            GROUP BY u.id
-            ORDER BY borrow_count DESC
-            LIMIT ?
-        ");
-        $stmt->execute([$limit]);
-        return $stmt->fetchAll();
-    }
-
-    /**
-     * รายงานรายได้รายวัน (สำหรับ PDF - format วันที่)
-     */
-    public function getDailyRevenueReportForPdf(int $limit = 30): array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT DATE_FORMAT(payment_date, '%d/%m/%Y') as payment_day, 
-                   COUNT(id) as transaction_count, 
-                   SUM(amount) as total_amount
-            FROM payments
-            GROUP BY DATE(payment_date)
-            ORDER BY payment_date DESC
-            LIMIT ?
-        ");
-        $stmt->execute([$limit]);
-        return $stmt->fetchAll();
-    }
-
-    /**
-     * รายงานหนังสือเกินกำหนด (สำหรับ PDF - format วันที่)
-     */
-    public function getOverdueReportForPdf(): array
-    {
-        return $this->pdo->query("
-            SELECT u.name, u.phone, bk.title, 
-                   DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date,
-                   DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date,
-                   DATEDIFF(CURDATE(), b.due_date) as days_overdue
-            FROM borrows b
-            JOIN users u ON b.user_id = u.id
-            JOIN books bk ON b.book_id = bk.id
-            WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-            ORDER BY b.due_date ASC
-        ")->fetchAll();
-    }
+    // Consolidated: getTopMembersReportForPdf() -> use getTopMembersReport($limit, true)
+    // Consolidated: getDailyRevenueReportForPdf() -> use getDailyRevenueReport($limit, true)
+    // Consolidated: getOverdueReportForPdf() -> use getOverdueReport(true)
 }
 

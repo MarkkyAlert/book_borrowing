@@ -16,7 +16,7 @@ $editCategory = null;
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF validation
+    // [SECURITY] CSRF validation
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('categories.php');

@@ -7,9 +7,14 @@ require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
 
 use App\Services\DashboardService;
+use App\Services\ReservationService;
 
 $pdo = getDB();
 $dashboardService = new DashboardService($pdo);
+
+// [AUTO] Expire overdue reservations on dashboard load (fallback for cron)
+$reservationService = new ReservationService($pdo);
+$reservationService->expireOverdueReservations();
 
 // Get card statistics
 $stats = $dashboardService->getCardStats();

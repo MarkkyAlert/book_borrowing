@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS `reservations` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL COMMENT 'ผู้จอง',
     `book_id` INT NOT NULL COMMENT 'หนังสือที่จอง',
+    `borrow_id` INT DEFAULT NULL COMMENT 'รายการยืมที่สร้างจากการจอง (เฉพาะ fulfilled)',
     `status` ENUM('pending', 'fulfilled', 'expired', 'cancelled') NOT NULL DEFAULT 'pending' COMMENT 'สถานะ',
     `expires_at` DATETIME NOT NULL COMMENT 'วันหมดอายุการจอง',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -97,7 +98,8 @@ CREATE TABLE IF NOT EXISTS `reservations` (
     INDEX `idx_user` (`user_id`),
     INDEX `idx_book` (`book_id`),
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (`borrow_id`) REFERENCES `borrows`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================

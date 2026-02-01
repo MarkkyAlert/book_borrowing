@@ -25,6 +25,9 @@ require_once BASE_PATH . '/includes/db.php';
 // Load helper functions
 require_once BASE_PATH . '/includes/functions.php';
 
+// [CLEANUP] ล้าง idempotency keys ที่หมดอายุ
+cleanupIdempotencyKeys();
+
 /**
  * Simple autoloader for app/ classes
  * รองรับ class ใน app/Services/, app/Repositories/, etc.

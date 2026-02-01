@@ -28,39 +28,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         // [SECURITY] Rate limiting ป้องกัน brute force attack
-        // ใช้ md5(email) เป็น key เพื่อนับแยกตาม email (ไม่ใช่ IP - เพราะ IP อาจ shared)
-        // Limit: 5 attempts / 15 นาที ต่อ email
-        $attemptKey = 'login_attempts_' . md5($email);
-        $attemptTimeKey = 'login_time_' . md5($email);
+        // ใช้ md5(email) เป็น key เพื่อนับแยกตาม email
+        $rateLimitKey = 'login_' . md5($email);
         
-        if (!isset($_SESSION[$attemptKey])) {
-            $_SESSION[$attemptKey] = 0;
-            $_SESSION[$attemptTimeKey] = time();
-        }
-        
-        // [RATE LIMIT] Reset counter หลัง 15 นาที (900 วินาที)
-        if (time() - $_SESSION[$attemptTimeKey] > 900) {
-            $_SESSION[$attemptKey] = 0;
-            $_SESSION[$attemptTimeKey] = time();
-        }
-        
-        if ($_SESSION[$attemptKey] >= 5) {
-            $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที';
+        if (!checkRateLimit($rateLimitKey)) {
+            $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
         } else {
-            // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
             require_once __DIR__ . '/app/Services/AuthService.php';
             $authService = new \App\Services\AuthService(getDB());
             $user = $authService->login($email, $password);
             
             if ($user) {
                 // [SECURITY] Reset counter เมื่อ login สำเร็จ
-                $_SESSION[$attemptKey] = 0;
+                resetRateLimit($rateLimitKey);
                 
-                // [SECURITY] สำคัญมาก! regenerate session ID ป้องกัน session fixation attack
-                // true = ลบ session file เก่าทิ้ง (ไม่ให้ attacker ใช้ session เดิมได้)
+                // [SECURITY] regenerate session ID ป้องกัน session fixation attack
                 session_regenerate_id(true);
                 
-                // [AUTH] เก็บข้อมูล user ใน session - ค่าเหล่านี้มาจาก DB เท่านั้น
+                // [AUTH] เก็บข้อมูล user ใน session
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_email'] = $user['email'];
@@ -75,8 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     redirect(APP_URL . '/index.php');
                 }
             } else {
-                // [SECURITY] นับ attempt ก่อนแจ้ง error (ป้องกัน brute force)
-                $_SESSION[$attemptKey]++;
+                // [SECURITY] นับ attempt ก่อนแจ้ง error
+                incrementRateLimit($rateLimitKey);
                 // [SECURITY] ไม่บอกว่า email หรือ password ผิด - ป้องกัน user enumeration
                 $errors[] = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
             }

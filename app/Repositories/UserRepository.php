@@ -119,7 +119,6 @@ class UserRepository
      *     role?: string       // role (default: 'member')
      * }
      * @return int ID ของผู้ใช้ที่สร้าง
-     * 
      * @sideeffect INSERT ลง users table
      * @security password ต้อง hash ก่อนส่งมา (ใช้ password_hash)
      */
@@ -207,15 +206,8 @@ class UserRepository
         return $stmt->fetchColumn() > 0;
     }
 
-    /**
-     * ตรวจสอบว่ามีประวัติการยืมหรือไม่
-     */
-    public function hasBorrowHistory(int $userId): bool
-    {
-        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ?");
-        $stmt->execute([$userId]);
-        return $stmt->fetchColumn() > 0;
-    }
+    // NOTE: hasBorrowHistory() removed - use BorrowRepository::countByUser() > 0
+    // เหตุผล: ลด duplication, BorrowRepository เป็น owner ของ borrows table
 
     /**
      * นับจำนวนสมาชิก
@@ -227,31 +219,8 @@ class UserRepository
         ")->fetchColumn();
     }
 
-    /**
-     * ดึงสถิติการยืมของสมาชิก (สำหรับหน้า profile)
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @return array {
-     *     total_borrows: int,   // จำนวนการยืมทั้งหมด
-     *     active_borrows: int,  // จำนวนที่ยังไม่คืน
-     *     returned: int,        // จำนวนที่คืนแล้ว
-     *     total_fines: float    // ค่าปรับรวม (บาท)
-     * }
-     */
-    public function getMemberStatistics(int $userId): array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT 
-                COUNT(*) as total_borrows,
-                SUM(CASE WHEN status = 'borrowing' THEN 1 ELSE 0 END) as active_borrows,
-                SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
-                SUM(fine_amount) as total_fines
-            FROM borrows
-            WHERE user_id = ?
-        ");
-        $stmt->execute([$userId]);
-        return $stmt->fetch();
-    }
+    // NOTE: getMemberStatistics() removed - use BorrowRepository::getStatsByUser()
+    // เหตุผล: BorrowRepository เป็น owner ของ borrows table และมี COALESCE ป้องกัน null
 
     /**
      * Lock user row สำหรับ transaction

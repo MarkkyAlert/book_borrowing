@@ -9,9 +9,11 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Repositories/BookRepository.php';
 require_once __DIR__ . '/../Repositories/ReservationRepository.php';
+require_once __DIR__ . '/../Repositories/BorrowRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\ReservationRepository;
+use App\Repositories\BorrowRepository;
 use PDO;
 use Exception;
 
@@ -20,12 +22,14 @@ class ReservationService
     private PDO $pdo;
     private BookRepository $bookRepo;
     private ReservationRepository $reservationRepo;
+    private BorrowRepository $borrowRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->bookRepo = new BookRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
+        $this->borrowRepo = new BorrowRepository($pdo);
     }
 
     /**
@@ -135,22 +139,78 @@ class ReservationService
     }
 
     /**
-     * Mark การจองเป็น fulfilled (ผู้จองมารับหนังสือแล้ว)
+     * อนุมัติการจอง → สร้าง borrow record ให้อัตโนมัติ
      * 
      * State Transition: pending → fulfilled
+     * 
+     * @param int $reservationId ID การจอง
+     * @param int|null $borrowDays จำนวนวันยืม (null = ใช้ DEFAULT_BORROW_DAYS)
+     * 
+     * @return array {
+     *     success: bool,
+     *     borrow_id: int,      // ID รายการยืมที่สร้าง
+     *     due_date: string,    // วันกำหนดคืน
+     *     message: string
+     * }
+     * 
+     * @throws Exception เมื่อ:
+     *     - ไม่พบรายการจอง
+     *     - รายการไม่อยู่ในสถานะ pending
+     *     - ผู้ยืมถึงโควต้าสูงสุด
+     * 
+     * @sideeffect
+     *     - INSERT ลง `borrows` table (สร้างรายการยืม)
+     *     - UPDATE `reservations.status` = 'fulfilled'
+     *     - UPDATE `reservations.borrow_id` = borrow_id ที่สร้าง
+     *     - ไม่ต้อง update stock เพราะหักไปแล้วตอนจอง
      */
-    public function fulfillReservation(int $reservationId): array
+    public function fulfillReservation(int $reservationId, ?int $borrowDays = null): array
     {
-        $result = $this->reservationRepo->updateStatus($reservationId, 'fulfilled');
-
-        if (!$result) {
-            throw new Exception('ไม่พบรายการจองหรือไม่อยู่ในสถานะรอรับ');
+        $borrowDays = $borrowDays ?? DEFAULT_BORROW_DAYS;
+        
+        $this->pdo->beginTransaction();
+        
+        try {
+            // [LOCK] ล็อค reservation ป้องกัน double approve
+            $reservation = $this->reservationRepo->findPendingForUpdate($reservationId);
+            
+            if (!$reservation) {
+                throw new Exception('ไม่พบรายการจองหรือไม่อยู่ในสถานะรอรับ');
+            }
+            
+            // [VALIDATE] ตรวจโควต้าผู้ยืม
+            $currentBorrows = $this->borrowRepo->countActiveBorrows($reservation['user_id']);
+            if ($currentBorrows >= MAX_BORROW_BOOKS) {
+                throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+            }
+            
+            // [CREATE] สร้าง borrow record
+            $borrowDate = date('Y-m-d');
+            $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
+            
+            $borrowId = $this->borrowRepo->create([
+                'user_id' => $reservation['user_id'],
+                'book_id' => $reservation['book_id'],
+                'borrow_date' => $borrowDate,
+                'due_date' => $dueDate
+            ]);
+            
+            // [STATE] เปลี่ยนสถานะ + link borrow_id
+            $this->reservationRepo->updateStatusWithBorrow($reservationId, 'fulfilled', $borrowId);
+            
+            $this->pdo->commit();
+            
+            return [
+                'success' => true,
+                'borrow_id' => $borrowId,
+                'due_date' => $dueDate,
+                'message' => 'อนุมัติการจองสำเร็จ! สร้างรายการยืมแล้ว กำหนดคืน: ' . date('d/m/Y', strtotime($dueDate))
+            ];
+            
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            throw $e;
         }
-
-        return [
-            'success' => true,
-            'message' => 'บันทึกการรับหนังสือสำเร็จ'
-        ];
     }
 
     /**

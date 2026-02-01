@@ -27,7 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        // [REFACTORED] ใช้ AuthService แทน SQL Query โดยตรง
         require_once __DIR__ . '/app/Services/AuthService.php';
         $authService = new \App\Services\AuthService(getDB());
         

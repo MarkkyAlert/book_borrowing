@@ -109,12 +109,55 @@ class ReservationRepository
     }
 
     /**
-     * อัปเดตสถานะการจอง
+     * อัปเดตสถานะการจอง (พร้อม state transition guard)
+     * 
+     * @param int $id reservation ID
+     * @param string $newStatus สถานะใหม่
+     * 
+     * @return bool true = สำเร็จ, false = ไม่สามารถเปลี่ยนสถานะได้
+     * 
+     * @note State Transitions ที่อนุญาต:
+     *     - pending → fulfilled, cancelled, expired
+     *     - fulfilled, cancelled, expired → (ไม่สามารถเปลี่ยนได้)
      */
-    public function updateStatus(int $id, string $status): bool
+    public function updateStatus(int $id, string $newStatus): bool
     {
-        $stmt = $this->pdo->prepare("UPDATE reservations SET status = ? WHERE id = ?");
-        return $stmt->execute([$status, $id]);
+        // [GUARD] อนุญาตเฉพาะจาก pending เท่านั้น
+        $allowedTransitions = ['fulfilled', 'cancelled', 'expired'];
+        
+        if (!in_array($newStatus, $allowedTransitions)) {
+            return false;
+        }
+        
+        $stmt = $this->pdo->prepare("
+            UPDATE reservations 
+            SET status = ? 
+            WHERE id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$newStatus, $id]);
+        
+        return $stmt->rowCount() > 0;
+    }
+    
+    /**
+     * อัปเดตสถานะพร้อม link borrow_id (สำหรับ fulfill)
+     * 
+     * @param int $id reservation ID
+     * @param string $status สถานะใหม่ ('fulfilled')
+     * @param int $borrowId ID รายการยืมที่สร้าง
+     * 
+     * @return bool
+     */
+    public function updateStatusWithBorrow(int $id, string $status, int $borrowId): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE reservations 
+            SET status = ?, borrow_id = ? 
+            WHERE id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$status, $borrowId, $id]);
+        
+        return $stmt->rowCount() > 0;
     }
 
     /**

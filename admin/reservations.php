@@ -24,15 +24,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $resId = (int) $_POST['id'];
     $action = $_POST['action'];
 
+    // [IDEMPOTENCY] ป้องกัน double-submit
+    $idempotencyKey = 'reservation_' . $action . '_' . $resId;
+    if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+        setFlash('info', 'รายการนี้ถูกดำเนินการไปแล้ว');
+        redirect('reservations.php');
+    }
+
     try {
         if ($action === 'approve') {
-            // ReservationService จัดการ: validate status, สร้าง borrow, update status
-            $reservationService->fulfill($resId);
-            setFlash('success', 'อนุมัติการจองสำเร็จ! บันทึกเป็น "กำลังยืม" เรียบร้อยแล้ว');
+            // [STATE] pending → fulfilled + สร้าง borrow record
+            $result = $reservationService->fulfillReservation($resId);
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+            setFlash('success', $result['message']);
 
         } elseif ($action === 'cancel') {
-            // ReservationService จัดการ: validate status, คืน stock, update status
-            $reservationService->cancel($resId);
+            // [STATE] pending → cancelled + คืน stock
+            $reservationService->cancelReservation($resId);
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
             setFlash('success', 'ยกเลิกการจองและคืนสต็อกหนังสือเรียบร้อยแล้ว');
         }
     } catch (Exception $e) {

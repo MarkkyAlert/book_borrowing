@@ -9,9 +9,13 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Repositories/ReportRepository.php';
 require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+require_once __DIR__ . '/../Repositories/BookRepository.php';
+require_once __DIR__ . '/../Repositories/UserRepository.php';
 
 use App\Repositories\ReportRepository;
 use App\Repositories\BorrowRepository;
+use App\Repositories\BookRepository;
+use App\Repositories\UserRepository;
 use PDO;
 
 class ReportService
@@ -19,12 +23,16 @@ class ReportService
     private PDO $pdo;
     private ReportRepository $reportRepo;
     private BorrowRepository $borrowRepo;
+    private BookRepository $bookRepo;
+    private UserRepository $userRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->reportRepo = new ReportRepository($pdo);
         $this->borrowRepo = new BorrowRepository($pdo);
+        $this->bookRepo = new BookRepository($pdo);
+        $this->userRepo = new UserRepository($pdo);
     }
 
     /**
@@ -41,19 +49,22 @@ class ReportService
     }
 
     /**
-     * สถิติหนังสือ
+     * สถิติหนังสือ (ใช้ BookRepository เป็น single source)
      */
     public function getBookStatistics(): array
     {
-        return $this->reportRepo->getBookStats();
+        return $this->bookRepo->getStatistics();
     }
 
     /**
-     * สถิติสมาชิก
+     * สถิติสมาชิก (ใช้ UserRepository เป็น single source)
      */
     public function getMemberStatistics(): array
     {
-        return $this->reportRepo->getMemberStats();
+        return [
+            'total' => $this->userRepo->countMembers(),
+            'new_this_month' => $this->userRepo->countNewThisMonth()
+        ];
     }
 
     /**
