@@ -99,33 +99,62 @@ if (!$user) {
             aside, header, #mobile-sidebar, .no-print, button, form {
                 display: none !important;
             }
-            body, main, .max-w-7xl {
+            html, body {
+                height: auto !important;
+                overflow: visible !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            body {
+                display: block !important;
+                margin: 0 !important;
+                padding: 10px !important;
+            }
+            main, .max-w-7xl, .flex-1 {
+                display: block !important;
+                height: auto !important;
+                overflow: visible !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100% !important;
                 max-width: 100% !important;
+            }
+            .overflow-hidden, .overflow-y-auto, .overflow-x-auto {
                 overflow: visible !important;
+                height: auto !important;
             }
             .bg-gray-100, .bg-gray-50 {
                 background: white !important;
             }
-            .shadow-sm, .shadow-md, .shadow-lg, .border {
+            .shadow-sm, .shadow-md, .shadow-lg {
                 box-shadow: none !important;
-                border: none !important;
+            }
+            .rounded-xl, .rounded-2xl {
+                border-radius: 0 !important;
             }
             table {
                 width: 100% !important;
                 border-collapse: collapse !important;
+                page-break-inside: auto !important;
+            }
+            tr {
+                page-break-inside: avoid !important;
+                page-break-after: auto !important;
+            }
+            thead {
+                display: table-header-group !important;
             }
             th, td {
                 border: 1px solid #ddd !important;
-                padding: 8px !important;
-                font-size: 12px !important;
+                padding: 6px 8px !important;
+                font-size: 11px !important;
             }
-            /* Ensure background colors for badges print */
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+            .mb-6, .mb-8 {
+                margin-bottom: 15px !important;
+            }
+            /* Page breaks */
+            .page-break {
+                page-break-before: always !important;
             }
         }
     </style>

@@ -44,7 +44,24 @@ $unpaidTotal = $borrowRepo->getTotalUnpaidFines();
 $thisMonthRevenue = $paymentRepo->getThisMonthTotal();
 
 // Get unpaid fines list
-$unpaidList = $borrowRepo->getUnpaidFinesList(20);
+$unpaidList = $borrowRepo->getUnpaidFinesList(50);
+
+// Group unpaid fines by user
+$unpaidByUser = [];
+foreach ($unpaidList as $item) {
+    $userId = $item['user_id'];
+    if (!isset($unpaidByUser[$userId])) {
+        $unpaidByUser[$userId] = [
+            'user_id' => $userId,
+            'user_name' => $item['user_name'],
+            'user_phone' => $item['user_phone'] ?? '-',
+            'total_fine' => 0,
+            'items' => []
+        ];
+    }
+    $unpaidByUser[$userId]['total_fine'] += $item['fine_amount'];
+    $unpaidByUser[$userId]['items'][] = $item;
+}
 
 // Search Logic
 $search = trim($_GET['search'] ?? '');
@@ -155,14 +172,15 @@ require_once __DIR__ . '/header.php';
     </div>
 </div>
 
-<!-- Unpaid Fines Section -->
-<?php if (!empty($unpaidList)): ?>
+<!-- Unpaid Fines Section (Grouped by User) -->
+<?php if (!empty($unpaidByUser)): ?>
 <div class="unpaid-section bg-gradient-to-r from-red-50 to-rose-50 rounded-2xl shadow-sm border border-red-200 p-6 mb-6">
     <div class="flex justify-between items-center mb-4">
         <h5 class="font-bold text-red-800 flex items-center">
             <i class="bi bi-exclamation-triangle text-red-500 mr-2"></i>
             รายการค้างชำระ
-            <span class="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full"><?= count($unpaidList) ?></span>
+            <span class="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full"><?= count($unpaidByUser) ?> คน</span>
+            <span class="ml-2 px-2 py-0.5 bg-red-700 text-white text-xs rounded-full"><?= count($unpaidList) ?> รายการ</span>
         </h5>
     </div>
     <div class="overflow-x-auto">
@@ -170,34 +188,32 @@ require_once __DIR__ . '/header.php';
             <thead class="text-xs text-red-700 uppercase bg-red-100/50">
                 <tr>
                     <th class="px-4 py-2 text-left font-medium">สมาชิก</th>
-                    <th class="px-4 py-2 text-left font-medium">หนังสือ</th>
-                    <th class="px-4 py-2 text-left font-medium">คืนเมื่อ</th>
-                    <th class="px-4 py-2 text-left font-medium">ยอดค้าง</th>
+                    <th class="px-4 py-2 text-center font-medium">จำนวนรายการ</th>
+                    <th class="px-4 py-2 text-left font-medium">ยอดค้างรวม</th>
                     <th class="px-4 py-2 text-center font-medium hide-on-print">ดำเนินการ</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-red-100">
-                <?php foreach ($unpaidList as $item): ?>
+                <?php foreach ($unpaidByUser as $userId => $userData): ?>
                     <tr class="hover:bg-red-50/50 transition-colors">
                         <td class="px-4 py-3">
-                            <div class="font-medium text-gray-900"><?= e($item['user_name']) ?></div>
-                            <div class="text-xs text-gray-500"><?= e($item['user_phone'] ?? '-') ?></div>
+                            <div class="font-medium text-gray-900"><?= e($userData['user_name']) ?></div>
+                            <div class="text-xs text-gray-500"><?= e($userData['user_phone']) ?></div>
                         </td>
-                        <td class="px-4 py-3 text-gray-700 max-w-[200px]">
-                            <div class="line-clamp-1"><?= e($item['book_title']) ?></div>
-                        </td>
-                        <td class="px-4 py-3 text-gray-600 text-xs">
-                            <?= $item['return_date'] ? formatDate($item['return_date']) : '-' ?>
+                        <td class="px-4 py-3 text-center">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-200 text-red-800">
+                                <?= count($userData['items']) ?> เล่ม
+                            </span>
                         </td>
                         <td class="px-4 py-3">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                                <?= number_format($item['fine_amount']) ?> ฿
+                                <?= number_format($userData['total_fine']) ?> ฿
                             </span>
                         </td>
                         <td class="px-4 py-3 text-center hide-on-print">
-                            <button type="button" onclick="openPayModal(<?= $item['id'] ?>, '<?= e($item['user_name']) ?>', '<?= e($item['book_title']) ?>', <?= $item['fine_amount'] ?>)" 
-                                    class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors">
-                                <i class="bi bi-cash mr-1"></i>รับชำระ
+                            <button type="button" onclick="openUserFinesModal(<?= $userId ?>)" 
+                                    class="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                <i class="bi bi-eye mr-1"></i>ดูรายละเอียด
                             </button>
                         </td>
                     </tr>
@@ -206,6 +222,67 @@ require_once __DIR__ . '/header.php';
         </table>
     </div>
 </div>
+
+<!-- User Fines Detail Modals -->
+<?php foreach ($unpaidByUser as $userId => $userData): ?>
+<div id="userFinesModal<?= $userId ?>" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0 modal-backdrop"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="modal-panel relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-2xl opacity-0 translate-y-4">
+            <div class="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center">
+                            <i class="bi bi-person-circle mr-2"></i><?= e($userData['user_name']) ?>
+                        </h3>
+                        <p class="text-red-100 text-sm"><?= e($userData['user_phone']) ?></p>
+                    </div>
+                    <button type="button" class="text-white/80 hover:text-white" onclick="closeUserFinesModal(<?= $userId ?>)">
+                        <i class="bi bi-x-lg text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-gray-600">รายการค้างชำระทั้งหมด</span>
+                    <span class="text-xl font-bold text-red-600"><?= number_format($userData['total_fine']) ?> ฿</span>
+                </div>
+                
+                <div class="space-y-3 max-h-80 overflow-y-auto">
+                    <?php foreach ($userData['items'] as $item): ?>
+                    <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900"><?= e($item['book_title']) ?></div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    คืนเมื่อ: <?= $item['return_date'] ? formatDate($item['return_date']) : '-' ?>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 ml-4">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold bg-red-100 text-red-700">
+                                    <?= number_format($item['fine_amount']) ?> ฿
+                                </span>
+                                <button type="button" onclick="closeUserFinesModal(<?= $userId ?>); setTimeout(() => openPayModal(<?= $item['id'] ?>, '<?= e($item['user_name']) ?>', '<?= e($item['book_title']) ?>', <?= $item['fine_amount'] ?>), 350);" 
+                                        class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                    <i class="bi bi-cash mr-1"></i>รับชำระ
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 px-6 py-4 flex justify-end">
+                <button type="button" onclick="closeUserFinesModal(<?= $userId ?>)" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                    ปิด
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 <?php endif; ?>
 
 <!-- Payment History Table -->
@@ -392,10 +469,47 @@ function closePayModal() {
 // Close modal on backdrop click
 document.getElementById('payModalBackdrop').addEventListener('click', closePayModal);
 
+// User Fines Modal Functions
+function openUserFinesModal(userId) {
+    const modal = document.getElementById('userFinesModal' + userId);
+    const backdrop = modal.querySelector('.modal-backdrop');
+    const panel = modal.querySelector('.modal-panel');
+    
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        panel.classList.remove('opacity-0', 'translate-y-4');
+        panel.classList.add('opacity-100', 'translate-y-0');
+    }, 10);
+}
+
+function closeUserFinesModal(userId) {
+    const modal = document.getElementById('userFinesModal' + userId);
+    const backdrop = modal.querySelector('.modal-backdrop');
+    const panel = modal.querySelector('.modal-panel');
+    
+    backdrop.classList.add('opacity-0');
+    panel.classList.remove('opacity-100', 'translate-y-0');
+    panel.classList.add('opacity-0', 'translate-y-4');
+    
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 300);
+}
+
 // Close modal on Escape key
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && !document.getElementById('payModal').classList.contains('hidden')) {
-        closePayModal();
+    if (e.key === 'Escape') {
+        if (!document.getElementById('payModal').classList.contains('hidden')) {
+            closePayModal();
+        }
+        // Close any open user fines modal
+        document.querySelectorAll('[id^="userFinesModal"]').forEach(modal => {
+            if (!modal.classList.contains('hidden')) {
+                const userId = modal.id.replace('userFinesModal', '');
+                closeUserFinesModal(userId);
+            }
+        });
     }
 });
 </script>

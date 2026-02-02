@@ -149,4 +149,20 @@ class DashboardService
     {
         return $this->bookRepo->findLowStock($threshold, $limit);
     }
+
+    /**
+     * ดึงรายการค้างชำระค่าปรับ
+     */
+    public function getUnpaidFinesList(int $limit = 10): array
+    {
+        return $this->borrowRepo->getUnpaidFinesList($limit);
+    }
+
+    /**
+     * ดึงหมวดหมู่ทั้งหมดพร้อมสถิติ (สำหรับ PDF report)
+     */
+    public function getAllCategoriesWithStats(): array
+    {
+        return $this->reportRepo->getAllCategoriesWithStats();
+    }
 }

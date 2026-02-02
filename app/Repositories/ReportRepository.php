@@ -100,6 +100,23 @@ class ReportRepository
     }
 
     /**
+     * รายงานหมวดหมู่ทั้งหมดพร้อมสถิติ
+     */
+    public function getAllCategoriesWithStats(): array
+    {
+        return $this->pdo->query("
+            SELECT c.name, 
+                   COUNT(DISTINCT bk.id) as book_count,
+                   COUNT(b.id) as borrow_count
+            FROM categories c
+            LEFT JOIN books bk ON c.id = bk.category_id
+            LEFT JOIN borrows b ON bk.id = b.book_id
+            GROUP BY c.id, c.name
+            ORDER BY c.name ASC
+        ")->fetchAll();
+    }
+
+    /**
      * หนังสือยอดนิยม
      */
     public function getPopularBooks(int $limit = 10): array

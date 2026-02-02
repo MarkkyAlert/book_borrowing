@@ -34,6 +34,12 @@ $overdueList = $dashboardService->getOverdueList(10);
 // Low stock books (available <= 2)
 $lowStockBooks = $dashboardService->getLowStockBooks(2, 5);
 
+// Unpaid fines list for PDF report
+$unpaidFinesList = $dashboardService->getUnpaidFinesList(10);
+
+// All categories with stats for PDF report
+$allCategoriesStats = $dashboardService->getAllCategoriesWithStats();
+
 // Date range for chart (default: 6 months)
 $chartRange = isset($_GET['range']) ? (int)$_GET['range'] : 6;
 $validRanges = [1, 3, 6, 12];
@@ -62,7 +68,7 @@ $chartReturned = array_column($monthlyBorrows, 'returned');
 $chartFines = array_column($monthlyBorrows, 'total_fines');
 
 $categoryLabels = array_column($categoryStats, 'name');
-$categoryData = array_column($categoryStats, 'book_count');
+$categoryData = array_column($categoryStats, 'borrow_count');
 
 $pageTitle = 'Dashboard';
 require_once __DIR__ . '/header.php';
@@ -194,7 +200,7 @@ require_once __DIR__ . '/header.php';
     <div class="lg:col-span-4">
         <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-full">
             <h6 class="font-bold text-gray-800 mb-4 flex items-center">
-                <i class="bi bi-pie-chart text-primary-500 mr-2"></i>หนังสือแยกตามหมวดหมู่
+                <i class="bi bi-pie-chart text-primary-500 mr-2"></i>Top 6 หมวดหมู่ยอดนิยม
             </h6>
             <div class="relative h-64">
                 <canvas id="categoryChart"></canvas>
@@ -686,15 +692,93 @@ function exportDashboardPDF() {
             
             <?php if (!empty($overdueList)): ?>
             <div class="section">
-                <div class="section-title" style="color:#dc2626;">⚠️ รายการเกินกำหนด</div>
+                <div class="section-title" style="color:#dc2626;">⚠️ รายการเกินกำหนด (<?= count($overdueList) ?> รายการ)</div>
                 <table>
-                    <tr><th>หนังสือ</th><th>ผู้ยืม</th><th>กำหนดคืน</th></tr>
-                    <?php foreach ($overdueList as $item): ?>
-                    <tr><td><?= e($item['book_title']) ?></td><td><?= e($item['user_name']) ?></td><td><?= e($item['due_date']) ?></td></tr>
+                    <tr><th>หนังสือ</th><th>ผู้ยืม</th><th>กำหนดคืน</th><th>เกิน (วัน)</th></tr>
+                    <?php foreach ($overdueList as $item): 
+                        $dueDate = new DateTime($item['due_date']);
+                        $today = new DateTime();
+                        $overdueDays = $today->diff($dueDate)->days;
+                    ?>
+                    <tr>
+                        <td><?= e($item['book_title']) ?></td>
+                        <td><?= e($item['user_name']) ?></td>
+                        <td><?= formatDate($item['due_date']) ?></td>
+                        <td style="color:#dc2626;font-weight:bold;"><?= $overdueDays ?> วัน</td>
+                    </tr>
                     <?php endforeach; ?>
                 </table>
             </div>
             <?php endif; ?>
+            
+            <?php if (!empty($unpaidFinesList)): ?>
+            <div class="section">
+                <div class="section-title" style="color:#f59e0b;">💰 รายการค้างชำระค่าปรับ</div>
+                <table>
+                    <tr><th>ผู้ยืม</th><th>หนังสือ</th><th>คืนเมื่อ</th><th>ค่าปรับ</th></tr>
+                    <?php foreach ($unpaidFinesList as $item): ?>
+                    <tr>
+                        <td><?= e($item['user_name']) ?></td>
+                        <td><?= e($item['book_title']) ?></td>
+                        <td><?= $item['return_date'] ? formatDate($item['return_date']) : '-' ?></td>
+                        <td style="color:#dc2626;font-weight:bold;"><?= number_format($item['fine_amount']) ?> ฿</td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+            
+            <?php if (!empty($lowStockBooks)): ?>
+            <div class="section">
+                <div class="section-title" style="color:#f97316;">📦 หนังสือใกล้หมด Stock</div>
+                <table>
+                    <tr><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>หมวดหมู่</th><th>คงเหลือ</th></tr>
+                    <?php foreach ($lowStockBooks as $book): ?>
+                    <tr>
+                        <td><?= e($book['title']) ?></td>
+                        <td><?= e($book['author']) ?></td>
+                        <td><?= e($book['category_name'] ?? '-') ?></td>
+                        <td style="color:<?= $book['available'] == 0 ? '#dc2626' : '#f97316' ?>;font-weight:bold;"><?= $book['available'] ?>/<?= $book['quantity'] ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+            
+            <div class="section">
+                <div class="section-title">📊 สถิติการยืมรายเดือน (<?= $chartRange ?> เดือนล่าสุด)</div>
+                <table>
+                    <tr><th>เดือน</th><th>จำนวนยืม</th><th>จำนวนคืน</th></tr>
+                    <?php 
+                    $thaiMonths = ['Jan'=>'ม.ค.','Feb'=>'ก.พ.','Mar'=>'มี.ค.','Apr'=>'เม.ย.','May'=>'พ.ค.','Jun'=>'มิ.ย.','Jul'=>'ก.ค.','Aug'=>'ส.ค.','Sep'=>'ก.ย.','Oct'=>'ต.ค.','Nov'=>'พ.ย.','Dec'=>'ธ.ค.'];
+                    foreach ($monthlyBorrows as $stat): 
+                        $monthKey = $stat['month_name'] ?? '';
+                        $thaiMonth = $thaiMonths[$monthKey] ?? $monthKey;
+                    ?>
+                    <tr>
+                        <td><?= e($thaiMonth) ?> <?= substr($stat['month'] ?? '', 0, 4) ?></td>
+                        <td><?= number_format($stat['total_borrows'] ?? $stat['borrow_count'] ?? 0) ?></td>
+                        <td><?= number_format($stat['returned'] ?? $stat['return_count'] ?? 0) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($monthlyBorrows)): ?><tr><td colspan="3" style="text-align:center;color:#9ca3af;">ไม่มีข้อมูล</td></tr><?php endif; ?>
+                </table>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">📁 สรุปตามหมวดหมู่ (ทั้งหมด <?= count($allCategoriesStats) ?> หมวดหมู่)</div>
+                <table>
+                    <tr><th>หมวดหมู่</th><th>จำนวนหนังสือ</th><th>ถูกยืม (ครั้ง)</th></tr>
+                    <?php foreach ($allCategoriesStats as $cat): ?>
+                    <tr>
+                        <td><?= e($cat['name']) ?></td>
+                        <td><?= number_format($cat['book_count']) ?></td>
+                        <td><?= number_format($cat['borrow_count']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($allCategoriesStats)): ?><tr><td colspan="3" style="text-align:center;color:#9ca3af;">ไม่มีข้อมูล</td></tr><?php endif; ?>
+                </table>
+            </div>
             
             <p style="margin-top:40px;color:#9ca3af;font-size:11px;text-align:center;">
                 สร้างโดย <?= e(APP_NAME) ?> | <?= date('Y') ?>

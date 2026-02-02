@@ -127,16 +127,17 @@ class CategoryRepository
     }
 
     /**
-     * ดึงสถิติหมวดหมู่ (สำหรับ chart)
+     * ดึงสถิติหมวดหมู่ (สำหรับ chart) - เรียงตามจำนวนการยืม
      */
     public function getStatistics(int $limit = 6): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT c.name, COUNT(b.id) as book_count
+            SELECT c.name, COUNT(br.id) as borrow_count
             FROM categories c
             LEFT JOIN books b ON c.id = b.category_id
+            LEFT JOIN borrows br ON b.id = br.book_id
             GROUP BY c.id, c.name
-            ORDER BY book_count DESC
+            ORDER BY borrow_count DESC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
