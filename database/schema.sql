@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS `payments` (
     `amount` DECIMAL(10,2) NOT NULL COMMENT 'จำนวนเงิน',
     `recorded_by` INT DEFAULT NULL COMMENT 'ผู้บันทึก',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE INDEX `unique_borrow_payment` (`borrow_id`),
     INDEX `idx_borrow` (`borrow_id`),
     FOREIGN KEY (`borrow_id`) REFERENCES `borrows`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (`recorded_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE

@@ -16,9 +16,28 @@ $borrowRepo = new BorrowRepository($pdo);
 $reportType = $_GET['report'] ?? 'books';
 $isExport = isset($_GET['export']) && $_GET['export'] === 'csv';
 
-// Date range filter
+// Date range filter with validation
 $startDate = $_GET['start_date'] ?? date('Y-m-01'); // Default: start of current month
 $endDate = $_GET['end_date'] ?? date('Y-m-d'); // Default: today
+
+// [VALIDATION] ตรวจสอบ format วันที่ (YYYY-MM-DD)
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !strtotime($startDate)) {
+    $startDate = date('Y-m-01');
+}
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) || !strtotime($endDate)) {
+    $endDate = date('Y-m-d');
+}
+
+// [VALIDATION] startDate ต้องไม่เกิน endDate
+if ($startDate > $endDate) {
+    $startDate = $endDate;
+}
+
+// [VALIDATION] endDate ต้องไม่เกินวันนี้
+$today = date('Y-m-d');
+if ($endDate > $today) {
+    $endDate = $today;
+}
 
 // Detect active range for button highlighting
 $activeRange = '';
@@ -112,6 +131,9 @@ require_once __DIR__ . '/header.php';
     </div>
 </div>
 
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
 <!-- Date Range Filter -->
 <?php 
 $startDateDisplay = date('d/m/Y', strtotime($startDate));
@@ -124,25 +146,19 @@ $endDateDisplay = date('d/m/Y', strtotime($endDate));
         <input type="hidden" name="end_date" id="end_date_hidden" value="<?= $endDate ?>">
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
-            <input type="text" id="start_date_display" value="<?= $startDateDisplay ?>" 
-                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32"
-                   placeholder="วว/ดด/ปปปป" readonly onclick="this.nextElementSibling.showPicker()">
-            <input type="date" id="start_date_picker" value="<?= $startDate ?>" class="hidden"
-                   onchange="updateDateDisplay('start')">
+            <input type="text" id="start_date_picker" value="<?= $startDateDisplay ?>" 
+                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32 cursor-pointer" readonly>
         </div>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
-            <input type="text" id="end_date_display" value="<?= $endDateDisplay ?>" 
-                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32"
-                   placeholder="วว/ดด/ปปปป" readonly onclick="this.nextElementSibling.showPicker()">
-            <input type="date" id="end_date_picker" value="<?= $endDate ?>" class="hidden"
-                   onchange="updateDateDisplay('end')">
+            <input type="text" id="end_date_picker" value="<?= $endDateDisplay ?>" 
+                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32 cursor-pointer" readonly>
         </div>
         <div class="flex gap-2">
             <button type="submit" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
                 <i class="bi bi-funnel mr-1"></i>กรอง
             </button>
-            <a href="reports.php?report=<?= $reportType ?>" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+            <a href="reports.php?report=<?= $reportType ?>&start_date=<?= date('Y-m-01') ?>&end_date=<?= date('Y-m-d') ?>" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
                 <i class="bi bi-arrow-counterclockwise mr-1"></i>รีเซ็ต
             </a>
         </div>
@@ -155,35 +171,41 @@ $endDateDisplay = date('d/m/Y', strtotime($endDate));
     </form>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
 <script>
-function formatDateThai(date) {
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const y = date.getFullYear();
-    return d + '/' + m + '/' + y;
-}
-
+// Helper functions - ต้องประกาศก่อนใช้งาน
 function formatDateISO(date) {
-    return date.toISOString().split('T')[0];
+    // ใช้ local date แทน toISOString() เพื่อป้องกัน timezone shift
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
 }
 
-function updateDateDisplay(type) {
-    if (type === 'start') {
-        const picker = document.getElementById('start_date_picker');
-        const display = document.getElementById('start_date_display');
-        const hidden = document.getElementById('start_date_hidden');
-        const date = new Date(picker.value);
-        display.value = formatDateThai(date);
-        hidden.value = picker.value;
-    } else {
-        const picker = document.getElementById('end_date_picker');
-        const display = document.getElementById('end_date_display');
-        const hidden = document.getElementById('end_date_hidden');
-        const date = new Date(picker.value);
-        display.value = formatDateThai(date);
-        hidden.value = picker.value;
+// Initialize Flatpickr with Thai date format
+const fpConfig = {
+    dateFormat: 'd/m/Y',
+    locale: 'th',
+    allowInput: false,
+    maxDate: 'today'  // ไม่อนุญาตเลือกวันที่เกินวันนี้
+};
+
+const startPicker = flatpickr('#start_date_picker', {
+    ...fpConfig,
+    defaultDate: '<?= $startDate ?>',
+    onChange: function(selectedDates, dateStr) {
+        document.getElementById('start_date_hidden').value = formatDateISO(selectedDates[0]);
     }
-}
+});
+
+const endPicker = flatpickr('#end_date_picker', {
+    ...fpConfig,
+    defaultDate: '<?= $endDate ?>',
+    onChange: function(selectedDates, dateStr) {
+        document.getElementById('end_date_hidden').value = formatDateISO(selectedDates[0]);
+    }
+});
 
 function setDateRange(range) {
     const today = new Date();
@@ -207,19 +229,13 @@ function setDateRange(range) {
             break;
     }
     
+    // Update Flatpickr instances
+    startPicker.setDate(startDate);
+    endPicker.setDate(today);
+    
     // Update hidden fields
     document.getElementById('start_date_hidden').value = formatDateISO(startDate);
     document.getElementById('end_date_hidden').value = formatDateISO(today);
-    
-    // Update display fields
-    document.getElementById('start_date_display').value = formatDateThai(startDate);
-    document.getElementById('end_date_display').value = formatDateThai(today);
-    
-    // Update pickers
-    document.getElementById('start_date_picker').value = formatDateISO(startDate);
-    document.getElementById('end_date_picker').value = formatDateISO(today);
-    
-    return true;
 }
 </script>
 

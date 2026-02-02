@@ -180,15 +180,17 @@ class ReportRepository
 
     /**
      * รายงานหนังสือยอดนิยม (สำหรับหน้า reports)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด
+     * @param string|null $startDate วันเริ่มต้น (Y-m-d)
+     * @param string|null $endDate วันสิ้นสุด (Y-m-d)
      */
     public function getTopBooksReport(int $limit = 50, ?string $startDate = null, ?string $endDate = null): array
     {
-        $dateFilter = '';
-        $params = [];
-        
-        if ($startDate && $endDate) {
-            $dateFilter = 'AND br.borrow_date BETWEEN ? AND ?';
-            $params = [$startDate, $endDate];
+        // ถ้าไม่มีวันที่ ใช้ช่วง 1 ปีย้อนหลัง
+        if (!$startDate || !$endDate) {
+            $endDate = date('Y-m-d');
+            $startDate = date('Y-m-d', strtotime('-1 year'));
         }
         
         $stmt = $this->pdo->prepare("
@@ -209,10 +211,19 @@ class ReportRepository
     /**
      * รายงานสมาชิกที่ใช้บริการบ่อย
      * 
+     * @param int $limit จำนวนรายการสูงสุด
      * @param bool $translateRole true = แปลง role เป็นภาษาไทย (สำหรับ PDF)
+     * @param string|null $startDate วันเริ่มต้น (Y-m-d)
+     * @param string|null $endDate วันสิ้นสุด (Y-m-d)
      */
     public function getTopMembersReport(int $limit = 50, bool $translateRole = false, ?string $startDate = null, ?string $endDate = null): array
     {
+        // ถ้าไม่มีวันที่ ใช้ช่วง 1 ปีย้อนหลัง
+        if (!$startDate || !$endDate) {
+            $endDate = date('Y-m-d');
+            $startDate = date('Y-m-d', strtotime('-1 year'));
+        }
+        
         $roleCol = $translateRole 
             ? "CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,"
             : "u.role,";
@@ -239,11 +250,11 @@ class ReportRepository
     public function getDailyRevenueReport(string $startDate, string $endDate): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
+            SELECT DATE(created_at) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
             FROM payments
-            WHERE DATE(payment_date) BETWEEN ? AND ?
-            GROUP BY DATE(payment_date)
-            ORDER BY payment_date DESC
+            WHERE DATE(created_at) BETWEEN ? AND ?
+            GROUP BY DATE(created_at)
+            ORDER BY created_at DESC
         ");
         $stmt->execute([$startDate, $endDate]);
         return $stmt->fetchAll();

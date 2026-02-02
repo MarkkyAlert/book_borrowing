@@ -92,8 +92,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Use BorrowService for transaction logic
     if (empty($errors)) {
+        // [IDEMPOTENCY] ป้องกัน double-submit (กดปุ่มซ้ำ / refresh)
+        sort($bookIds); // sort เพื่อให้ key เหมือนกันไม่ว่าจะเลือกลำดับไหน
+        $idempotencyKey = 'borrow_' . $userId . '_' . md5(json_encode($bookIds));
+        
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            $processedAt = $_SESSION['processed_actions'][$idempotencyKey];
+            if (time() - $processedAt < 60) { // ภายใน 60 วินาที ถือว่าซ้ำ
+                setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+                redirect('borrows.php');
+            }
+        }
+        
         try {
             $result = $borrowService->createBorrow($userId, $bookIds, $borrowDays);
+            
+            // บันทึก idempotency key หลังสำเร็จ
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
             
             if ($result['success']) {
                 setFlash('success', $result['message']);

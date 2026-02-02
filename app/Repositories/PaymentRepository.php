@@ -79,7 +79,7 @@ class PaymentRepository
     public function findAll(array $filters = []): array
     {
         $sql = "
-            SELECT p.*, b.borrow_date, b.return_date, 
+            SELECT p.*, p.created_at as payment_date, b.borrow_date, b.return_date, 
                    u.name as member_name, 
                    bk.title as book_title,
                    staff.name as staff_name
@@ -97,7 +97,7 @@ class PaymentRepository
             $params = [$search, $search, $search];
         }
 
-        $sql .= " ORDER BY p.payment_date DESC";
+        $sql .= " ORDER BY p.created_at DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

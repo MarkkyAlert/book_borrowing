@@ -28,8 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'pay_fine') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         
+        // [IDEMPOTENCY] ป้องกัน double-submit ด้วย session token
+        $idempotencyKey = 'pay_fine_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('payments.php');
+        }
+        
         try {
             $result = $borrowService->payFine($borrowId, $_SESSION['user_id']);
+            
+            // บันทึกว่า process แล้ว
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+            
             setFlash('success', $result['message']);
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());

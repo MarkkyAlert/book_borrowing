@@ -99,18 +99,36 @@ class BorrowRepository
     }
 
     /**
-     * Lock row สำหรับ transaction
+     * Lock row สำหรับ transaction (เฉพาะ status='borrowing')
      * 
      * [CONCURRENCY] FOR UPDATE ป้องกัน:
      * - คืนหนังสือซ้ำ (กดปุ่มคืน 2 ครั้ง)
      * - Race condition ระหว่าง staff 2 คน
      * 
      * @note ต้องเรียกภายใน transaction เท่านั้น
+     * @note ใช้สำหรับ returnBook() - filter เฉพาะ borrowing
      */
     public function findByIdForUpdate(int $id): ?array
     {
         $stmt = $this->pdo->prepare("
             SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE
+        ");
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * Lock row สำหรับ transaction (ทุก status)
+     * 
+     * [CONCURRENCY] FOR UPDATE ป้องกัน race condition
+     * 
+     * @note ต้องเรียกภายใน transaction เท่านั้น
+     * @note ใช้สำหรับ payFine() - ต้องการหา borrow ที่ returned แล้ว
+     */
+    public function findByIdForUpdateAnyStatus(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM borrows WHERE id = ? FOR UPDATE
         ");
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
