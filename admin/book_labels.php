@@ -5,7 +5,7 @@
 
 require_once __DIR__ . '/../bootstrap.php';
 
-requireAdmin();
+requireStaff(); // Staff ต้องพิมพ์ฉลากหนังสือได้
 
 use App\Repositories\BookRepository;
 

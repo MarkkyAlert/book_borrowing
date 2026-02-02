@@ -4,7 +4,7 @@
  */
 
 require_once __DIR__ . '/../includes/functions.php';
-requireAdmin();
+requireStaff(); // ใช้ requireStaff เพราะแต่ละหน้าจะตรวจสอบสิทธิ์เองอีกที
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 $user = getCurrentUser();
@@ -211,22 +211,22 @@ if (!$user) {
                     <span>ประวัติการเงิน</span>
                 </a>
                 
-                <?php if (isAdmin()): ?>
-                <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-primary-100 hover:text-white <?= $currentPage === 'members.php' ? 'active' : 'border-l-4 border-transparent' ?>" href="<?= APP_URL ?>/admin/members.php">
+                <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-primary-100 hover:text-white <?= in_array($currentPage, ['members.php', 'member_form.php']) ? 'active' : 'border-l-4 border-transparent' ?>" href="<?= APP_URL ?>/admin/members.php">
                     <i class="bi bi-people text-lg"></i>
                     <span>สมาชิก</span>
                 </a>
                 
+                <?php if (isAdmin()): ?>
                 <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-primary-100 hover:text-white <?= $currentPage === 'reports.php' ? 'active' : 'border-l-4 border-transparent' ?>" href="<?= APP_URL ?>/admin/reports.php">
                     <i class="bi bi-bar-chart-line text-lg"></i>
                     <span>รายงาน</span>
                 </a>
-                <?php endif; ?>
                 
                 <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-primary-100 hover:text-white <?= $currentPage === 'settings.php' ? 'active' : 'border-l-4 border-transparent' ?>" href="<?= APP_URL ?>/admin/settings.php">
                     <i class="bi bi-gear-fill text-lg"></i>
                     <span>ตั้งค่าระบบ</span>
                 </a>
+                <?php endif; ?>
                 
                 <hr class="border-primary-800 my-4 mx-2">
                 
@@ -285,11 +285,11 @@ if (!$user) {
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/book_labels.php">พิมพ์บาร์โค้ด</a>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/reservations.php">รายการจอง</a>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/payments.php">ประวัติการเงิน</a>
-                    <?php if (isAdmin()): ?>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/members.php">สมาชิก</a>
+                    <?php if (isAdmin()): ?>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/reports.php">รายงาน</a>
-                    <?php endif; ?>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/settings.php">ตั้งค่าระบบ</a>
+                    <?php endif; ?>
                     <hr class="border-primary-700 my-2">
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>">หน้าเว็บไซต์</a>
                     <a class="block px-4 py-2 text-red-300 hover:bg-red-900/50 rounded" href="<?= APP_URL ?>/logout.php">ออกจากระบบ</a>

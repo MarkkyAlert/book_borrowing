@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 setFlash('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' . $user['name']);
                 
                 // Redirect based on role
-                if ($user['role'] === 'admin') {
+                if ($user['role'] === 'admin' || $user['role'] === 'staff') {
                     redirect(APP_URL . '/admin/');
                 } else {
                     redirect(APP_URL . '/index.php');

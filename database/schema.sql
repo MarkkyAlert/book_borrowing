@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS `books` (
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_available` (`available`),
     INDEX `idx_category` (`category_id`),
-    FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+    FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT `chk_books_available_non_negative` CHECK (`available` >= 0),
+    CONSTRAINT `chk_books_quantity_gte_available` CHECK (`quantity` >= `available`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================

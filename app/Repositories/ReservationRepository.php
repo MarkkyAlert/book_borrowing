@@ -19,6 +19,58 @@ class ReservationRepository
     }
 
     /**
+     * [LAZY EXPIRE] อัปเดต reservation ที่หมดอายุเป็น 'expired' + คืน stock อัตโนมัติ
+     * 
+     * @return int จำนวน reservations ที่ถูก expire
+     * 
+     * @note ใช้ transaction เพื่อให้ atomic: ถ้า expire แล้วต้องคืน stock ด้วย
+     */
+    public function markExpiredReservations(): int
+    {
+        // ดึงรายการที่หมดอายุก่อน
+        $expiredStmt = $this->pdo->prepare("
+            SELECT id, book_id FROM reservations 
+            WHERE status = 'pending' AND expires_at < NOW()
+        ");
+        $expiredStmt->execute();
+        $expiredList = $expiredStmt->fetchAll();
+        
+        if (empty($expiredList)) {
+            return 0;
+        }
+        
+        // ใช้ transaction เพื่อให้ atomic
+        $this->pdo->beginTransaction();
+        
+        try {
+            foreach ($expiredList as $res) {
+                // Mark as expired
+                $updateStmt = $this->pdo->prepare("
+                    UPDATE reservations SET status = 'expired' 
+                    WHERE id = ? AND status = 'pending'
+                ");
+                $updateStmt->execute([$res['id']]);
+                
+                // คืน stock (ถ้า update สำเร็จ)
+                if ($updateStmt->rowCount() > 0) {
+                    $stockStmt = $this->pdo->prepare("
+                        UPDATE books SET available = available + 1 WHERE id = ?
+                    ");
+                    $stockStmt->execute([$res['book_id']]);
+                }
+            }
+            
+            $this->pdo->commit();
+            return count($expiredList);
+            
+        } catch (\Exception $e) {
+            $this->pdo->rollBack();
+            // Silent fail - lazy expire ไม่ควร block การทำงานหลัก
+            return 0;
+        }
+    }
+
+    /**
      * ดึงรายการจองทั้งหมด พร้อม filter
      * 
      * @param array $filters {
@@ -26,9 +78,14 @@ class ReservationRepository
      *     user_id?: int,
      *     book_id?: int
      * }
+     * 
+     * @note จะ auto-expire reservations ที่หมดอายุก่อน query (lazy expiration)
      */
     public function findAll(array $filters = []): array
     {
+        // [LAZY EXPIRE] Mark expired reservations ก่อน query
+        $this->markExpiredReservations();
+        
         $where = [];
         $params = [];
 

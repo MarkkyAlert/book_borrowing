@@ -350,6 +350,11 @@ class BorrowService
             return ['success' => false, 'reason' => $book['title'] . ' (ยืมอยู่แล้ว)'];
         }
 
+        // Update book available count (atomic - ป้องกันติดลบ)
+        if (!$this->bookRepo->decrementAvailable($bookId)) {
+            return ['success' => false, 'reason' => $book['title'] . ' (stock หมดระหว่างดำเนินการ)'];
+        }
+
         // Insert borrow record
         $this->borrowRepo->create([
             'user_id' => $userId,
@@ -357,9 +362,6 @@ class BorrowService
             'borrow_date' => $borrowDate,
             'due_date' => $dueDate
         ]);
-
-        // Update book available count
-        $this->bookRepo->decrementAvailable($bookId);
 
         return ['success' => true, 'title' => $book['title']];
     }

@@ -99,7 +99,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                 <!-- Right Menu -->
                 <div class="hidden md:flex items-center space-x-4">
                     <?php if (isLoggedIn()): ?>
-                        <?php if (isAdmin()): ?>
+                        <?php if (isAdmin() || isStaff()): ?>
                             <a href="<?= APP_URL ?>/admin/" class="text-gray-600 hover:text-primary-600 font-medium text-sm flex items-center transition-colors">
                                 <i class="bi bi-gear mr-1.5"></i>จัดการระบบ
                             </a>
@@ -160,7 +160,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                 </a>
                 
                 <?php if (isLoggedIn()): ?>
-                    <?php if (isAdmin()): ?>
+                    <?php if (isAdmin() || isStaff()): ?>
                         <a href="<?= APP_URL ?>/admin/" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                             <i class="bi bi-gear mr-2"></i>จัดการระบบ
                         </a>

@@ -264,10 +264,18 @@ class BookRepository
 
     /**
      * ลด available - 1 (ยืมหนังสือ)
+     * 
+     * @return bool true = สำเร็จ, false = stock ไม่พอ (available = 0)
+     * @security ใช้ conditional update ป้องกัน available ติดลบ
      */
     public function decrementAvailable(int $id): bool
     {
-        return $this->updateAvailable($id, -1);
+        $stmt = $this->pdo->prepare("
+            UPDATE books SET available = available - 1 
+            WHERE id = ? AND available > 0
+        ");
+        $stmt->execute([$id]);
+        return $stmt->rowCount() > 0;
     }
 
     /**

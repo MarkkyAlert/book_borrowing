@@ -121,8 +121,14 @@ class ReservationService
      * ยกเลิกการจอง พร้อมคืน stock กลับ
      * 
      * State Transition: pending → cancelled
+     * 
+     * @param int $reservationId ID การจอง
+     * @param int|null $userId   ID ผู้ใช้ (ถ้าส่งมา = ต้องเป็นเจ้าของถึงจะยกเลิกได้)
+     *                           null = admin/staff ยกเลิกได้ทุกรายการ
+     * 
+     * @security ถ้าเรียกจาก member endpoint ต้องส่ง userId เสมอเพื่อป้องกัน authorization leak
      */
-    public function cancelReservation(int $reservationId, int $userId = null): array
+    public function cancelReservation(int $reservationId, ?int $userId = null): array
     {
         $this->pdo->beginTransaction();
 

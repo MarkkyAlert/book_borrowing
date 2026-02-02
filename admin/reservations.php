@@ -4,7 +4,7 @@
  */
 
 require_once __DIR__ . '/../bootstrap.php';
-requireAdmin();
+requireStaff(); // Staff ต้องจัดการจองได้
 
 use App\Services\ReservationService;
 use App\Repositories\ReservationRepository;
