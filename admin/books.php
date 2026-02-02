@@ -23,7 +23,7 @@ $sort = $_GET['sort'] ?? 'newest';
 $books = $bookService->getBooks([
     'search' => $search,
     'category_id' => $categoryId,
-    'status' => $status === 'available' ? 'available' : ($status === 'out_of_stock' ? 'out_of_stock' : ''),
+    'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
     'sort' => $sort
 ]);
 
@@ -96,6 +96,7 @@ require_once __DIR__ . '/header.php';
                 <option value="">ทั้งหมด</option>
                 <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>มีของ</option>
                 <option value="out_of_stock" <?= $status === 'out_of_stock' ? 'selected' : '' ?>>หนังสือหมด</option>
+                <option value="low_stock" <?= $status === 'low_stock' ? 'selected' : '' ?>>ใกล้หมด (≤2)</option>
             </select>
         </div>
         <div class="md:col-span-2">

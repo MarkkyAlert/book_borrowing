@@ -279,6 +279,27 @@ class BookRepository
     }
 
     /**
+     * ดึงหนังสือที่ใกล้หมด stock
+     * 
+     * @param int $threshold จำนวน available ที่ถือว่า "ใกล้หมด" (default: 2)
+     * @param int $limit จำนวนรายการที่ต้องการ
+     * @return array รายการหนังสือที่ available <= threshold
+     */
+    public function findLowStock(int $threshold = 2, int $limit = 5): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.id, b.title, b.author, b.quantity, b.available, c.name as category_name
+            FROM books b
+            LEFT JOIN categories c ON b.category_id = c.id
+            WHERE b.available <= ? AND b.quantity > 0
+            ORDER BY b.available ASC, b.title ASC
+            LIMIT ?
+        ");
+        $stmt->execute([$threshold, $limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
      * ดึงสถิติหนังสือ (สำหรับ dashboard)
      * 
      * @return array {

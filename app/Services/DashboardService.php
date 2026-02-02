@@ -138,4 +138,15 @@ class DashboardService
     {
         return $this->reportRepo->getPopularBooks($limit);
     }
+
+    /**
+     * ดึงหนังสือที่ใกล้หมด stock
+     * 
+     * @param int $threshold จำนวน available ที่ถือว่า "ใกล้หมด"
+     * @param int $limit จำนวนรายการที่ต้องการ
+     */
+    public function getLowStockBooks(int $threshold = 2, int $limit = 5): array
+    {
+        return $this->bookRepo->findLowStock($threshold, $limit);
+    }
 }

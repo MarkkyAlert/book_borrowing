@@ -357,5 +357,42 @@ class BorrowRepository
         $stmt->execute([$bookId]);
         return (int) $stmt->fetchColumn();
     }
+
+    /**
+     * ดึงรายการยืมที่มีค่าปรับค้างชำระ (fine_amount > 0 และยังไม่มี payment)
+     * 
+     * @param int $limit จำนวนรายการที่ต้องการ
+     * @return array รายการยืมพร้อมข้อมูล user และ book
+     */
+    public function getUnpaidFinesList(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
+                   u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                   bk.id as book_id, bk.title as book_title
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.fine_amount > 0 AND p.id IS NULL
+            ORDER BY b.return_date DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * นับยอดค่าปรับค้างชำระทั้งหมด
+     */
+    public function getTotalUnpaidFines(): float
+    {
+        return (float) $this->pdo->query("
+            SELECT COALESCE(SUM(b.fine_amount), 0) 
+            FROM borrows b
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.fine_amount > 0 AND p.id IS NULL
+        ")->fetchColumn();
+    }
 }
 

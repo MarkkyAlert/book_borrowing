@@ -273,6 +273,47 @@ class BorrowService
         return $this->borrowRepo->findRecent($limit);
     }
 
+    /**
+     * รับชำระค่าปรับทีหลัง (สำหรับรายการที่คืนแล้วแต่ยังไม่ได้จ่าย)
+     * 
+     * @param int      $borrowId   ID รายการยืม (ต้องมี status = 'returned' และ fine_amount > 0)
+     * @param int|null $recordedBy ID staff ที่บันทึก
+     * 
+     * @return array { success: bool, amount: float, message: string }
+     * 
+     * @throws Exception เมื่อ:
+     *     - ไม่พบรายการยืม
+     *     - รายการนี้ไม่มีค่าปรับ หรือชำระแล้ว
+     */
+    public function payFine(int $borrowId, ?int $recordedBy = null): array
+    {
+        // ดึงข้อมูล borrow
+        $borrow = $this->borrowRepo->findById($borrowId);
+        
+        if (!$borrow) {
+            throw new Exception('ไม่พบรายการยืม');
+        }
+        
+        if ($borrow['fine_amount'] <= 0) {
+            throw new Exception('รายการนี้ไม่มีค่าปรับ');
+        }
+        
+        // ตรวจสอบว่าชำระแล้วหรือยัง
+        $existingPayment = $this->paymentRepo->findByBorrowId($borrowId);
+        if ($existingPayment) {
+            throw new Exception('รายการนี้ชำระค่าปรับแล้ว');
+        }
+        
+        // บันทึก payment
+        $this->paymentRepo->create($borrowId, $borrow['fine_amount'], $recordedBy);
+        
+        return [
+            'success' => true,
+            'amount' => $borrow['fine_amount'],
+            'message' => 'รับชำระค่าปรับ ' . number_format($borrow['fine_amount']) . ' บาท เรียบร้อยแล้ว'
+        ];
+    }
+
     // ==================== Private Methods ====================
 
     /**

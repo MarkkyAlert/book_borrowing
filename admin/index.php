@@ -31,8 +31,18 @@ $recentBorrows = $dashboardService->getRecentBorrows(5);
 $recentReservations = $dashboardService->getRecentReservations(5);
 $overdueList = $dashboardService->getOverdueList(10);
 
+// Low stock books (available <= 2)
+$lowStockBooks = $dashboardService->getLowStockBooks(2, 5);
+
+// Date range for chart (default: 6 months)
+$chartRange = isset($_GET['range']) ? (int)$_GET['range'] : 6;
+$validRanges = [1, 3, 6, 12];
+if (!in_array($chartRange, $validRanges)) {
+    $chartRange = 6;
+}
+
 // Chart data
-$monthlyBorrows = $dashboardService->getMonthlyStats(6);
+$monthlyBorrows = $dashboardService->getMonthlyStats($chartRange);
 $categoryStats = $dashboardService->getCategoryStats(6);
 $totalFines = $dashboardService->getTotalFinesCollected();
 $unpaidFines = $dashboardService->getUnpaidFines();
@@ -134,30 +144,46 @@ require_once __DIR__ . '/header.php';
 
 <!-- Charts Section -->
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-    <!-- Total Fines Card -->
+    <!-- Total Fines Card (Compact) -->
     <div class="lg:col-span-3">
-        <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white text-center h-full shadow-lg shadow-green-500/20 flex flex-col justify-center items-center">
-            <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 text-3xl">
-                <i class="bi bi-cash-coin"></i>
+        <a href="payments.php" class="block bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg shadow-green-500/20 hover:shadow-xl transition-shadow h-full">
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 bg-white/20 rounded-lg">
+                    <i class="bi bi-cash-coin text-xl"></i>
+                </div>
+                <i class="bi bi-arrow-right text-green-200"></i>
             </div>
-            <h3 class="text-3xl font-bold mb-1"><?= number_format($totalFines) ?> ฿</h3>
-            <p class="text-green-100 text-sm font-medium mb-4">รายได้ค่าปรับ (ชำระแล้ว)</p>
+            <h3 class="text-2xl font-bold mb-0.5"><?= number_format($totalFines) ?> ฿</h3>
+            <p class="text-green-100 text-xs font-medium mb-3">รายได้ค่าปรับ (ชำระแล้ว)</p>
             
-            <div class="bg-white/10 rounded-xl p-3 w-full backdrop-blur-sm border border-white/20">
-                <div class="flex justify-between items-center text-sm">
+            <div class="bg-white/10 rounded-lg p-2 backdrop-blur-sm border border-white/20">
+                <div class="flex justify-between items-center text-xs">
                     <span class="text-green-50">ค้างชำระ:</span>
                     <span class="font-bold text-white"><?= number_format($unpaidFines) ?> ฿</span>
                 </div>
             </div>
-        </div>
+            <p class="text-green-200 text-xs mt-2 text-center">คลิกดูรายละเอียด →</p>
+        </a>
     </div>
     
     <!-- Monthly Borrows Chart -->
     <div class="lg:col-span-5">
         <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-full">
-            <h6 class="font-bold text-gray-800 mb-4 flex items-center">
-                <i class="bi bi-bar-chart text-primary-500 mr-2"></i>สถิติการยืม 6 เดือนล่าสุด
-            </h6>
+            <div class="flex justify-between items-center mb-4">
+                <h6 class="font-bold text-gray-800 flex items-center">
+                    <i class="bi bi-bar-chart text-primary-500 mr-2"></i>สถิติการยืม
+                </h6>
+                <div class="flex items-center gap-2">
+                    <!-- Date Range Selector -->
+                    <select id="chartRange" onchange="changeChartRange(this.value)" 
+                            class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        <option value="1" <?= $chartRange == 1 ? 'selected' : '' ?>>1 เดือน</option>
+                        <option value="3" <?= $chartRange == 3 ? 'selected' : '' ?>>3 เดือน</option>
+                        <option value="6" <?= $chartRange == 6 ? 'selected' : '' ?>>6 เดือน</option>
+                        <option value="12" <?= $chartRange == 12 ? 'selected' : '' ?>>1 ปี</option>
+                    </select>
+                </div>
+            </div>
             <div class="relative h-64">
                 <canvas id="borrowChart"></canvas>
             </div>
@@ -399,6 +425,36 @@ require_once __DIR__ . '/header.php';
     </div>
 </div>
 
+<!-- Low Stock Alert -->
+<?php if (!empty($lowStockBooks)): ?>
+<div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl shadow-sm border border-amber-200 p-6 mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h5 class="font-bold text-amber-800 flex items-center">
+            <i class="bi bi-exclamation-triangle text-amber-500 mr-2"></i>
+            หนังสือใกล้หมด Stock
+            <span class="ml-2 px-2 py-0.5 bg-amber-500 text-white text-xs rounded-full"><?= count($lowStockBooks) ?></span>
+        </h5>
+        <a href="books.php?filter=low_stock" class="text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-3 py-1 rounded-full transition-colors">
+            ดูทั้งหมด
+        </a>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <?php foreach ($lowStockBooks as $book): ?>
+            <div class="bg-white rounded-xl p-3 border border-amber-100 hover:shadow-md transition-shadow">
+                <div class="font-medium text-gray-900 text-sm line-clamp-1"><?= e($book['title']) ?></div>
+                <div class="text-xs text-gray-500 line-clamp-1"><?= e($book['author']) ?></div>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs text-gray-400"><?= e($book['category_name'] ?? '-') ?></span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold <?= $book['available'] == 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700' ?>">
+                        <?= $book['available'] ?>/<?= $book['quantity'] ?>
+                    </span>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Quick Actions -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
     <h5 class="font-bold text-gray-800 mb-4 flex items-center">
@@ -418,6 +474,9 @@ require_once __DIR__ . '/header.php';
         <a href="members.php" class="inline-flex items-center px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-slate-500/20">
             <i class="bi bi-people mr-2"></i>ดูสมาชิก
         </a>
+        <button onclick="exportDashboardPDF()" class="inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-rose-500/20">
+            <i class="bi bi-file-pdf mr-2"></i>Export PDF
+        </button>
     </div>
 </div>
 
@@ -550,6 +609,110 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Change chart date range
+function changeChartRange(range) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('range', range);
+    window.location.href = url.toString();
+}
+
+// Export Dashboard to PDF
+function exportDashboardPDF() {
+    // Show loading
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-hourglass-split mr-2"></i>กำลังสร้าง...';
+    btn.disabled = true;
+    
+    // Use browser print with PDF styling
+    const printContents = `
+        <html>
+        <head>
+            <title>Dashboard Report - <?= date('Y-m-d') ?></title>
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; }
+                h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+                .stats { display: flex; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+                .stat-card { background: #f3f4f6; padding: 15px 25px; border-radius: 8px; text-align: center; }
+                .stat-value { font-size: 24px; font-weight: bold; color: #3b82f6; }
+                .stat-label { font-size: 12px; color: #6b7280; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
+                th { background: #f9fafb; font-weight: 600; }
+                .section { margin: 30px 0; }
+                .section-title { font-size: 16px; font-weight: bold; color: #374151; margin-bottom: 10px; }
+                @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+            </style>
+        </head>
+        <body>
+            <h1>📊 รายงาน Dashboard - <?= e(APP_NAME) ?></h1>
+            <p style="color:#6b7280;">วันที่พิมพ์: ${new Date().toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}</p>
+            
+            <div class="stats">
+                <div class="stat-card"><div class="stat-value"><?= number_format($totalMembers) ?></div><div class="stat-label">สมาชิกทั้งหมด</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($totalBooks) ?></div><div class="stat-label">หนังสือทั้งหมด</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($availableBooks) ?></div><div class="stat-label">พร้อมให้ยืม</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($activeBorrows) ?></div><div class="stat-label">กำลังยืม</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($overdueBorrows) ?></div><div class="stat-label">เกินกำหนด</div></div>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-card"><div class="stat-value" style="color:#10b981;"><?= number_format($totalFines) ?> ฿</div><div class="stat-label">รายได้ค่าปรับ (ชำระแล้ว)</div></div>
+                <div class="stat-card"><div class="stat-value" style="color:#ef4444;"><?= number_format($unpaidFines) ?> ฿</div><div class="stat-label">ค้างชำระ</div></div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">🏆 สมาชิกยืมสูงสุด</div>
+                <table>
+                    <tr><th>#</th><th>ชื่อ</th><th>อีเมล</th><th>จำนวนยืม</th></tr>
+                    <?php foreach ($topBorrowers as $idx => $user): ?>
+                    <tr><td><?= $idx + 1 ?></td><td><?= e($user['name']) ?></td><td><?= e($user['email']) ?></td><td><?= number_format($user['borrow_count']) ?></td></tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($topBorrowers)): ?><tr><td colspan="4" style="text-align:center;color:#9ca3af;">ไม่มีข้อมูล</td></tr><?php endif; ?>
+                </table>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">🔥 หนังสือยอดนิยม</div>
+                <table>
+                    <tr><th>#</th><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>ถูกยืม (ครั้ง)</th></tr>
+                    <?php foreach ($popularBooks as $idx => $book): ?>
+                    <tr><td><?= $idx + 1 ?></td><td><?= e($book['title']) ?></td><td><?= e($book['author']) ?></td><td><?= number_format($book['borrow_count']) ?></td></tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($popularBooks)): ?><tr><td colspan="4" style="text-align:center;color:#9ca3af;">ไม่มีข้อมูล</td></tr><?php endif; ?>
+                </table>
+            </div>
+            
+            <?php if (!empty($overdueList)): ?>
+            <div class="section">
+                <div class="section-title" style="color:#dc2626;">⚠️ รายการเกินกำหนด</div>
+                <table>
+                    <tr><th>หนังสือ</th><th>ผู้ยืม</th><th>กำหนดคืน</th></tr>
+                    <?php foreach ($overdueList as $item): ?>
+                    <tr><td><?= e($item['book_title']) ?></td><td><?= e($item['user_name']) ?></td><td><?= e($item['due_date']) ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+            
+            <p style="margin-top:40px;color:#9ca3af;font-size:11px;text-align:center;">
+                สร้างโดย <?= e(APP_NAME) ?> | <?= date('Y') ?>
+            </p>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContents);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+        printWindow.print();
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 500);
+}
 </script>
 
 <?php require_once __DIR__ . '/footer.php'; ?>

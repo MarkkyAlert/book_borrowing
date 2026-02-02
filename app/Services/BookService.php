@@ -34,7 +34,7 @@ class BookService
      * @param array $filters {
      *     search?: string,
      *     category_id?: int,
-     *     status?: string ('available', 'borrowed', 'out_of_stock'),
+     *     status?: string ('available', 'borrowed', 'out_of_stock', 'low_stock'),
      *     sort?: string ('newest', 'oldest', 'az')
      * }
      */
@@ -64,6 +64,8 @@ class BookService
                     return $book['available'] < $book['quantity'];
                 } elseif ($status === 'out_of_stock') {
                     return $book['available'] === 0;
+                } elseif ($status === 'low_stock') {
+                    return $book['available'] > 0 && $book['available'] <= 2;
                 }
                 return true;
             });
