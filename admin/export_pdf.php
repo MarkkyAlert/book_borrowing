@@ -13,6 +13,11 @@ use App\Repositories\ReportRepository;
 $reportRepo = new ReportRepository(getDB());
 $reportType = $_GET['report'] ?? 'books';
 
+// Date range filter
+$startDate = $_GET['start_date'] ?? date('Y-m-01');
+$endDate = $_GET['end_date'] ?? date('Y-m-d');
+$dateRangeText = formatDate($startDate) . ' - ' . formatDate($endDate);
+
 // Prepare Data
 $data = [];
 $headers = [];
@@ -20,21 +25,21 @@ $reportTitle = '';
 $filename = "report_" . date('Y-m-d');
 
 if ($reportType === 'books') {
-    $data = $reportRepo->getTopBooksReport(50);
+    $data = $reportRepo->getTopBooksReport(50, $startDate, $endDate);
     $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม', 'กำลังถูกยืม'];
-    $reportTitle = 'รายงานหนังสือยอดนิยม';
+    $reportTitle = 'รายงานหนังสือยอดนิยม (' . $dateRangeText . ')';
     $filename = "top_books_" . date('Y-m-d');
     
 } elseif ($reportType === 'members') {
-    $data = $reportRepo->getTopMembersReport(50, true);
+    $data = $reportRepo->getTopMembersReport(50, true, $startDate, $endDate);
     $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม', 'กำลังยืมอยู่'];
-    $reportTitle = 'รายงานสมาชิกที่ใช้บริการบ่อย';
+    $reportTitle = 'รายงานสมาชิกที่ใช้บริการบ่อย (' . $dateRangeText . ')';
     $filename = "top_members_" . date('Y-m-d');
 
 } elseif ($reportType === 'revenue') {
-    $data = $reportRepo->getDailyRevenueReport(30, true);
+    $data = $reportRepo->getDailyRevenueReport($startDate, $endDate);
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
-    $reportTitle = 'รายงานสรุปรายได้ค่าปรับ';
+    $reportTitle = 'รายงานสรุปรายได้ค่าปรับ (' . $dateRangeText . ')';
     $filename = "daily_revenue_" . date('Y-m-d');
 
 } elseif ($reportType === 'overdue') {
@@ -44,14 +49,16 @@ if ($reportType === 'books') {
     $filename = "overdue_" . date('Y-m-d');
 
 } elseif ($reportType === 'borrows') {
-    $dateFrom = $_GET['from'] ?? date('Y-m-01');
-    $dateTo = $_GET['to'] ?? date('Y-m-d');
-    
-    $data = $reportRepo->getBorrowsReport($dateFrom, $dateTo);
-    
+    $data = $reportRepo->getBorrowsReport($startDate, $endDate);
     $headers = ['ผู้ยืม', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'สถานะ', 'ค่าปรับ'];
-    $reportTitle = 'รายงานการยืม-คืน (' . formatDate($dateFrom) . ' - ' . formatDate($dateTo) . ')';
+    $reportTitle = 'รายงานการยืม-คืน (' . $dateRangeText . ')';
     $filename = "borrows_" . date('Y-m-d');
+
+} elseif ($reportType === 'unpaid') {
+    $data = $reportRepo->getUnpaidFinesReport($startDate, $endDate);
+    $headers = ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ค่าปรับ (บาท)'];
+    $reportTitle = 'รายงานสมาชิกค้างชำระ (' . $dateRangeText . ')';
+    $filename = "unpaid_fines_" . date('Y-m-d');
 }
 
 $orgName = getSetting('org_name', 'ระบบห้องสมุด');

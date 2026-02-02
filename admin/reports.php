@@ -8,10 +8,30 @@ require_once __DIR__ . '/../bootstrap.php';
 requireAdmin(); // Reports are for Admin only
 
 use App\Repositories\ReportRepository;
+use App\Repositories\BorrowRepository;
 
-$reportRepo = new ReportRepository(getDB());
+$pdo = getDB();
+$reportRepo = new ReportRepository($pdo);
+$borrowRepo = new BorrowRepository($pdo);
 $reportType = $_GET['report'] ?? 'books';
 $isExport = isset($_GET['export']) && $_GET['export'] === 'csv';
+
+// Date range filter
+$startDate = $_GET['start_date'] ?? date('Y-m-01'); // Default: start of current month
+$endDate = $_GET['end_date'] ?? date('Y-m-d'); // Default: today
+
+// Detect active range for button highlighting
+$activeRange = '';
+$today = date('Y-m-d');
+if ($startDate === $today && $endDate === $today) {
+    $activeRange = 'today';
+} elseif ($startDate === date('Y-m-d', strtotime('-7 days')) && $endDate === $today) {
+    $activeRange = 'week';
+} elseif ($startDate === date('Y-m-d', strtotime('-30 days')) && $endDate === $today) {
+    $activeRange = 'month';
+} elseif ($startDate === date('Y-m-d', strtotime('-1 year')) && $endDate === $today) {
+    $activeRange = 'year';
+}
 
 // Prepare Data based on Report Type
 $data = [];
@@ -19,17 +39,17 @@ $headers = [];
 $filename = "report_" . date('Y-m-d');
 
 if ($reportType === 'books') {
-    $data = $reportRepo->getTopBooksReport(50);
+    $data = $reportRepo->getTopBooksReport(50, $startDate, $endDate);
     $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม (ครั้ง)', 'กำลังถูกยืม (เล่ม)'];
     $filename = "top_books_" . date('Y-m-d');
     
 } elseif ($reportType === 'members') {
-    $data = $reportRepo->getTopMembersReport(50);
+    $data = $reportRepo->getTopMembersReport(50, false, $startDate, $endDate);
     $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม (เล่ม)', 'กำลังยืมอยู่ (เล่ม)'];
     $filename = "top_members_" . date('Y-m-d');
 
 } elseif ($reportType === 'revenue') {
-    $data = $reportRepo->getDailyRevenueReport(30);
+    $data = $reportRepo->getDailyRevenueReport($startDate, $endDate);
     $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
     $filename = "daily_revenue_" . date('Y-m-d');
 
@@ -37,6 +57,11 @@ if ($reportType === 'books') {
     $data = $reportRepo->getOverdueReport();
     $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
     $filename = "overdue_books_" . date('Y-m-d');
+
+} elseif ($reportType === 'unpaid') {
+    $data = $reportRepo->getUnpaidFinesReport($startDate, $endDate);
+    $headers = ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ค่าปรับ (บาท)'];
+    $filename = "unpaid_fines_" . date('Y-m-d');
 }
 
 // Handle Export
@@ -75,17 +100,128 @@ require_once __DIR__ . '/header.php';
             <p class="text-gray-500">วิเคราะห์ข้อมูลเพื่อการวางแผน</p>
         </div>
         <div class="flex gap-2">
-            <a href="reports.php?report=<?= $reportType ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+            <a href="reports.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
                 <i class="bi bi-file-earmark-spreadsheet mr-2"></i>
                 CSV
             </a>
-            <a href="export_pdf.php?report=<?= $reportType ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+            <a href="export_pdf.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
                 <i class="bi bi-file-earmark-pdf mr-2"></i>
                 PDF
             </a>
         </div>
     </div>
 </div>
+
+<!-- Date Range Filter -->
+<?php 
+$startDateDisplay = date('d/m/Y', strtotime($startDate));
+$endDateDisplay = date('d/m/Y', strtotime($endDate));
+?>
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+    <form method="GET" class="flex flex-wrap items-end gap-4" id="dateFilterForm">
+        <input type="hidden" name="report" value="<?= $reportType ?>">
+        <input type="hidden" name="start_date" id="start_date_hidden" value="<?= $startDate ?>">
+        <input type="hidden" name="end_date" id="end_date_hidden" value="<?= $endDate ?>">
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
+            <input type="text" id="start_date_display" value="<?= $startDateDisplay ?>" 
+                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32"
+                   placeholder="วว/ดด/ปปปป" readonly onclick="this.nextElementSibling.showPicker()">
+            <input type="date" id="start_date_picker" value="<?= $startDate ?>" class="hidden"
+                   onchange="updateDateDisplay('start')">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
+            <input type="text" id="end_date_display" value="<?= $endDateDisplay ?>" 
+                   class="border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 w-32"
+                   placeholder="วว/ดด/ปปปป" readonly onclick="this.nextElementSibling.showPicker()">
+            <input type="date" id="end_date_picker" value="<?= $endDate ?>" class="hidden"
+                   onchange="updateDateDisplay('end')">
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
+                <i class="bi bi-funnel mr-1"></i>กรอง
+            </button>
+            <a href="reports.php?report=<?= $reportType ?>" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+                <i class="bi bi-arrow-counterclockwise mr-1"></i>รีเซ็ต
+            </a>
+        </div>
+        <div class="flex gap-2 ml-auto">
+            <button type="submit" onclick="setDateRange('today')" class="px-3 py-2 text-xs rounded-lg <?= $activeRange === 'today' ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200' ?>">วันนี้</button>
+            <button type="submit" onclick="setDateRange('week')" class="px-3 py-2 text-xs rounded-lg <?= $activeRange === 'week' ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200' ?>">7 วัน</button>
+            <button type="submit" onclick="setDateRange('month')" class="px-3 py-2 text-xs rounded-lg <?= $activeRange === 'month' ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200' ?>">30 วัน</button>
+            <button type="submit" onclick="setDateRange('year')" class="px-3 py-2 text-xs rounded-lg <?= $activeRange === 'year' ? 'bg-primary-600 text-white' : 'bg-gray-100 hover:bg-gray-200' ?>">1 ปี</button>
+        </div>
+    </form>
+</div>
+
+<script>
+function formatDateThai(date) {
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return d + '/' + m + '/' + y;
+}
+
+function formatDateISO(date) {
+    return date.toISOString().split('T')[0];
+}
+
+function updateDateDisplay(type) {
+    if (type === 'start') {
+        const picker = document.getElementById('start_date_picker');
+        const display = document.getElementById('start_date_display');
+        const hidden = document.getElementById('start_date_hidden');
+        const date = new Date(picker.value);
+        display.value = formatDateThai(date);
+        hidden.value = picker.value;
+    } else {
+        const picker = document.getElementById('end_date_picker');
+        const display = document.getElementById('end_date_display');
+        const hidden = document.getElementById('end_date_hidden');
+        const date = new Date(picker.value);
+        display.value = formatDateThai(date);
+        hidden.value = picker.value;
+    }
+}
+
+function setDateRange(range) {
+    const today = new Date();
+    let startDate = new Date();
+    
+    switch(range) {
+        case 'today':
+            startDate = new Date(today);
+            break;
+        case 'week':
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 7);
+            break;
+        case 'month':
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 30);
+            break;
+        case 'year':
+            startDate = new Date(today);
+            startDate.setFullYear(today.getFullYear() - 1);
+            break;
+    }
+    
+    // Update hidden fields
+    document.getElementById('start_date_hidden').value = formatDateISO(startDate);
+    document.getElementById('end_date_hidden').value = formatDateISO(today);
+    
+    // Update display fields
+    document.getElementById('start_date_display').value = formatDateThai(startDate);
+    document.getElementById('end_date_display').value = formatDateThai(today);
+    
+    // Update pickers
+    document.getElementById('start_date_picker').value = formatDateISO(startDate);
+    document.getElementById('end_date_picker').value = formatDateISO(today);
+    
+    return true;
+}
+</script>
 
 <!-- Report Navigation -->
 <div class="border-b border-gray-200 mb-6">
@@ -101,6 +237,9 @@ require_once __DIR__ . '/header.php';
         </a>
         <a href="reports.php?report=overdue" class="<?= $reportType === 'overdue' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-exclamation-triangle mr-2"></i>หนังสือค้างส่ง
+        </a>
+        <a href="reports.php?report=unpaid" class="<?= $reportType === 'unpaid' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
+            <i class="bi bi-cash-coin mr-2 text-red-500"></i>สมาชิกค้างชำระ
         </a>
     </nav>
 </div>

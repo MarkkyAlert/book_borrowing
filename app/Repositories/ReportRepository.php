@@ -181,10 +181,19 @@ class ReportRepository
     /**
      * รายงานหนังสือยอดนิยม (สำหรับหน้า reports)
      */
-    public function getTopBooksReport(int $limit = 50): array
+    public function getTopBooksReport(int $limit = 50, ?string $startDate = null, ?string $endDate = null): array
     {
+        $dateFilter = '';
+        $params = [];
+        
+        if ($startDate && $endDate) {
+            $dateFilter = 'AND br.borrow_date BETWEEN ? AND ?';
+            $params = [$startDate, $endDate];
+        }
+        
         $stmt = $this->pdo->prepare("
-            SELECT b.title, c.name as category, COUNT(br.id) as borrow_count,
+            SELECT b.title, c.name as category, 
+                   COUNT(CASE WHEN br.borrow_date BETWEEN ? AND ? THEN br.id END) as borrow_count,
                    (b.quantity - b.available) as currently_borrowed
             FROM books b
             LEFT JOIN categories c ON b.category_id = c.id
@@ -193,7 +202,7 @@ class ReportRepository
             ORDER BY borrow_count DESC
             LIMIT ?
         ");
-        $stmt->execute([$limit]);
+        $stmt->execute([$startDate, $endDate, $limit]);
         return $stmt->fetchAll();
     }
 
@@ -202,45 +211,41 @@ class ReportRepository
      * 
      * @param bool $translateRole true = แปลง role เป็นภาษาไทย (สำหรับ PDF)
      */
-    public function getTopMembersReport(int $limit = 50, bool $translateRole = false): array
+    public function getTopMembersReport(int $limit = 50, bool $translateRole = false, ?string $startDate = null, ?string $endDate = null): array
     {
         $roleCol = $translateRole 
             ? "CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,"
             : "u.role,";
         
         $stmt = $this->pdo->prepare("
-            SELECT u.name, u.email, {$roleCol} COUNT(br.id) as borrow_count,
+            SELECT u.name, u.email, {$roleCol} 
+                   COUNT(CASE WHEN br.borrow_date BETWEEN ? AND ? THEN br.id END) as borrow_count,
                    SUM(CASE WHEN br.status = 'borrowing' THEN 1 ELSE 0 END) as active_loans
             FROM users u
-            JOIN borrows br ON u.id = br.user_id
+            LEFT JOIN borrows br ON u.id = br.user_id
             WHERE u.role != 'admin'
             GROUP BY u.id
+            HAVING borrow_count > 0
             ORDER BY borrow_count DESC
             LIMIT ?
         ");
-        $stmt->execute([$limit]);
+        $stmt->execute([$startDate, $endDate, $limit]);
         return $stmt->fetchAll();
     }
 
     /**
      * รายงานรายได้รายวัน
-     * 
-     * @param bool $formatDate true = format วันที่เป็น d/m/Y (สำหรับ PDF)
      */
-    public function getDailyRevenueReport(int $limit = 30, bool $formatDate = false): array
+    public function getDailyRevenueReport(string $startDate, string $endDate): array
     {
-        $dateCol = $formatDate 
-            ? "DATE_FORMAT(payment_date, '%d/%m/%Y') as payment_day"
-            : "DATE(payment_date) as payment_day";
-        
         $stmt = $this->pdo->prepare("
-            SELECT {$dateCol}, COUNT(id) as transaction_count, SUM(amount) as total_amount
+            SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
             FROM payments
+            WHERE DATE(payment_date) BETWEEN ? AND ?
             GROUP BY DATE(payment_date)
             ORDER BY payment_date DESC
-            LIMIT ?
         ");
-        $stmt->execute([$limit]);
+        $stmt->execute([$startDate, $endDate]);
         return $stmt->fetchAll();
     }
 
@@ -290,8 +295,35 @@ class ReportRepository
         return $stmt->fetchAll();
     }
 
-    // Consolidated: getTopMembersReportForPdf() -> use getTopMembersReport($limit, true)
-    // Consolidated: getDailyRevenueReportForPdf() -> use getDailyRevenueReport($limit, true)
-    // Consolidated: getOverdueReportForPdf() -> use getOverdueReport(true)
+    /**
+     * รายงานสมาชิกค้างชำระค่าปรับ
+     */
+    public function getUnpaidFinesReport(?string $startDate = null, ?string $endDate = null): array
+    {
+        $dateFilter = '';
+        $params = [];
+        
+        if ($startDate && $endDate) {
+            $dateFilter = 'AND b.return_date BETWEEN ? AND ?';
+            $params = [$startDate, $endDate];
+        }
+        
+        $stmt = $this->pdo->prepare("
+            SELECT u.name as user_name, u.phone as user_phone,
+                   bk.title as book_title,
+                   DATE_FORMAT(b.return_date, '%d/%m/%Y') as return_date,
+                   b.fine_amount
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.status = 'returned' 
+              AND b.fine_amount > 0
+              AND b.id NOT IN (SELECT borrow_id FROM payments)
+              {$dateFilter}
+            ORDER BY b.fine_amount DESC
+        ");
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
 }
 
