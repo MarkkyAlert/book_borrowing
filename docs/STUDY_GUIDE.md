@@ -1,974 +1,600 @@
-# Study Guide - Book Borrowing System
+# Study Guide - คู่มือศึกษาระบบยืมคืนหนังสือ
 
-เอกสารนี้สำหรับเจ้าของโปรเจกต์ที่ต้องการเข้าใจโค้ดเพื่ออ่านและแก้ไขต่อได้ด้วยตนเอง
-
-**หมายเหตุ:** เนื้อหาทั้งหมดอ้างอิงจากโค้ดที่มีอยู่จริงในโปรเจกต์เท่านั้น
-
----
-
-## สารบัญ
-
-1. [แผนที่โปรเจกต์ (Project Map)](#1-แผนที่โปรเจกต์-project-map)
-2. [Request → Response Flow](#2-request--response-flow)
-3. [Core Flows](#3-core-flows)
-4. [Single Source of Truth Map](#4-single-source-of-truth-map)
-5. [Debug Playbook](#5-debug-playbook)
-6. [Modification Guide](#6-modification-guide)
+เอกสารนี้สำหรับ **เจ้าของโปรเจกต์** ที่ให้ AI เขียนโค้ดส่วนใหญ่ เพื่อให้สามารถ:
+- อ่านโค้ดได้เอง
+- เข้าใจ flow การทำงาน
+- แก้ไขระบบได้โดยไม่พัง
 
 ---
 
 ## 1. แผนที่โปรเจกต์ (Project Map)
 
-### โครงสร้างโฟลเดอร์
+### 1.1 โฟลเดอร์สำคัญและหน้าที่
 
-```
-book_borrowing/
-├── admin/              # หน้า backend สำหรับ staff/admin
-├── api/                # API endpoints (JSON/HTML responses)
-├── app/                # Modern architecture layer (เตรียมไว้สำหรับ Phase 2)
-│   ├── Config/         # Settings class
-│   ├── Helpers/        # Namespaced helper functions
-│   ├── Repositories/   # Data access layer
-│   └── Services/       # Business logic layer
-├── css/                # Stylesheet
-├── database/           # SQL schema และ migrations
-├── docs/               # เอกสารโปรเจกต์
-├── includes/           # Core files ที่ใช้งานจริง (Legacy layer)
-├── tests/              # Test files
-└── uploads/            # ไฟล์ที่ upload (covers/)
-```
+| โฟลเดอร์ | หน้าที่ | ตัวอย่างไฟล์ |
+|----------|--------|-------------|
+| `/` (root) | **Public Entry Points** - หน้าเว็บที่ user เข้าถึงได้โดยตรง | `index.php`, `login.php`, `register.php` |
+| `admin/` | **Admin Panel** - หน้าจัดการสำหรับ staff/admin | `index.php` (dashboard), `books.php`, `borrows.php` |
+| `api/` | **API Endpoints** - รับ AJAX requests จาก frontend | `search_books.php`, `reserve_book.php` |
+| `app/Services/` | **Business Logic** - กฎเกณฑ์ทางธุรกิจ, transactions | `BorrowService.php`, `AuthService.php` |
+| `app/Repositories/` | **Data Access** - SQL queries ทั้งหมด | `BookRepository.php`, `UserRepository.php` |
+| `includes/` | **Shared Components** - config, helpers, UI components | `config.php`, `functions.php`, `db.php` |
+| `database/` | **Database Files** - schema และ migrations | `schema.sql`, `migrations/` |
+| `uploads/covers/` | **User Uploads** - รูปปกหนังสือ | `cover_*.png` |
+| `cron/` | **Scheduled Tasks** - งานที่รันตามเวลา | `expire_reservations.php` |
 
-### หน้าที่ของแต่ละโฟลเดอร์
+### 1.2 ไฟล์ Entry Point สำคัญ (อ่านก่อน 10 ไฟล์)
 
-| โฟลเดอร์ | หน้าที่ | ใช้งานจริง |
-|---------|--------|-----------|
-| `admin/` | หน้าจัดการระบบ: books, members, borrows, payments, reports | ✅ ใช้งาน |
-| `api/` | API endpoints สำหรับ AJAX | ✅ ใช้งาน |
-| `app/Config/` | Settings class สำหรับอ่าน `.env` | ⚠️ มีแต่ยังไม่ใช้ |
-| `app/Helpers/` | Helper functions แบบ namespace | ⚠️ มีแต่ยังไม่ใช้ |
-| `app/Repositories/` | Repository classes สำหรับ DB access | ⚠️ ใช้บางส่วน |
-| `app/Services/` | Service classes สำหรับ business logic | ✅ ใช้บางส่วน |
-| `includes/` | **Core files หลักที่ใช้งานจริง** | ✅ ใช้งานทั้งหมด |
-| `database/` | Schema, migrations, sample data | ✅ ใช้ตอน install |
-| `uploads/covers/` | รูปปกหนังสือ | ✅ ใช้งาน |
-
----
-
-### ไฟล์ Entry Point สำคัญ 10 ไฟล์ที่ควรอ่านก่อน
-
-อ่านตามลำดับนี้เพื่อเข้าใจระบบ:
-
-#### ระดับ 1: Foundation (เข้าใจพื้นฐาน)
-
-| # | ไฟล์ | เหตุผลที่ควรอ่าน |
-|---|------|-----------------|
-| 1 | `includes/config.php` | จุดเริ่มต้นของระบบ - โหลด `.env`, กำหนด constants ทั้งหมด (DB, APP_URL, FINE_PER_DAY) |
-| 2 | `includes/db.php` | เข้าใจการเชื่อมต่อ DB - singleton pattern ผ่าน `getDB()` |
-| 3 | `includes/functions.php` | **ไฟล์สำคัญที่สุด** - รวม helper functions 30+ ตัว (auth, csrf, validation, formatting) |
-
-#### ระดับ 2: Authentication Flow
-
-| # | ไฟล์ | เหตุผลที่ควรอ่าน |
-|---|------|-----------------|
-| 4 | `login.php` | เข้าใจ auth flow: validation → query → session → redirect |
-| 5 | `register.php` | เข้าใจ user creation: validation → hash password → insert |
-
-#### ระดับ 3: Public Pages
-
-| # | ไฟล์ | เหตุผลที่ควรอ่าน |
-|---|------|-----------------|
-| 6 | `index.php` | หน้าแรก: การ query books, การใช้ filters, include header/footer |
-| 7 | `api/reserve_book.php` | ตัวอย่าง API: JSON response, CSRF check, service layer usage |
-
-#### ระดับ 4: Admin Pattern
-
-| # | ไฟล์ | เหตุผลที่ควรอ่าน |
-|---|------|-----------------|
-| 8 | `admin/header.php` | Template pattern: permission check, navigation, common UI |
-| 9 | `admin/books.php` | CRUD pattern: list + delete + filters ในไฟล์เดียว |
-| 10 | `admin/borrow_form.php` | Complex form: multi-select, validation, transaction |
+| ลำดับ | ไฟล์ | เหตุผลที่ต้องอ่านก่อน |
+|-------|------|---------------------|
+| 1 | `bootstrap.php` | **จุดเริ่มต้นของทุกหน้า** - โหลด config, DB, helpers, autoloader |
+| 2 | `includes/config.php` | ค่าคงที่ทั้งระบบ (DB, business rules) ที่อ่านจาก `.env` |
+| 3 | `includes/functions.php` | **Helper functions ทั้งหมด** - `e()`, `redirect()`, `requireLogin()`, CSRF |
+| 4 | `includes/db.php` | PDO connection (Singleton pattern) |
+| 5 | `login.php` | ตัวอย่าง **authentication flow** + rate limiting |
+| 6 | `app/Services/BorrowService.php` | **Business logic หลัก** - ยืม/คืน/ค่าปรับ |
+| 7 | `app/Repositories/BookRepository.php` | ตัวอย่าง **Repository pattern** + row locking |
+| 8 | `admin/borrow_form.php` | ตัวอย่าง **admin page** + CSRF + idempotency |
+| 9 | `api/reserve_book.php` | ตัวอย่าง **API endpoint** - auth/CSRF/validation |
+| 10 | `admin/index.php` | **Dashboard** - เห็นภาพรวมว่าระบบ query อะไรบ้าง |
 
 ---
 
 ## 2. Request → Response Flow
 
-### ภาพรวมการทำงาน
+### 2.1 Flow ภาพรวม
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌────────────────┐     ┌──────────────┐
-│   Browser   │────>│   Endpoint   │────>│   Validation   │────>│   Database   │
-│  (Request)  │     │  (PHP file)  │     │  & Auth Check  │     │    (MySQL)   │
-└─────────────┘     └──────────────┘     └────────────────┘     └──────────────┘
-       ^                   │                     │                      │
-       │                   v                     v                      v
-       │            ┌──────────────┐     ┌────────────────┐     ┌──────────────┐
-       └────────────│   Response   │<────│    Service     │<────│  Repository  │
-                    │ (HTML/JSON)  │     │ (Business Logic)│    │ (Data Access)│
-                    └──────────────┘     └────────────────┘     └──────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Browser (User)                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                │
+                │ HTTP Request (GET/POST)
+                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Entry Point (*.php, admin/*.php, api/*.php)                             │
+│ ─────────────────────────────────────────                               │
+│ • require bootstrap.php                                                 │
+│ • Auth Check: requireLogin(), requireStaff(), requireAdmin()            │
+│ • CSRF Check: validateCSRFToken($_POST['csrf_token'])                   │
+│ • Input Validation (basic sanitization)                                 │
+│ • Rate Limiting: checkRateLimit()                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+                │
+                │ Validated Data
+                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Service Layer (app/Services/)                                           │
+│ ─────────────────────────────────────────                               │
+│ • Business Logic & Validation Rules                                     │
+│ • Transaction Management (begin/commit/rollback)                        │
+│ • Calls Repository methods                                              │
+│ • Throws Exception on failure                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+                │
+                │ Repository Calls
+                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Repository Layer (app/Repositories/)                                    │
+│ ─────────────────────────────────────────                               │
+│ • Pure SQL Queries (SELECT, INSERT, UPDATE, DELETE)                     │
+│ • Row Locking (FOR UPDATE) when needed                                  │
+│ • Returns arrays                                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+                │
+                │ PDO Query
+                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Database (MySQL)                                                        │
+└─────────────────────────────────────────────────────────────────────────┘
+                │
+                │ Result
+                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Response                                                                │
+│ • Web Page: setFlash() + redirect() หรือ render HTML                    │
+│ • API: echo json_encode(['success' => ..., 'message' => ...])          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Sequence ของ Request ทั่วไป
+### 2.2 Boundary (ขอบเขตความรับผิดชอบ)
 
+| Layer | ตำแหน่ง | ควรทำ | ห้ามทำ |
+|-------|---------|-------|--------|
+| **Entry Point** | `*.php`, `admin/*.php`, `api/*.php` | รับ input, ตรวจ auth/CSRF, เรียก Service, render response | เขียน SQL, Business logic ซับซ้อน |
+| **Service** | `app/Services/*.php` | Business logic, transactions, เรียก Repository | เขียน SQL โดยตรง, output HTML |
+| **Repository** | `app/Repositories/*.php` | SQL queries, return arrays | Business logic, session access |
+| **Helpers** | `includes/functions.php` | Utility functions, formatting | Database queries |
+
+---
+
+## 3. Core Flows (8 Flows หลัก)
+
+### 3.1 Flow: User Login
+
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | ตรวจสอบ credentials และสร้าง session |
+| **Entry Point** | `login.php` |
+| **Inputs** | `email`, `password` (POST) |
+| **Validation** | ไม่ว่าง, email format (`isValidEmail()`) |
+| **Authorization** | ไม่ต้อง (หน้า public) |
+| **DB Changes** | ไม่มี (read-only) |
+| **Output** | redirect ไป `index.php` หรือ `admin/` ตาม role |
+| **Failure Cases** | Email/password ผิด, Rate limit exceeded (5 attempts/15 min) |
+| **จุดระวัง** | - ห้ามบอกว่า email หรือ password ผิด (user enumeration)<br>- Rate limit ใช้ key `login_` + md5(email) |
+
+**Code Path:**
 ```
-1. Browser ส่ง Request
-   ↓
-2. PHP file โหลด dependencies
-   └── require_once 'includes/functions.php'  ← โหลด config.php ด้วย
-   └── require_once 'includes/db.php'
-   ↓
-3. Permission Check (ถ้าเป็น protected page)
-   └── requireLogin() / requireAdmin() / requireStaff()
-   ↓
-4. CSRF Validation (ถ้าเป็น POST)
-   └── validateCSRFToken($_POST['csrf_token'])
-   ↓
-5. Input Validation
-   └── ตรวจสอบ fields ที่จำเป็น
-   └── ใช้ isValidEmail(), isValidPhone() etc.
-   ↓
-6. Business Logic / Database Operation
-   └── Direct query: $pdo->prepare() → execute()
-   └── หรือ Service: $service->doSomething()
-   ↓
-7. Response
-   └── HTML: include header, render, include footer
-   └── JSON: header('Content-Type: application/json'), echo json_encode()
-   └── Redirect: setFlash() → redirect()
-```
-
-### Boundary ของแต่ละ Layer
-
-| Layer | หน้าที่ | ตำแหน่งในโปรเจกต์ |
-|-------|--------|------------------|
-| **Entry Point** | รับ request, โหลด dependencies, render response | `*.php` (root), `admin/*.php`, `api/*.php` |
-| **Auth/CSRF** | ตรวจสอบสิทธิ์และ token | `includes/functions.php` (isLoggedIn, requireAdmin, validateCSRFToken) |
-| **Validation** | ตรวจสอบ input | ทำใน entry point หรือ service |
-| **Service** | Business logic, transaction | `app/Services/*.php` |
-| **Repository** | Data access (CRUD) | `app/Repositories/*.php` (มีแต่ใช้น้อย) |
-| **Database** | Query execution | `includes/db.php` → `getDB()` |
-| **Helpers** | Utility functions | `includes/functions.php` |
-
-### ตัวอย่าง Flow จริง: การจองหนังสือ
-
-```php
-// api/reserve_book.php
-
-// 1. Load dependencies
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/db.php';
-
-// 2. Method check
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') → 405
-
-// 3. Auth check
-if (!isLoggedIn()) → 401
-
-// 4. CSRF check
-if (!validateCSRFToken($_POST['csrf_token'])) → 403
-
-// 5. Input validation
-$bookId = filter_input(INPUT_POST, 'book_id', FILTER_VALIDATE_INT);
-if (!$bookId) → 400
-
-// 6. Business logic (via Service)
-$service = new ReservationService(getDB());
-$result = $service->createReservation($userId, $bookId);
-
-// 7. Response
-echo json_encode(['success' => true, 'message' => $result['message']]);
+login.php → checkRateLimit() → AuthService::login() → UserRepository::findByEmail()
+         → password_verify() → session_regenerate_id() → redirect
 ```
 
 ---
 
-## 3. Core Flows
+### 3.2 Flow: User Registration
 
-### Flow 1: User Login
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | สร้าง user ใหม่ (role = member) |
+| **Entry Point** | `register.php` |
+| **Inputs** | `name`, `email`, `password`, `confirm_password`, `phone` (optional) |
+| **Validation** | - `validateMaxLength($name, 100)`<br>- `isValidEmail($email)`<br>- `validatePassword($password)` (min 6 chars)<br>- `isValidPhone($phone)` (9-10 digits) |
+| **Authorization** | ไม่ต้อง (หน้า public) |
+| **DB Changes** | INSERT `users` (role = 'member' hardcoded) |
+| **Output** | redirect ไป `login.php` พร้อม flash success |
+| **Failure Cases** | Email ซ้ำ, Rate limit (global key `register`) |
+| **จุดระวัง** | - Rate limit ใช้ global key (ไม่ใช่ per-email) เพราะ attacker ใช้ email ใหม่ได้<br>- Password ถูก hash ด้วย `password_hash()` |
 
-#### Goal
-ตรวจสอบตัวตนผู้ใช้และสร้าง session สำหรับเข้าถึงระบบ
-
-#### Entry Point
-`login.php` (GET: แสดง form, POST: process login)
-
-#### Inputs
-| Field | Type | Required | Source |
-|-------|------|----------|--------|
-| email | string | Yes | `$_POST['email']` |
-| password | string | Yes | `$_POST['password']` |
-
-**Session ที่ใช้:** rate limit keys `login_attempts_{md5(email)}`, `login_time_{md5(email)}`
-
-#### Validation Rules
-```php
-// includes/functions.php + login.php
-- Email: ต้องไม่ว่าง
-- Password: ต้องไม่ว่าง
-- Rate limit: ≤ 5 attempts / 15 นาที (ต่อ email)
+**Code Path:**
 ```
-
-#### Authorization
-ไม่มี - เป็น public page (แต่ถ้า login อยู่แล้วจะ redirect)
-
-#### DB Changes
-| Table | Operation | Condition |
-|-------|-----------|-----------|
-| `users` | SELECT | `WHERE email = ?` |
-| (session) | UPDATE | Set user data on success |
-
-#### Outputs
-- **Success:** Redirect to `/admin/` (admin) หรือ `/index.php` (member)
-- **Failure:** Re-render form with error messages
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Duplicate submit หลัง login | Redirect (isLoggedIn check) |
-| Multi-tab login | Session ใหม่ override เก่า |
-| Rate limit exceeded | Block 15 นาที |
-| SQL injection | Prepared statement ป้องกัน |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ `session_regenerate_id(true)` ต้องเรียกหลัง verify password (ป้องกัน session fixation)
-- ⚠️ Rate limit keys ใช้ `md5(email)` - ถ้าเปลี่ยน format จะ reset counter ทั้งหมด
-- ⚠️ Redirect logic ดูจาก `$_SESSION['role']` - ถ้าเพิ่ม role ใหม่ต้องเพิ่ม case
+register.php → incrementRateLimit() → validate → AuthService::register()
+            → UserRepository::emailExists() → UserRepository::create()
+```
 
 ---
 
-### Flow 2: User Registration
+### 3.3 Flow: Create Borrow (ยืมหนังสือ)
 
-#### Goal
-สร้าง account ใหม่สำหรับ member
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | บันทึกการยืมหนังสือ 1-3 เล่ม |
+| **Entry Point** | `admin/borrow_form.php` |
+| **Inputs** | `user_id`, `book_ids[]`, `borrow_days`, `csrf_token` |
+| **Validation** | - `user_id > 0`<br>- `book_ids` ไม่ว่าง<br>- `borrow_days` 1-30<br>- user ต้องเป็น member |
+| **Authorization** | `requireStaff()` |
+| **DB Changes** | - INSERT `borrows` (1 row per book)<br>- UPDATE `books.available` ลดลง |
+| **Locking** | `FOR UPDATE` บน users และ books (ป้องกันยืมทะลุโควต้า) |
+| **Output** | redirect ไป `borrows.php` พร้อม flash |
+| **Failure Cases** | - User ถึง quota (MAX_BORROW_BOOKS = 3)<br>- Book หมด stock<br>- Double submit |
+| **จุดระวัง** | - **Idempotency Key**: `borrow_{userId}_{md5(bookIds)}` ป้องกัน double submit<br>- `decrementAvailable()` มี WHERE `available > 0` ป้องกันติดลบ |
 
-#### Entry Point
-`register.php` (GET: form, POST: process)
-
-#### Inputs
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| name | string | Yes | ≤ 100 chars |
-| email | string | Yes | `isValidEmail()`, unique |
-| phone | string | No | `isValidPhone()` (9-10 digits) |
-| password | string | Yes | ≥ 6 chars |
-| confirm_password | string | Yes | = password |
-
-#### Validation Rules
-```php
-// register.php lines 42-77
-- Name: required, max 100 chars
-- Email: required, valid format, unique in DB
-- Phone: optional, 9-10 digits if provided
-- Password: min 6 chars, must match confirm
-- Rate limit: 5 attempts / 15 min (global)
+**Code Path:**
 ```
-
-#### Authorization
-ไม่มี - public page
-
-#### DB Changes
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `users` | SELECT | Check email uniqueness |
-| `users` | INSERT | name, email, password (bcrypt), phone, role='member' |
-
-#### Outputs
-- **Success:** Redirect to `/login.php` with flash message
-- **Failure:** Re-render form with errors, retain field values
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Duplicate email submit | Second request fails (unique constraint) |
-| Empty phone | Saved as NULL |
-| Unicode in name | Supported (UTF-8) |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ `password_hash()` ใช้ `PASSWORD_DEFAULT` - อย่าเปลี่ยนเป็น algorithm อื่นโดยไม่จำเป็น
-- ⚠️ Default role คือ 'member' - ถ้าต้องการ role อื่นต้องแก้ INSERT query
-- ⚠️ Phone validation เป็น Thai format (9-10 digits) - ถ้าต้องการ international ต้องแก้ regex
+borrow_form.php → validateCSRFToken() → BorrowService::createBorrow()
+               → userRepo->lockById() → borrowRepo->countActiveBorrowsForUpdate()
+               → bookRepo->findByIdForUpdate() → bookRepo->decrementAvailable()
+               → borrowRepo->create() → commit
+```
 
 ---
 
-### Flow 3: Create Borrow (ยืมหนังสือ)
+### 3.4 Flow: Return Book (คืนหนังสือ)
 
-#### Goal
-บันทึกการยืมหนังสือสำหรับ member
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | บันทึกการคืนหนังสือ + คำนวณค่าปรับ |
+| **Entry Point** | `admin/borrows.php` (POST action=return) |
+| **Inputs** | `borrow_id`, `pay_now` (checkbox), `csrf_token` |
+| **Validation** | `borrow_id` ต้องมีอยู่และ status = 'borrowing' |
+| **Authorization** | `requireStaff()` |
+| **DB Changes** | - UPDATE `borrows` (status='returned', return_date, fine_amount)<br>- UPDATE `books.available` เพิ่มขึ้น<br>- INSERT `payments` (ถ้า pay_now && มีค่าปรับ) |
+| **Locking** | `FOR UPDATE` บน borrows (ป้องกันคืนซ้ำ) |
+| **Output** | redirect กลับ `borrows.php` |
+| **Failure Cases** | - Borrow ไม่พบหรือคืนไปแล้ว<br>- Double submit |
+| **จุดระวัง** | - ค่าปรับคำนวณจาก `due_date` vs วันนี้<br>- สูตรค่าปรับอยู่ที่ `BorrowService::calculateFine()` |
 
-#### Entry Point
-`admin/borrow_form.php` (POST)
-
-#### Inputs
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| csrf_token | string | Yes | `validateCSRFToken()` |
-| user_id | int | Yes | Must be valid member |
-| book_ids[] | array | Yes | ≤ `MAX_BORROW_BOOKS` |
-| borrow_days | int | No | 1-30, default `DEFAULT_BORROW_DAYS` |
-
-#### Validation Rules
+**สูตรค่าปรับ:**
 ```php
-// admin/borrow_form.php
-- User must exist and be member
-- At least 1 book selected
-- Each book: available > 0
-- User not already borrowing same book
-- User hasn't reached borrow limit
+$daysOverdue × FINE_PER_DAY (default: 10 บาท/วัน)
 ```
-
-#### Authorization
-```php
-requireStaff();  // admin หรือ staff เท่านั้น
-```
-
-#### DB Changes (Transaction)
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `users` | SELECT FOR UPDATE | Lock user row |
-| `books` | SELECT FOR UPDATE | Lock book rows |
-| `borrows` | INSERT | user_id, book_id, borrow_date, due_date, status='borrowing' |
-| `books` | UPDATE | `available = available - 1` |
-
-**Transaction Pattern:**
-```php
-$pdo->beginTransaction();
-try {
-    // Lock rows, validate, insert, update
-    $pdo->commit();
-} catch (Exception $e) {
-    $pdo->rollBack();
-    throw $e;
-}
-```
-
-#### Outputs
-- **Success:** Redirect to `/admin/borrows.php` with success flash
-- **Failure:** Re-render form with error messages
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Concurrent borrow (same book) | Transaction + row lock ป้องกัน |
-| Last copy race condition | First transaction wins |
-| Duplicate submit | Second request sees "already borrowing" |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ Transaction และ `FOR UPDATE` lock จำเป็นสำหรับ concurrency - อย่าลบออก
-- ⚠️ Logic นี้ duplicate ระหว่าง `borrow_form.php` และ `BorrowService::createBorrow()` - ถ้าแก้ต้องแก้ทั้งสองที่
-- ⚠️ `MAX_BORROW_BOOKS` กำหนดใน `includes/config.php` - ถ้าแก้ต้องแก้ที่เดียว
 
 ---
 
-### Flow 4: Return Book (คืนหนังสือ + ค่าปรับ)
+### 3.5 Flow: Create Reservation (จองหนังสือ)
 
-#### Goal
-บันทึกการคืนหนังสือ คำนวณค่าปรับถ้าเกินกำหนด และรับชำระเงิน (optional)
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | จองหนังสือเพื่อมารับทีหลัง |
+| **Entry Point** | `api/reserve_book.php` |
+| **Inputs** | `book_id`, `csrf_token` (user_id จาก session) |
+| **Validation** | - ต้อง login<br>- `book_id > 0`<br>- ยังไม่มี pending reservation เล่มเดียวกัน |
+| **Authorization** | `isLoggedIn()` |
+| **DB Changes** | - INSERT `reservations` (status='pending', expires_at)<br>- UPDATE `books.available` ลดลง **ทันที** |
+| **Locking** | `FOR UPDATE` บน books |
+| **Output** | JSON `{success: true, message: "..."}` |
+| **Failure Cases** | - Book หมด<br>- จองเล่มเดิมซ้ำ |
+| **จุดระวัง** | - Stock ถูกหักทันทีตอนจอง (กัน stock ไว้)<br>- ถ้าหมดอายุ/ยกเลิก ต้องคืน stock กลับ |
 
-#### Entry Point
-`admin/borrows.php` (POST with action=return)
-
-#### Inputs
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| action | string | Yes | = 'return' |
-| borrow_id | int | Yes | Borrow record ID |
-| pay_now | checkbox | No | ถ้า checked = รับค่าปรับทันที |
-
-#### Validation Rules
-```php
-- Borrow must exist
-- Borrow status = 'borrowing'
+**State Transitions:**
 ```
-
-#### Authorization
-```php
-requireStaff();
+pending → fulfilled (admin อนุมัติ → สร้าง borrow)
+pending → cancelled (ยกเลิก → คืน stock)
+pending → expired   (cron job → คืน stock)
 ```
-
-#### DB Changes (Transaction via BorrowService)
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `borrows` | SELECT FOR UPDATE | Lock borrow row |
-| `borrows` | UPDATE | status='returned', return_date, fine_amount |
-| `books` | UPDATE | `available = available + 1` |
-| `payments` | INSERT (optional) | ถ้า pay_now และมี fine |
-
-**Fine Calculation:**
-```php
-// app/Services/BorrowService.php
-$overdueDays = max(0, daysDiff($dueDate, $returnDate));
-$fineAmount = $overdueDays * FINE_PER_DAY;
-```
-
-#### Outputs
-- **No fine:** Flash "บันทึกการคืนเรียบร้อย"
-- **With fine + paid:** Flash "บันทึกการคืนและรับค่าปรับ {amount} บาท"
-- **With fine + not paid:** Warning flash "มีค่าปรับค้างชำระ {amount} บาท"
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Return already returned | Error "รายการนี้คืนแล้ว" |
-| Concurrent return | Transaction ป้องกัน |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ `FINE_PER_DAY` กำหนดใน `includes/config.php` - เปลี่ยนตรงนั้นที่เดียว
-- ⚠️ Fine calculation อยู่ใน `BorrowService` - ถ้าต้องการ cap สูงสุดต้องเพิ่มที่นั่น
-- ⚠️ Payment record links to borrow_id - ถ้า delete borrow จะ cascade delete payment
 
 ---
 
-### Flow 5: Reserve Book (API)
+### 3.6 Flow: Fulfill Reservation (อนุมัติการจอง)
 
-#### Goal
-ให้ member จองหนังสือผ่าน API
-
-#### Entry Point
-`api/reserve_book.php` (POST)
-
-#### Inputs
-| Field | Type | Required | Source |
-|-------|------|----------|--------|
-| book_id | int | Yes | `$_POST['book_id']` |
-| csrf_token | string | Yes | `$_POST['csrf_token']` |
-
-**Headers:** Content-Type: application/x-www-form-urlencoded
-
-#### Validation Rules
-```php
-// api/reserve_book.php + ReservationService
-- User must be logged in
-- CSRF token valid
-- book_id is positive integer
-- Book exists
-- Book available > 0
-- User doesn't have pending reservation for same book
-```
-
-#### Authorization
-```php
-isLoggedIn()  // ต้อง login เป็น member
-```
-
-#### DB Changes (Transaction via ReservationService)
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `reservations` | SELECT | Check existing pending |
-| `books` | SELECT FOR UPDATE | Lock book row |
-| `reservations` | INSERT | user_id, book_id, status='pending', expires_at |
-| `books` | UPDATE | `available = available - 1` |
-
-#### Outputs
-```json
-// Success (200)
-{"success": true, "message": "จองสำเร็จ! กรุณามารับหนังสือ..."}
-
-// Failure (400/401/403/405)
-{"success": false, "message": "error message"}
-```
-
-| HTTP Status | Meaning |
-|-------------|---------|
-| 200 | Success |
-| 400 | Invalid input / business error |
-| 401 | Not logged in |
-| 403 | Invalid CSRF |
-| 405 | Method not POST |
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Duplicate reservation | Error "คุณได้จองหนังสือเล่มนี้แล้ว" |
-| Race condition (last copy) | Row lock - first wins |
-| Session timeout | 401 error |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ `expires_at` คำนวณจาก `RESERVATION_DAYS` (default 2 วัน) - แก้ใน config หรือ service
-- ⚠️ API นี้ไม่มี rate limiting - ถ้าต้องการต้องเพิ่มเอง
-- ⚠️ Row locking สำคัญ - อย่าลบ `FOR UPDATE`
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | แปลง reservation เป็น borrow record |
+| **Entry Point** | `admin/reservations.php` (POST action=fulfill) |
+| **Inputs** | `reservation_id`, `csrf_token` |
+| **Validation** | reservation ต้อง status = 'pending' |
+| **Authorization** | `requireStaff()` |
+| **DB Changes** | - INSERT `borrows`<br>- UPDATE `reservations` (status='fulfilled', borrow_id) |
+| **Output** | redirect กลับพร้อม flash |
+| **Failure Cases** | - Reservation ไม่ใช่ pending<br>- User ถึง quota |
+| **จุดระวัง** | - ไม่ต้องลด stock เพราะหักไปแล้วตอนจอง<br>- ต้องตรวจ quota ของ user ก่อนอนุมัติ |
 
 ---
 
-### Flow 6: Search Books (AJAX API)
+### 3.7 Flow: Delete Book (ลบหนังสือ)
 
-#### Goal
-ค้นหาหนังสือแบบ real-time โดยไม่ reload หน้า
-
-#### Entry Point
-`api/search_books.php` (GET)
-
-#### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| search | string | No | คำค้นหา (title, author, ISBN) |
-| category | int | No | Category ID filter |
-| status | string | No | 'available' = มีพร้อมยืม |
-
-**Source:** Query string (`$_GET`)
-
-#### Validation Rules
-```php
-// ไม่มี validation เข้มงวด - public API
-- Parameters sanitized via prepared statements
-```
-
-#### Authorization
-ไม่มี - public API
-
-#### DB Changes
-ไม่มี - read only
-
-#### Outputs
-- **Content-Type:** `text/html; charset=utf-8`
-- **Response:** HTML partial (book grid) หรือ empty state message
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Invalid category ID | Empty results (ไม่ error) |
-| SQL injection | Prepared statement ป้องกัน |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ Response เป็น HTML partial (ไม่ใช่ JSON) - frontend คาดหวัง HTML
-- ⚠️ ใช้ `includes/book_grid.php` สำหรับ render - ถ้าแก้ layout ต้องแก้ที่นั่น
-- ⚠️ LIKE query ใช้ `%search%` - ถ้า search string ยาวมากอาจช้า
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | ลบหนังสือออกจากระบบ |
+| **Entry Point** | `admin/books.php` (POST action=delete) |
+| **Inputs** | `id`, `csrf_token` |
+| **Validation** | - Book ต้องมีอยู่<br>- available = quantity (ไม่มีคนยืมอยู่)<br>- ไม่มี borrow history |
+| **Authorization** | `requireStaff()` |
+| **DB Changes** | DELETE `books` + ลบไฟล์ cover_image |
+| **Locking** | `FOR UPDATE` บน books |
+| **Output** | redirect กลับพร้อม flash |
+| **Failure Cases** | - มีคนยืมอยู่<br>- มี borrow history |
+| **จุดระวัง** | - UI ซ่อนปุ่มลบถ้า `available != quantity`<br>- ลบ cover image file ด้วย |
 
 ---
 
-### Flow 7: Delete Book
+### 3.8 Flow: Update Settings (ตั้งค่าระบบ)
 
-#### Goal
-ลบหนังสือออกจากระบบ
-
-#### Entry Point
-`admin/books.php` (POST with action=delete)
-
-#### Inputs
-| Field | Type | Required |
-|-------|------|----------|
-| csrf_token | string | Yes |
-| action | string | Yes | = 'delete' |
-| id | int | Yes | Book ID |
-
-#### Validation Rules
-```php
-// admin/books.php
-- Book must exist
-- No active borrows (status='borrowing')
-- All copies available (available == quantity)
-```
-
-#### Authorization
-```php
-requireStaff();
-```
-
-#### DB Changes (Transaction)
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `books` | SELECT FOR UPDATE | Lock row |
-| `borrows` | SELECT | Check active borrows |
-| `books` | DELETE | Remove book |
-
-**File System:**
-- Delete cover image from `uploads/covers/` if exists
-
-#### Outputs
-- **Success:** Redirect with flash "ลบหนังสือสำเร็จ"
-- **Failure:** Redirect with error message
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Book has active borrow | Error "ไม่สามารถลบได้ มีการยืมอยู่" |
-| Concurrent delete | First wins, second gets "ไม่พบหนังสือ" |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ Borrow history ยังอยู่หลังลบ book (FK cascade) - อาจมี orphan records
-- ⚠️ Cover file ถูกลบด้วย - ไม่สามารถ restore ได้
-- ⚠️ ไม่มี soft delete - ถ้าต้องการต้องเพิ่ม `deleted_at` column
-
----
-
-### Flow 8: Approve/Cancel Reservation
-
-#### Goal
-Admin อนุมัติหรือยกเลิกการจองหนังสือ
-
-#### Entry Point
-`admin/reservations.php` (POST)
-
-#### Inputs (Approve)
-| Field | Type | Required |
-|-------|------|----------|
-| csrf_token | string | Yes |
-| action | string | Yes | = 'approve' |
-| id | int | Yes | Reservation ID |
-
-#### Inputs (Cancel)
-| Field | Type | Required |
-|-------|------|----------|
-| csrf_token | string | Yes |
-| action | string | Yes | = 'cancel' |
-| id | int | Yes | Reservation ID |
-
-#### Validation Rules
-```php
-- Reservation must exist
-- Reservation status = 'pending'
-```
-
-#### Authorization
-```php
-requireAdmin();  // เฉพาะ admin เท่านั้น (staff ไม่ได้)
-```
-
-#### DB Changes
-
-**Approve (Transaction):**
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `borrows` | INSERT | เริ่มการยืมทันที |
-| `reservations` | UPDATE | status='fulfilled' |
-
-**Cancel (Transaction):**
-| Table | Operation | Details |
-|-------|-----------|---------|
-| `books` | UPDATE | `available = available + 1` |
-| `reservations` | UPDATE | status='cancelled' |
-
-#### Outputs
-- **Approve success:** Flash "อนุมัติการจองสำเร็จ"
-- **Cancel success:** Flash "ยกเลิกการจองเรียบร้อย"
-- **Failure:** Flash error
-
-#### Common Failure Cases
-| Case | Result |
-|------|--------|
-| Already processed | Error "รายการนี้ถูกดำเนินการแล้ว" |
-| Concurrent approve/cancel | Transaction ป้องกัน |
-
-#### จุดที่ควรระวังเวลาแก้
-- ⚠️ Approve สร้าง borrow ทันที - due_date คำนวณจากวันที่ approve
-- ⚠️ Cancel คืน stock (`available + 1`) - ถ้าลืมจะ stock ผิด
-- ⚠️ เฉพาะ admin - staff ไม่มีสิทธิ์ (ต่างจาก borrow)
+| หัวข้อ | รายละเอียด |
+|--------|-------------|
+| **Goal** | บันทึกค่าตั้งค่าระบบ (เช่น ชื่อหน่วยงาน, สีบัตร) |
+| **Entry Point** | `admin/settings.php` |
+| **Inputs** | `org_name`, `card_color_primary`, `card_color_secondary`, `csrf_token` |
+| **Validation** | - `org_name` ไม่ว่าง, ไม่เกิน 100 ตัวอักษร<br>- colors ต้อง format `#XXXXXX` |
+| **Authorization** | `requireAdmin()` (Admin only!) |
+| **DB Changes** | UPDATE/INSERT `settings` (key-value pairs) |
+| **Output** | redirect กลับพร้อม flash |
+| **Failure Cases** | - Validation error |
+| **จุดระวัง** | - เป็นหน้า Admin-only<br>- ใช้ helper `updateSetting($key, $value)` |
 
 ---
 
 ## 4. Single Source of Truth Map
 
-### ตารางแหล่งที่มาของแต่ละ Feature
+### 4.1 ตำแหน่งที่ถูกต้องของแต่ละ concern
 
-| Feature | ไฟล์หลัก | หมายเหตุ |
+| Concern | ตำแหน่งที่ถูกต้อง | ไฟล์ |
+|---------|-----------------|------|
+| **DB Connection** | `getDB()` | `includes/db.php` |
+| **Config Values** | `env()` + Constants | `includes/config.php` + `.env` |
+| **Auth Check** | `isLoggedIn()`, `isStaff()`, `isAdmin()` | `includes/functions.php` |
+| **Access Control** | `requireLogin()`, `requireStaff()`, `requireAdmin()` | `includes/functions.php` |
+| **CSRF Token** | `generateCSRFToken()`, `validateCSRFToken()` | `includes/functions.php` |
+| **Rate Limiting** | `checkRateLimit()`, `incrementRateLimit()` | `includes/functions.php` |
+| **XSS Protection** | `e()` (htmlspecialchars wrapper) | `includes/functions.php` |
+| **Password Rules** | `validatePassword()` | `includes/functions.php` |
+| **Email Validation** | `isValidEmail()` | `includes/functions.php` |
+| **Phone Validation** | `isValidPhone()` | `includes/functions.php` |
+| **Name Validation** | `validateName()`, `validateMaxLength()` | `includes/functions.php` |
+| **Borrow Rules** | `MAX_BORROW_BOOKS`, `DEFAULT_BORROW_DAYS` | `includes/config.php` |
+| **Fine Calculation** | `BorrowService::calculateFine()` | `app/Services/BorrowService.php` |
+| **SQL Queries** | Repository methods | `app/Repositories/*.php` |
+
+### 4.2 จุดที่พบ validation ซ้ำ/ใกล้ซ้ำ
+
+| จุดที่พบ | ตำแหน่ง | หมายเหตุ |
 |---------|---------|---------|
-| **Configuration** | `includes/config.php` | Constants ทั้งหมด, อ่าน `.env` |
-| **Database Connection** | `includes/db.php` | `getDB()` singleton |
-| **Auth Functions** | `includes/functions.php` | `isLoggedIn()`, `isAdmin()`, `isStaff()`, `requireLogin()`, `requireAdmin()`, `requireStaff()` |
-| **CSRF** | `includes/functions.php` | `generateCSRFToken()`, `validateCSRFToken()` |
-| **Validation** | `includes/functions.php` | `isValidEmail()`, `isValidPhone()` |
-| **Rate Limiting** | `login.php`, `register.php` | Session-based, inline code |
-| **Flash Messages** | `includes/functions.php` | `setFlash()`, `getFlash()`, `displayFlash()` |
-| **Formatting** | `includes/functions.php` | `formatDate()`, `formatFine()`, status labels |
-| **Borrow Logic** | `app/Services/BorrowService.php` | Transaction, fine calculation |
-| **Reservation Logic** | `app/Services/ReservationService.php` | Transaction, expiry |
-
-### จุดที่ซ้ำ/ใกล้ซ้ำ (Duplication Points)
-
-| สิ่งที่ซ้ำ | ตำแหน่งที่ 1 | ตำแหน่งที่ 2 | ผลกระทบ |
-|-----------|-------------|-------------|---------|
-| Helper functions | `includes/functions.php` | `app/Helpers/functions.php` | ยังใช้แค่ includes/ |
-| Borrow creation logic | `admin/borrow_form.php` | `app/Services/BorrowService.php` | แก้ต้องแก้ 2 ที่ |
-| Settings loading | `includes/config.php` | `app/Config/settings.php` | ยังใช้แค่ includes/ |
-| Date formatting | `includes/functions.php` | `app/Helpers/functions.php` | Format ต่างกันเล็กน้อย |
-| Status label functions | `includes/functions.php` | `app/Helpers/functions.php` | HTML ต่างกัน |
-
-**คำแนะนำ:** ตอนนี้ใช้ `includes/` เป็นหลัก - `app/` เตรียมไว้สำหรับ migration ในอนาคต
+| Password length check | `validatePassword()` ใน `functions.php` + `AuthService::register()` | ควรเรียก `validatePassword()` ที่เดียว - ปัจจุบัน `register.php` เรียก helper ก่อน |
+| Email format check | `isValidEmail()` ใน `functions.php` + `AuthService::register()` | `register.php` ตรวจก่อนส่งให้ Service - OK |
+| User exists check | ทั้ง Entry Point และ Service | Entry Point ตรวจคร่าวๆ, Service ตรวจอีกครั้งภายใน transaction - เป็น pattern ที่ถูกต้อง |
 
 ---
 
 ## 5. Debug Playbook
 
-### เมื่อเจอ Error ให้ไล่ดูตามลำดับ
+### 5.1 วิธีเปิด Debug Mode
 
-#### Error 400 (Bad Request)
+1. **สร้างไฟล์ `.env`** จาก `.env.example`:
+   ```bash
+   cp .env.example .env
+   ```
 
-```
-1. ตรวจ input validation
-   └── ดู error message ใน response
-   └── ตรวจว่าส่ง parameters ครบหรือไม่
-   └── ตรวจ format (email, phone, int)
+2. **แก้ไข `.env`**:
+   ```
+   APP_DEBUG=true
+   ```
 
-2. ตรวจ business logic
-   └── เช่น book available = 0
-   └── user มี pending reservation อยู่แล้ว
-   └── duplicate action
-```
+3. **ผลลัพธ์**: Error details จะแสดงบนหน้าเว็บแทนที่จะแสดงแค่ "ระบบขัดข้อง"
 
-#### Error 401 (Unauthorized)
+### 5.2 Log อยู่ที่ไหน
 
-```
-1. ตรวจ session
-   └── Session หมดอายุหรือไม่ (SESSION_LIFETIME = 3600)
-   └── Cookie ถูกลบหรือไม่
-   └── isLoggedIn() return false
+| ประเภท | ตำแหน่ง |
+|--------|---------|
+| PHP Errors | `logs/` folder หรือ Apache error log |
+| DB Connection Error | แสดงบนหน้าเว็บ (ถ้า APP_DEBUG=true) |
+| Custom Logs | ใช้ `error_log()` - ไปที่ Apache error log |
 
-2. ตรวจ $_SESSION
-   └── var_dump($_SESSION) ดูว่ามี user_id หรือไม่
-   └── session_status() ดูว่า session active หรือไม่
-```
+### 5.3 เวลาเจอ Error แต่ละประเภท
 
-#### Error 403 (Forbidden)
+#### HTTP 400 Bad Request
+1. ตรวจ **input validation** ใน Entry Point
+2. ดู `$errors` array ที่สร้างจาก validation
+3. ตรวจว่า required fields ส่งมาครบไหม
 
-```
-1. ตรวจ CSRF token
-   └── Form มี hidden field csrf_token หรือไม่
-   └── Token ตรงกับใน session หรือไม่
-   └── generateCSRFToken() ถูกเรียกก่อน form หรือไม่
+#### HTTP 401 Unauthorized
+1. ตรวจว่า user **login อยู่หรือไม่** (`$_SESSION['user_id']`)
+2. ดูว่า session หมดอายุหรือไม่ (SESSION_LIFETIME = 3600 วินาที)
+3. ตรวจ `isLoggedIn()` ถูกเรียกที่ไหน
 
-2. ตรวจ permission
-   └── User role คืออะไร ($_SESSION['role'])
-   └── Page ต้องการ admin หรือ staff
-   └── isAdmin() / isStaff() return อะไร
-```
+#### HTTP 403 Forbidden
+1. ตรวจ **CSRF token** - token หมดอายุหรือไม่ตรง
+2. ตรวจ **role** - user มี role ที่ต้องการหรือไม่
+3. ดู `requireStaff()` หรือ `requireAdmin()` ที่หน้านั้น
 
-#### Error 500 (Server Error)
+#### HTTP 500 Internal Server Error
+1. เปิด **APP_DEBUG=true** ดู error message
+2. ตรวจ **PDO Exception** - DB connection, SQL syntax
+3. ดู **PHP error log** ของ Apache
+4. ตรวจ **file permissions** ของ uploads/, logs/
 
-```
-1. เปิด error display
-   └── แก้ .env: APP_DEBUG=true
-   └── หรือ php.ini: display_errors = On
-
-2. ดู error log
-   └── XAMPP: C:\xampp\php\logs\php_error_log
-   └── หรือ Apache: C:\xampp\apache\logs\error.log
-
-3. Common causes:
-   └── Database connection failed
-   └── SQL syntax error
-   └── Missing required file
-   └── PHP fatal error
-```
-
-### Log และ Debug Mode
-
-**เปิด Debug Mode:**
-```ini
-# .env
-APP_DEBUG=true
-```
-
-**ดู Error Log (XAMPP Windows):**
-```
-C:\xampp\php\logs\php_error_log
-C:\xampp\apache\logs\error.log
-```
-
-**Debug ด้วย var_dump:**
-```php
-// เพิ่มชั่วคราวในโค้ด
-var_dump($_POST);
-var_dump($_SESSION);
-exit;
-```
-
-### ตัวอย่าง cURL Commands
+### 5.4 ตัวอย่าง Debug ด้วย curl
 
 #### 1. ทดสอบ Login
-
 ```bash
-# ส่ง login request
 curl -X POST http://localhost/book_borrowing/login.php \
-  -d "email=admin@example.com&password=password123" \
-  -c cookies.txt \
-  -v
+  -d "email=admin@library.com&password=123456" \
+  -c cookies.txt -b cookies.txt -L -v
 ```
 
 #### 2. ทดสอบ Search Books API
-
 ```bash
-# ค้นหาหนังสือ
-curl "http://localhost/book_borrowing/api/search_books.php?search=php&category=1&status=available"
-
-# ค้นหาทั้งหมด
-curl "http://localhost/book_borrowing/api/search_books.php"
+curl "http://localhost/book_borrowing/api/search_books.php?search=php&category=1"
 ```
 
-#### 3. ทดสอบ Reserve Book API (ต้อง login ก่อน)
-
+#### 3. ทดสอบ Reserve Book (ต้อง login ก่อน)
 ```bash
 # Step 1: Login และเก็บ cookie
 curl -X POST http://localhost/book_borrowing/login.php \
-  -d "email=member@example.com&password=password123" \
-  -c cookies.txt
+  -d "email=member@test.com&password=123456" \
+  -c cookies.txt -L
 
-# Step 2: ดึง CSRF token (จาก session หรือ หน้า book.php)
-# Token อยู่ใน hidden field ของ form
-
-# Step 3: ส่ง reservation
+# Step 2: Reserve (ต้องมี csrf_token จาก session)
 curl -X POST http://localhost/book_borrowing/api/reserve_book.php \
   -d "book_id=1&csrf_token=YOUR_TOKEN_HERE" \
   -b cookies.txt
+```
+
+### 5.5 Debug Checklist
+
+```
+□ APP_DEBUG=true ใน .env หรือยัง?
+□ ดู Apache error log แล้วหรือยัง?
+□ Session เริ่มต้นถูกต้องไหม? (startSession() ถูกเรียกผ่าน bootstrap.php)
+□ CSRF token ตรงกับ session ไหม?
+□ User มี role ที่ต้องการไหม?
+□ DB connection ได้ไหม? (ทดสอบด้วย getDB())
+□ ตรวจ input validation ผ่านหมดไหม?
+□ Transaction commit หรือ rollback?
 ```
 
 ---
 
 ## 6. Modification Guide (แก้ระบบแบบไม่พัง)
 
-### ถ้าจะแก้ Business Rule
+### 6.1 ถ้าจะแก้ Business Rule
 
-**ตัวอย่าง:** เปลี่ยนค่าปรับจาก 10 บาท/วัน เป็น 20 บาท/วัน
+| ต้องการแก้ | แก้ที่ไฟล์ | ตัวอย่าง |
+|-----------|-----------|---------|
+| จำนวนวันยืมเริ่มต้น | `.env` → `DEFAULT_BORROW_DAYS` | `DEFAULT_BORROW_DAYS=14` |
+| ยืมสูงสุดกี่เล่ม | `.env` → `MAX_BORROW_BOOKS` | `MAX_BORROW_BOOKS=5` |
+| ค่าปรับต่อวัน | `.env` → `FINE_PER_DAY` | `FINE_PER_DAY=20` |
+| สูตรค่าปรับ | `app/Services/BorrowService.php` → `calculateFine()` | แก้ลอจิกคำนวณ |
+| อายุการจอง | `app/Services/ReservationService.php` → `createReservation()` param | default 2 days |
 
-| ขั้นตอน | ไฟล์ | การแก้ไข |
-|--------|------|---------|
-| 1 | `includes/config.php` | เปลี่ยน `FINE_PER_DAY` จาก 10 เป็น 20 |
-| 2 | `.env` (ถ้ามี) | เพิ่ม `FINE_PER_DAY=20` |
+### 6.2 ถ้าจะแก้ Validation
 
-**จุดที่ใช้ค่านี้:**
-- `app/Services/BorrowService.php` - คำนวณค่าปรับ
-- `admin/borrows.php` - แสดงค่าปรับ
+| ต้องการแก้ | แก้ที่ไฟล์ |
+|-----------|-----------|
+| Password length | `includes/config.php` → `MIN_PASSWORD_LENGTH` |
+| Email format | `includes/functions.php` → `isValidEmail()` (ใช้ FILTER_VALIDATE_EMAIL) |
+| Phone format | `includes/functions.php` → `isValidPhone()` (regex) |
+| Name max length | `includes/functions.php` → `validateMaxLength()` |
+| Custom field validation | สร้าง function ใหม่ใน `functions.php` |
 
----
+### 6.3 ถ้าจะแก้ SQL
 
-### ถ้าจะแก้ Validation
+| ต้องการแก้ | แก้ที่ไฟล์ |
+|-----------|-----------|
+| Query หนังสือ | `app/Repositories/BookRepository.php` |
+| Query การยืม | `app/Repositories/BorrowRepository.php` |
+| Query user | `app/Repositories/UserRepository.php` |
+| Query การจอง | `app/Repositories/ReservationRepository.php` |
+| Query รายงาน | `app/Repositories/ReportRepository.php` |
 
-**ตัวอย่าง:** เปลี่ยน password ขั้นต่ำจาก 6 เป็น 8 ตัวอักษร
+**กฎสำคัญ:** 
+- ห้ามเขียน SQL ใน Entry Point หรือ Service
+- ทุก SQL ต้องอยู่ใน Repository เท่านั้น
+- ใช้ Prepared Statements (`?` placeholder) เสมอ
 
-| ขั้นตอน | ไฟล์ | การแก้ไข |
-|--------|------|---------|
-| 1 | `register.php` | แก้ validation `strlen($password) < 8` |
-| 2 | `reset_password.php` | แก้ validation เหมือนกัน |
-| 3 | `profile.php` | แก้ validation ใน change password |
+### 6.4 ถ้าจะแก้ Permission
 
-**หมายเหตุ:** ไม่มี central validation สำหรับ password - ต้องแก้ทุกที่ที่ใช้
+| ต้องการแก้ | แก้ที่ไฟล์ |
+|-----------|-----------|
+| เพิ่ม role ใหม่ | 1. `database/schema.sql` - แก้ ENUM<br>2. `includes/functions.php` - เพิ่ม `isNewRole()`<br>3. สร้าง `requireNewRole()` |
+| เปลี่ยน access level | Entry Point - เปลี่ยน `requireStaff()` เป็น `requireAdmin()` หรือกลับกัน |
 
----
+### 6.5 Checklist: เพิ่ม Field ใหม่ในตาราง
 
-### ถ้าจะแก้ SQL / Database
+ตัวอย่าง: เพิ่ม field `publisher` ในตาราง `books`
 
-**ตัวอย่าง:** เพิ่ม column `description` ใน `categories`
+```
+□ 1. Database
+   └── สร้าง migration file: database/migrations/XXX_add_publisher_to_books.sql
+       ALTER TABLE books ADD COLUMN publisher VARCHAR(100) DEFAULT NULL;
 
-| ขั้นตอน | ไฟล์/ตำแหน่ง | การแก้ไข |
-|--------|-------------|---------|
-| 1 | `database/schema.sql` | เพิ่ม `description TEXT` ใน CREATE TABLE |
-| 2 | MySQL | `ALTER TABLE categories ADD description TEXT;` |
-| 3 | `admin/categories.php` | เพิ่ม field ใน form และ INSERT/UPDATE |
+□ 2. Repository
+   └── app/Repositories/BookRepository.php
+       - แก้ findById() ให้ SELECT publisher ด้วย
+       - แก้ create() ให้ INSERT publisher
+       - แก้ update() ให้ UPDATE publisher
 
----
+□ 3. Service (ถ้ามี validation)
+   └── app/Services/BookService.php
+       - รับ $data['publisher'] ใน createBook(), updateBook()
 
-### ถ้าจะแก้ Permission
+□ 4. Entry Point (Form)
+   └── admin/book_form.php
+       - เพิ่ม input field สำหรับ publisher
+       - รับค่าจาก $_POST['publisher']
+       - ส่งไปให้ Service
 
-**ตัวอย่าง:** ให้ staff จัดการ reservations ได้ (ปัจจุบันเฉพาะ admin)
+□ 5. Entry Point (Display)
+   └── admin/books.php, book.php
+       - แสดง <?= e($book['publisher']) ?>
 
-| ขั้นตอน | ไฟล์ | การแก้ไข |
-|--------|------|---------|
-| 1 | `admin/reservations.php` | เปลี่ยน `requireAdmin()` เป็น `requireStaff()` |
+□ 6. ทดสอบ
+   └── ทดสอบ CRUD ครบทุก operation
+```
 
-**หมายเหตุ:** ถ้าเพิ่ม role ใหม่ต้องแก้:
-- `includes/functions.php` - เพิ่ม function check role
-- `login.php` - เพิ่ม redirect logic
-- ทุก page ที่ต้องการ permission ใหม่
+### 6.6 Checklist: เพิ่ม API Endpoint ใหม่
 
----
+```
+□ 1. สร้างไฟล์ใน api/
+   └── api/new_endpoint.php
 
-### ตัวอย่าง: เพิ่ม Field ใหม่ (Checklist แบบสมบูรณ์)
+□ 2. Template พื้นฐาน:
+   <?php
+   require_once __DIR__ . '/../bootstrap.php';
+   
+   header('Content-Type: application/json');
+   
+   // 1. Auth Check
+   if (!isLoggedIn()) {
+       http_response_code(401);
+       echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+       exit;
+   }
+   
+   // 2. Method Check
+   if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+       http_response_code(405);
+       echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+       exit;
+   }
+   
+   // 3. CSRF Check
+   if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+       http_response_code(403);
+       echo json_encode(['success' => false, 'message' => 'Invalid token']);
+       exit;
+   }
+   
+   // 4. Validate Input
+   // ...
+   
+   // 5. Call Service
+   try {
+       $service = new SomeService(getDB());
+       $result = $service->doSomething($input);
+       echo json_encode(['success' => true, 'data' => $result]);
+   } catch (Exception $e) {
+       http_response_code(400);
+       echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+   }
 
-**Scenario:** เพิ่ม field `publisher` ในหนังสือ
+□ 3. ทดสอบด้วย curl
+```
 
-#### Checklist
+### 6.7 สรุป: แก้ 1 จุดให้ครบ
 
-- [ ] **1. Database**
-  - [ ] แก้ `database/schema.sql` - เพิ่ม column
-  - [ ] Run migration: `ALTER TABLE books ADD publisher VARCHAR(100);`
-
-- [ ] **2. Create/Update Form**
-  - [ ] `admin/book_form.php` - เพิ่ม input field
-  - [ ] เพิ่มใน INSERT query
-  - [ ] เพิ่มใน UPDATE query
-  - [ ] Validate input (ถ้าจำเป็น)
-
-- [ ] **3. List/Display**
-  - [ ] `admin/books.php` - เพิ่มใน SELECT query
-  - [ ] เพิ่มใน table column (ถ้าต้องการแสดง)
-  - [ ] `book.php` - เพิ่มในหน้า detail
-
-- [ ] **4. Search (ถ้าต้องการ)**
-  - [ ] `api/search_books.php` - เพิ่มใน WHERE LIKE
-  - [ ] `app/Repositories/BookRepository.php` - เพิ่มใน filters
-
-- [ ] **5. Import (ถ้าต้องการ)**
-  - [ ] `admin/import_books.php` - เพิ่ม column ใน CSV parser
-  - [ ] `docs/samples/books_sample.csv` - update sample
-
-- [ ] **6. Test**
-  - [ ] Create book ใหม่
-  - [ ] Update book เดิม
-  - [ ] ดูหน้า list และ detail
-  - [ ] ค้นหา (ถ้าเพิ่มใน search)
-
----
-
-### Quick Reference: ไฟล์ที่ต้องแก้ตาม Feature
-
-| ต้องการแก้ | ไฟล์ที่เกี่ยวข้อง |
-|-----------|-----------------|
-| **User fields** | `register.php`, `profile.php`, `admin/member_form.php`, `admin/ajax_add_member.php` |
-| **Book fields** | `admin/book_form.php`, `admin/books.php`, `book.php`, `api/search_books.php` |
-| **Borrow rules** | `includes/config.php`, `admin/borrow_form.php`, `app/Services/BorrowService.php` |
-| **Fine rules** | `includes/config.php`, `app/Services/BorrowService.php` |
-| **Reservation rules** | `app/Services/ReservationService.php`, `admin/reservations.php` |
-| **Auth/Session** | `includes/functions.php`, `login.php`, `logout.php` |
-| **CSRF** | `includes/functions.php` (ไม่ควรแก้) |
-| **UI/Layout** | `includes/header.php`, `includes/footer.php`, `admin/header.php`, `css/style.css` |
-
----
-
-## Quick Reference Card
-
-### Constants สำคัญ (`includes/config.php`)
-
-| Constant | Default | ใช้ที่ |
-|----------|---------|-------|
-| `APP_URL` | from .env | Redirects, links |
-| `DEFAULT_BORROW_DAYS` | 7 | Borrow form |
-| `MAX_BORROW_BOOKS` | 5 | Borrow validation |
-| `FINE_PER_DAY` | 10 | Fine calculation |
-| `SESSION_LIFETIME` | 3600 | Session config |
-| `APP_DEBUG` | false | Error display |
-
-### Functions ที่ใช้บ่อย (`includes/functions.php`)
-
-| Function | หน้าที่ |
-|----------|--------|
-| `e($str)` | HTML escape (XSS protection) |
-| `isLoggedIn()` | Check login status |
-| `isAdmin()` | Check admin role |
-| `isStaff()` | Check admin or staff |
-| `requireLogin()` | Force login or redirect |
-| `requireAdmin()` | Force admin or redirect |
-| `requireStaff()` | Force staff or redirect |
-| `generateCSRFToken()` | Create CSRF token |
-| `validateCSRFToken($token)` | Verify CSRF token |
-| `setFlash($type, $msg)` | Set flash message |
-| `redirect($url)` | Redirect and exit |
-| `getDB()` | Get PDO instance |
-| `formatDate($date)` | Format date Thai style |
-| `formatFine($amount)` | Format currency |
-
-### HTTP Status Codes ที่ใช้
-
-| Code | Meaning | เมื่อไหร่ |
-|------|---------|---------|
-| 200 | OK | Success |
-| 302 | Redirect | After POST success |
-| 400 | Bad Request | Validation failed |
-| 401 | Unauthorized | Not logged in |
-| 403 | Forbidden | Invalid CSRF / No permission |
-| 405 | Method Not Allowed | Wrong HTTP method |
-| 500 | Server Error | PHP error / DB error |
+| Layer | คำถาม |
+|-------|-------|
+| **Database** | ต้องแก้ schema ไหม? สร้าง migration? |
+| **Repository** | ต้องเพิ่ม/แก้ SQL query ไหม? |
+| **Service** | ต้องเพิ่ม/แก้ business logic ไหม? |
+| **Entry Point** | ต้องแก้ form หรือ display ไหม? |
+| **Validation** | ต้องเพิ่ม validation rule ไหม? |
+| **Test** | ทดสอบ flow ครบถ้วนหรือยัง? |
 
 ---
 
-## Revision History
+## 7. Quick Reference Card
 
-| Date | Version | Author | Changes |
-|------|---------|--------|---------|
-| 2026-01-31 | 1.0 | Dev Team | Initial document |
+### 7.1 Helper Functions ที่ใช้บ่อย
+
+```php
+// Security
+e($string)                    // Escape HTML (ป้องกัน XSS)
+generateCSRFToken()           // สร้าง CSRF token
+validateCSRFToken($token)     // ตรวจ CSRF token
+
+// Auth
+isLoggedIn()                  // ตรวจว่า login อยู่ไหม
+isAdmin()                     // ตรวจว่าเป็น admin ไหม
+isStaff()                     // ตรวจว่าเป็น staff หรือ admin ไหม
+requireLogin()                // บังคับ login (redirect ถ้าไม่)
+requireStaff()                // บังคับเป็น staff+
+requireAdmin()                // บังคับเป็น admin
+
+// Redirect & Flash
+redirect($url)                // redirect + exit
+setFlash($type, $message)     // ตั้ง flash message
+getFlash()                    // ดึง flash message
+displayFlash()                // แสดง flash message (HTML)
+
+// Validation
+isValidEmail($email)          // ตรวจ email format
+isValidPhone($phone)          // ตรวจ phone format (9-10 digits)
+validatePassword($password)   // ตรวจ password (return error หรือ null)
+validateMaxLength($val, $max) // ตรวจความยาว
+
+// Rate Limiting
+checkRateLimit($key)          // ตรวจว่าเกิน limit ไหม
+incrementRateLimit($key)      // เพิ่ม counter
+resetRateLimit($key)          // reset counter
+
+// Formatting
+formatDate($date, $format)    // จัดรูปแบบวันที่
+formatFine($amount)           // จัดรูปแบบค่าปรับ
+daysDiff($date1, $date2)      // คำนวณจำนวนวัน
+```
+
+### 7.2 Config Constants
+
+```php
+// Database
+DB_HOST, DB_NAME, DB_USER, DB_PASS
+
+// Application
+APP_NAME, APP_URL, APP_DEBUG
+
+// Business Rules
+DEFAULT_BORROW_DAYS   // วันยืมเริ่มต้น (default: 7)
+MAX_BORROW_BOOKS      // ยืมสูงสุด (default: 3)
+FINE_PER_DAY          // ค่าปรับ/วัน (default: 10)
+
+// Security
+MIN_PASSWORD_LENGTH        // รหัสผ่านขั้นต่ำ (default: 6)
+RATE_LIMIT_MAX_ATTEMPTS    // จำนวนครั้งสูงสุด (default: 5)
+RATE_LIMIT_WINDOW_MINUTES  // ช่วงเวลานับ (default: 15)
+SESSION_LIFETIME           // อายุ session (default: 3600)
+```
+
+---
+
+*เอกสารนี้สร้างจากโค้ดจริงในโปรเจกต์ทั้งหมด ไม่มีการเดาหรือแต่งเพิ่ม*

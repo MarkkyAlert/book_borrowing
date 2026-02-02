@@ -55,11 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isEdit = !empty($_POST['id']);
     $member['id'] = (int) ($_POST['id'] ?? 0);
     
-    // Validation (ใช้ helper functions เดียวกับทั้งระบบ)
+    // Validation (ใช้ helper functions เป็น single source of truth)
     if (empty($member['name'])) {
         $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
-    } elseif (mb_strlen($member['name']) > 100) {
-        $errors[] = 'ชื่อต้องไม่เกิน 100 ตัวอักษร';
+    } elseif ($err = validateMaxLength($member['name'], 100, 'ชื่อ')) {
+        $errors[] = $err;
     }
     
     if (empty($member['email'])) {
@@ -75,11 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Password validation
-    if (!$isEdit && empty($password)) {
-        $errors[] = 'กรุณากรอกรหัสผ่าน';
-    } elseif (!empty($password) && strlen($password) < MIN_PASSWORD_LENGTH) {
-        $errors[] = 'รหัสผ่านต้องมีความยาวอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
+    // Password validation (ใช้ helper function)
+    if ($err = validatePassword($password, $isEdit)) { // allowEmpty=true ถ้าเป็น edit mode
+        $errors[] = $err;
     }
     
     if (empty($errors)) {

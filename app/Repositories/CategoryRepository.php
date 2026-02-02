@@ -20,6 +20,8 @@ class CategoryRepository
 
     /**
      * ดึงหมวดหมู่ทั้งหมด
+     * 
+     * @return array รายการหมวดหมู่ เรียงตามชื่อ
      */
     public function findAll(): array
     {
@@ -30,6 +32,8 @@ class CategoryRepository
 
     /**
      * ดึงหมวดหมู่พร้อมจำนวนหนังสือ
+     * 
+     * @return array รายการหมวดหมู่ พร้อม book_count
      */
     public function findAllWithBookCount(): array
     {
@@ -44,6 +48,9 @@ class CategoryRepository
 
     /**
      * ดึงหมวดหมู่ตาม ID
+     * 
+     * @param int $id Category ID
+     * @return array|null ข้อมูลหมวดหมู่ หรือ null ถ้าไม่พบ
      */
     public function findById(int $id): ?array
     {
@@ -54,6 +61,9 @@ class CategoryRepository
 
     /**
      * ดึงหมวดหมู่ตามชื่อ
+     * 
+     * @param string $name ชื่อหมวดหมู่ (exact match)
+     * @return array|null ข้อมูลหมวดหมู่ หรือ null ถ้าไม่พบ
      */
     public function findByName(string $name): ?array
     {
@@ -64,6 +74,10 @@ class CategoryRepository
 
     /**
      * สร้างหมวดหมู่ใหม่
+     * 
+     * @param string $name ชื่อหมวดหมู่
+     * @return int ID ของหมวดหมู่ที่สร้าง
+     * @sideeffect INSERT into categories table
      */
     public function create(string $name): int
     {
@@ -74,6 +88,11 @@ class CategoryRepository
 
     /**
      * อัปเดตหมวดหมู่
+     * 
+     * @param int $id Category ID
+     * @param string $name ชื่อใหม่
+     * @return bool true = สำเร็จ
+     * @sideeffect UPDATE categories table
      */
     public function update(int $id, string $name): bool
     {
@@ -83,6 +102,11 @@ class CategoryRepository
 
     /**
      * ลบหมวดหมู่
+     * 
+     * @param int $id Category ID
+     * @return bool true = สำเร็จ
+     * @sideeffect DELETE from categories table
+     * @throws PDOException ถ้ามีหนังสือในหมวดหมู่ (FK constraint)
      */
     public function delete(int $id): bool
     {
@@ -92,6 +116,10 @@ class CategoryRepository
 
     /**
      * ตรวจสอบว่าชื่อซ้ำหรือไม่
+     * 
+     * @param string $name ชื่อที่ต้องการตรวจสอบ
+     * @param int|null $excludeId ID ที่ต้องการยกเว้น (ใช้ตอน update)
+     * @return bool true = มีอยู่แล้ว (ห้ามใช้)
      */
     public function nameExists(string $name, ?int $excludeId = null): bool
     {
@@ -110,6 +138,9 @@ class CategoryRepository
 
     /**
      * ตรวจสอบว่ามีหนังสือในหมวดหมู่หรือไม่
+     * 
+     * @param int $categoryId Category ID
+     * @return bool true = มีหนังสือ (ไม่ควรลบ)
      */
     public function hasBooks(int $categoryId): bool
     {
@@ -120,6 +151,8 @@ class CategoryRepository
 
     /**
      * นับจำนวนหมวดหมู่
+     * 
+     * @return int จำนวนหมวดหมู่ทั้งหมด
      */
     public function count(): int
     {

@@ -188,9 +188,14 @@ class BorrowRepository
 
     /**
      * นับจำนวนการยืมที่ active ของ user (with lock)
+     * 
+     * @security FOR UPDATE ล็อคแถวที่ match ป้องกัน race condition:
+     *           2 requests พร้อมกันอาจทำให้ยืมเกินโควต้า (MAX_BORROW_BOOKS)
+     *           ต้องเรียกภายใน transaction เท่านั้น
      */
     public function countActiveBorrowsForUpdate(int $userId): int
     {
+        // [LOCK] ล็อคแถว borrows ของ user นี้ - ป้องกันยืมเกินโควต้า
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM borrows 
             WHERE user_id = ? AND status = 'borrowing' FOR UPDATE

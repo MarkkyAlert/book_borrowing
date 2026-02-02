@@ -1,948 +1,937 @@
-# Flow Test Guide - Book Borrowing System
+# Flow Test Guide - คู่มือทดสอบระบบยืมคืนหนังสือ
 
-เอกสารนี้รวบรวม flows หลักของระบบยืม-คืนหนังสือ สำหรับใช้ทดสอบระบบแบบ manual และเป็นฐานสำหรับเขียน automated tests
-
-**หมายเหตุ:** เอกสารนี้อ้างอิงจากโค้ดที่มีอยู่จริงเท่านั้น
+เอกสารนี้สำหรับทดสอบระบบแบบ manual และเป็นฐานสำหรับเขียน automated tests
 
 ---
 
 ## สารบัญ
 
-1. [User Login](#1-user-login)
-2. [User Registration](#2-user-registration)
-3. [Forgot & Reset Password](#3-forgot--reset-password)
-4. [Search Books (AJAX API)](#4-search-books-ajax-api)
-5. [Reserve Book (API)](#5-reserve-book-api)
-6. [Create Borrow](#6-create-borrow)
-7. [Return Book with Fine Calculation](#7-return-book-with-fine-calculation)
-8. [Create/Update Book](#8-createupdate-book)
-9. [Delete Book](#9-delete-book)
-10. [AJAX Add Member](#10-ajax-add-member)
-11. [Import Books from CSV](#11-import-books-from-csv)
-12. [Approve/Cancel Reservation](#12-approvecancel-reservation)
+1. [User Login](#flow-1-user-login)
+2. [User Registration](#flow-2-user-registration)
+3. [Create Borrow](#flow-3-create-borrow)
+4. [Return Book](#flow-4-return-book)
+5. [Create Reservation](#flow-5-create-reservation)
+6. [Fulfill Reservation](#flow-6-fulfill-reservation)
+7. [Cancel Reservation](#flow-7-cancel-reservation)
+8. [Create Book](#flow-8-create-book)
+9. [Delete Book](#flow-9-delete-book)
+10. [Create Member](#flow-10-create-member)
+11. [Pay Fine](#flow-11-pay-fine)
+12. [Search Books API](#flow-12-search-books-api)
 
 ---
 
-## 1. User Login
+## Flow 1: User Login
 
-### Goal
-ให้ผู้ใช้สามารถเข้าสู่ระบบด้วย email และ password เพื่อเข้าถึงฟีเจอร์ต่างๆ ตามสิทธิ์ของตน
+### 1) Flow Name
+**User Login** - เข้าสู่ระบบ
 
-### Preconditions
-- **Login state:** ไม่ได้ login (ถ้า login อยู่แล้วจะถูก redirect)
-- **Database state:** 
-  - มี user ใน `users` table ที่มี email และ password (bcrypt hash)
-  - `password_resets` table ต้องมีอยู่ (ระบบใช้ตรวจสอบ)
+### 2) Goal
+ตรวจสอบ credentials และสร้าง authenticated session เพื่อให้ผู้ใช้เข้าถึงฟีเจอร์ตาม role
 
-### Trigger
-- **Endpoint:** `/login.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| email | string | Yes | อีเมลผู้ใช้ |
-| password | string | Yes | รหัสผ่าน (plain text) |
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ❌ ต้องไม่ login อยู่ (ถ้า login อยู่จะ redirect ไป index.php) |
+| Database | ต้องมี user record ใน `users` table ที่ email ตรงกัน |
+| Rate Limit | ต้องไม่เกิน 5 attempts ใน 15 นาที |
 
-- **Session:** ต้องมี session เริ่มต้น (session_start)
-- **CSRF:** ไม่มี (ใช้ rate limiting แทน)
+### 4) Trigger
 
-### Steps
-1. ระบบตรวจสอบว่า user login อยู่หรือไม่ (ถ้า login แล้ว → redirect)
-2. ตรวจสอบ rate limiting (ใช้ session-based)
-   - Key: `login_attempts_{md5(email)}`, `login_time_{md5(email)}`
-   - Limit: 5 attempts / 15 minutes
-3. Validate ว่า email และ password ไม่ว่าง
-4. Query หา user: `SELECT id, name, email, password, role FROM users WHERE email = ?`
-5. ตรวจสอบ password ด้วย `password_verify()`
-6. ถ้าถูกต้อง:
-   - `session_regenerate_id(true)`
-   - Set session: `user_id`, `user_name`, `user_email`, `role`
-   - Reset attempt counter
-7. Redirect ตาม role
+| Property | Value |
+|----------|-------|
+| Endpoint | `/login.php` |
+| Method | `POST` |
 
-### Expected Results
+### 5) Inputs
 
-**Success:**
-- **HTTP Status:** 302 Redirect
-- **Redirect to:** 
-  - Admin: `/admin/`
-  - Member: `/index.php`
-- **Session changes:**
-  - `$_SESSION['user_id']` = user ID
-  - `$_SESSION['user_name']` = user name
-  - `$_SESSION['user_email']` = user email
-  - `$_SESSION['role']` = 'admin' | 'member'
-- **Flash message:** "เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ {name}"
-
-**Failure:**
-- **HTTP Status:** 200 (re-render form)
-- **Error messages:**
-  - "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-  - "ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที" (ถ้า attempts >= 5)
-
-### Failure Paths
-| Scenario | Expected Behavior |
-|----------|------------------|
-| Empty email/password | แสดง error "อีเมลหรือรหัสผ่านไม่ถูกต้อง" |
-| Email ไม่มีในระบบ | แสดง error "อีเมลหรือรหัสผ่านไม่ถูกต้อง" |
-| Password ไม่ถูกต้อง | แสดง error, เพิ่ม attempt counter |
-| Rate limit exceeded | แสดง error rate limit, block 15 นาที |
-
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Duplicate submit** | ถ้า login สำเร็จแล้ว redirect ไปหน้าหลัก |
-| **Multi-tab login** | Session ใหม่จะ override session เก่า (session_regenerate_id) |
-| **Concurrent users** | แต่ละ user มี session แยกกัน |
-| **Retry after rate limit** | หลัง 15 นาที counter จะ reset ได้ |
-| **SQL injection** | ใช้ prepared statements, ปลอดภัย |
-
----
-
-## 2. User Registration
-
-### Goal
-ให้ผู้ใช้ใหม่สามารถสมัครสมาชิกเพื่อใช้งานระบบในฐานะ member
-
-### Preconditions
-- **Login state:** ไม่ได้ login
-- **Database state:** 
-  - `users` table ต้องมีอยู่
-  - Email ที่จะสมัครต้องยังไม่มีในระบบ
-
-### Trigger
-- **Endpoint:** `/register.php`
-- **Method:** `POST`
-
-### Inputs
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| name | string | Yes | ไม่เกิน 100 ตัวอักษร |
-| email | string | Yes | Valid email format, unique |
-| phone | string | No | 9-10 หลัก (ถ้ากรอก) |
-| password | string | Yes | อย่างน้อย 6 ตัวอักษร |
-| confirm_password | string | Yes | ต้องตรงกับ password |
+| `email` | string | ✅ | ไม่ว่าง |
+| `password` | string | ✅ | ไม่ว่าง |
 
-- **CSRF:** ไม่มี (ใช้ rate limiting)
+**Headers/Session:** ไม่ต้องมี CSRF token, Session ต้อง start แล้ว
 
-### Steps
-1. ตรวจสอบว่า login อยู่หรือไม่ → redirect ถ้า login
-2. ตรวจสอบ rate limiting: 5 attempts / 15 minutes
-3. Validate fields ตามเงื่อนไข
-4. Check email uniqueness: `SELECT id FROM users WHERE email = ?`
-5. Hash password: `password_hash($password, PASSWORD_DEFAULT)`
-6. Insert user: `INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, ?, 'member')`
-7. Redirect to login page
+### 6) Steps
 
-### Expected Results
+```
+1. เปิด browser ไปที่ /login.php
+2. กรอก email: admin@library.com
+3. กรอก password: 123456
+4. กดปุ่ม "เข้าสู่ระบบ"
+5. ตรวจสอบ redirect ไปยังหน้าที่ถูกต้อง
+6. ตรวจ $_SESSION['user_id'] มีค่า
+7. ตรวจ $_SESSION['role'] ตรงกับ user
+```
 
-**Success:**
-- **HTTP Status:** 302 Redirect to `/login.php`
-- **Database changes:**
-  - New row in `users`:
-    - `role` = 'member'
-    - `password` = bcrypt hash
-    - `phone` = value หรือ NULL
-- **Flash message:** "สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ"
+### 7) Expected Results
 
-**Failure:**
-- **HTTP Status:** 200 (re-render form with errors)
-- **Form values retained:** name, email, phone (ไม่รวม password)
+| Aspect | Expected |
+|--------|----------|
+| HTTP Status | 302 (redirect) |
+| Redirect URL | `/admin/` (staff/admin) หรือ `/index.php` (member) |
+| Session Changes | `user_id`, `user_name`, `user_email`, `role` ถูกตั้งค่า |
+| Flash Message | "เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ {name}" |
+| Rate Limit | Counter reset เป็น 0 |
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| ไม่กรอกชื่อ | "กรุณากรอกชื่อ-นามสกุล" |
-| ชื่อเกิน 100 ตัวอักษร | "ชื่อต้องไม่เกิน 100 ตัวอักษร" |
-| Email format ผิด | "รูปแบบอีเมลไม่ถูกต้อง" |
-| เบอร์โทรไม่ใช่ 9-10 หลัก | "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" |
-| Password น้อยกว่า 6 ตัว | "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" |
-| Password ไม่ตรงกัน | "รหัสผ่านไม่ตรงกัน" |
-| Email ซ้ำ | "อีเมลนี้ถูกใช้งานแล้ว" |
-| Rate limit | "ลองหลายครั้งเกินไป กรุณารอ 15 นาที" |
+### 8) Failure Paths
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Duplicate submit** | Email unique constraint ป้องกัน duplicate |
-| **Multi-tab** | ใครส่งก่อนได้ email, อีกคนจะเจอ error duplicate |
-| **Phone empty** | บันทึกเป็น NULL ในฐานข้อมูล |
-| **Unicode name** | รองรับภาษาไทยและ UTF-8 |
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| Email ว่าง | `email=""` | Error: "กรุณากรอกอีเมล" |
+| Password ว่าง | `password=""` | Error: "กรุณากรอกรหัสผ่าน" |
+| Email ไม่มีในระบบ | `email="notexist@x.com"` | Error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" |
+| Password ผิด | `password="wrong"` | Error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" |
+| Rate limit exceeded | > 5 attempts | Error: "ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที" |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Duplicate Submit** | กด login 2 ครั้งเร็วๆ | ครั้งแรก success, ครั้งสอง redirect เพราะ login แล้ว |
+| **Multi-tab** | เปิด 2 tab, login tab แรก, refresh tab สอง | Tab สองเห็นว่า login แล้ว |
+| **Session Fixation** | จด session ID ก่อน login, ตรวจหลัง login | Session ID ต้องเปลี่ยน (regenerate) |
+| **Concurrent Users** | 2 users login พร้อมกัน | แต่ละคนได้ session แยกกัน |
 
 ---
 
-## 3. Forgot & Reset Password
+## Flow 2: User Registration
 
-### Goal
-ให้ผู้ใช้ที่ลืมรหัสผ่านสามารถขอ reset link และตั้งรหัสผ่านใหม่ได้
+### 1) Flow Name
+**User Registration** - สมัครสมาชิก
 
-### Preconditions
-- **Login state:** ไม่ได้ login
-- **Database state:** 
-  - `users` table มี email ที่ต้องการ reset
-  - `password_resets` table ต้องมีอยู่
+### 2) Goal
+สร้าง user account ใหม่ที่มี role = member เพื่อให้สามารถจองหนังสือได้
 
----
+### 3) Preconditions
 
-### Part A: Request Reset Link
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ❌ ต้องไม่ login อยู่ |
+| Database | email ต้องไม่ซ้ำกับที่มีอยู่ |
+| Rate Limit | ต้องไม่เกิน 5 attempts ใน 15 นาที (global key) |
 
-#### Trigger
-- **Endpoint:** `/forgot_password.php`
-- **Method:** `POST`
+### 4) Trigger
 
-#### Inputs
+| Property | Value |
+|----------|-------|
+| Endpoint | `/register.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| email | string | Yes | Valid email format |
+| `name` | string | ✅ | ไม่ว่าง, ≤100 ตัวอักษร |
+| `email` | string | ✅ | format email, unique |
+| `phone` | string | ❌ | 9-10 หลัก (ถ้ากรอก) |
+| `password` | string | ✅ | ≥6 ตัวอักษร |
+| `confirm_password` | string | ✅ | ต้องตรงกับ password |
 
-#### Steps
-1. Validate email format
-2. Check rate limit: 3 requests / email / hour (database-based)
-3. Check email exists: `SELECT id, email FROM users WHERE email = ?`
-4. Generate token: `bin2hex(random_bytes(32))` (64 chars)
-5. Insert: `INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)`
-   - `expires_at` = NOW() + 1 hour
-6. แสดง success message (ไม่บอกว่า email มีหรือไม่ - security)
+### 6) Steps
 
-#### Expected Results
+```
+1. เปิด browser ไปที่ /register.php
+2. กรอกข้อมูล:
+   - ชื่อ: ทดสอบ สมาชิก
+   - อีเมล: test_new@example.com (ต้องไม่ซ้ำ)
+   - เบอร์โทร: 0812345678
+   - รหัสผ่าน: 123456
+   - ยืนยันรหัสผ่าน: 123456
+3. กดปุ่ม "สมัครสมาชิก"
+4. ตรวจ redirect ไป /login.php
+5. ตรวจ flash message "สมัครสมาชิกสำเร็จ"
+6. SELECT * FROM users WHERE email='test_new@example.com'
+7. ตรวจ role = 'member', password เป็น bcrypt hash
+```
 
-**Success:**
-- **HTTP Status:** 200
-- **Database changes:** New row in `password_resets`
-- **Message:** "หากอีเมลนี้มีในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน"
-- **Demo mode:** แสดง reset link บนหน้าจอ
+### 7) Expected Results
 
-#### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Email format ผิด | "รูปแบบอีเมลไม่ถูกต้อง" |
-| Rate limit exceeded | "คุณขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 ชั่วโมง" |
+| Aspect | Expected |
+|--------|----------|
+| HTTP Status | 302 (redirect to /login.php) |
+| Database | INSERT 1 row ใน `users` |
+| Password | Hashed ด้วย bcrypt ($2y$) |
+| Role | 'member' (hardcoded) |
+| Flash Message | "สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ชื่อว่าง | `name=""` | Error: "กรุณากรอกชื่อ-นามสกุล" |
+| ชื่อยาวเกิน | `name=` (101 chars) | Error: "ชื่อต้องไม่เกิน 100 ตัวอักษร" |
+| Email format ผิด | `email="invalid"` | Error: "รูปแบบอีเมลไม่ถูกต้อง" |
+| Email ซ้ำ | `email="admin@library.com"` | Error: "อีเมลนี้มีผู้ใช้งานแล้ว" |
+| Phone format ผิด | `phone="123"` | Error: "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก" |
+| Password สั้นเกิน | `password="123"` | Error: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" |
+| Password ไม่ตรงกัน | `confirm_password="different"` | Error: "รหัสผ่านไม่ตรงกัน" |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Duplicate Submit** | กด submit 2 ครั้งเร็วๆ | ครั้งแรก success, ครั้งสอง email ซ้ำ |
+| **SQL Injection** | `email="'; DROP TABLE users;--"` | Validation error (invalid email) |
+| **XSS in name** | `name="<script>alert(1)</script>"` | บันทึกได้แต่แสดงแบบ escaped |
 
 ---
 
-### Part B: Reset Password
+## Flow 3: Create Borrow
 
-#### Trigger
-- **Endpoint:** `/reset_password.php?token={token}`
-- **Method:** `POST`
+### 1) Flow Name
+**Create Borrow** - บันทึกการยืมหนังสือ
 
-#### Inputs
+### 2) Goal
+Staff บันทึกการยืมหนังสือให้สมาชิก พร้อมหักจำนวนหนังสือที่มีอยู่
+
+### 3) Preconditions
+
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| User | สมาชิกต้องมีอยู่ใน DB, role='member' |
+| Book | หนังสือต้องมี available > 0 |
+| Quota | สมาชิกยืมอยู่ < MAX_BORROW_BOOKS (3) |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/borrow_form.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| token | string | Yes | In URL query string |
-| password | string | Yes | อย่างน้อย 6 ตัวอักษร |
-| confirm_password | string | Yes | ต้องตรงกับ password |
+| `user_id` | int | ✅ | > 0, ต้องเป็น member |
+| `book_ids[]` | array | ✅ | ไม่ว่าง |
+| `borrow_days` | int | ❌ | 1-30 (default: 7) |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
 
-#### Steps
-1. Validate token: `SELECT pr.*, u.id as user_id FROM password_resets pr JOIN users u ON u.email = pr.email WHERE pr.token = ? AND pr.used = 0 AND pr.expires_at > NOW()`
-2. Validate password และ confirm_password
-3. Begin transaction
-4. Update password: `UPDATE users SET password = ? WHERE id = ?`
-5. Mark token used: `UPDATE password_resets SET used = 1 WHERE id = ?`
-6. Commit transaction
+### 6) Steps
 
-#### Expected Results
-
-**Success:**
-- **HTTP Status:** 200
-- **Database changes:**
-  - `users.password` = new bcrypt hash
-  - `password_resets.used` = 1
-- **Message:** "เปลี่ยนรหัสผ่านสำเร็จ!"
-
-#### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Token ไม่ถูกต้อง/หมดอายุ | "ลิงก์ไม่ถูกต้องหรือหมดอายุ" |
-| Token ใช้แล้ว | "ลิงก์ไม่ถูกต้องหรือหมดอายุ" |
-| Password น้อยกว่า 6 ตัว | "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" |
-| Password ไม่ตรงกัน | "รหัสผ่านไม่ตรงกัน" |
-
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Token reuse** | Token ใช้ได้ครั้งเดียว (used = 1) |
-| **Expired token** | เกิน 1 ชั่วโมงใช้ไม่ได้ |
-| **Multiple requests** | สร้าง token ใหม่ได้ แต่มี rate limit |
-| **Concurrent reset** | Transaction ป้องกัน race condition |
-
----
-
-## 4. Search Books (AJAX API)
-
-### Goal
-ให้ผู้ใช้สามารถค้นหาหนังสือแบบ real-time โดยไม่ต้อง reload หน้า
-
-### Preconditions
-- **Login state:** ไม่จำเป็น (public API)
-- **Database state:** `books` และ `categories` tables มีข้อมูล
-
-### Trigger
-- **Endpoint:** `/api/search_books.php`
-- **Method:** `GET`
-
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| search | string | No | คำค้นหา (title, author, ISBN) |
-| category | int | No | Category ID |
-| status | string | No | `'available'` = หนังสือที่มีพร้อมยืม |
-
-- **Headers:** ไม่มีข้อกำหนดพิเศษ
-
-### Steps
-1. รับ parameters จาก query string
-2. สร้าง filters array
-3. Call `BookRepository::findAll($filters)`
-4. Render `includes/book_grid.php` 
-5. Return HTML partial
-
-### Expected Results
-
-**Success:**
-- **HTTP Status:** 200
-- **Content-Type:** `text/html; charset=utf-8`
-- **Response:** HTML grid ของ book cards หรือ empty state message
-- **Database:** Read-only, ไม่มีการเปลี่ยนแปลง
-
-### Failure Paths
-| Scenario | Expected Behavior |
-|----------|------------------|
-| Invalid category ID | ไม่พบหนังสือ (empty results) |
-| SQL injection attempt | Prepared statements ป้องกัน |
-
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Empty search** | แสดงหนังสือทั้งหมด |
-| **Search with spaces** | LIKE clause จัดการได้ |
-| **Unicode search** | รองรับภาษาไทย |
-| **Multiple filters** | ใช้ทุก filter รวมกัน (AND) |
-| **Concurrent requests** | Read-only, ไม่มีปัญหา |
-
----
-
-## 5. Reserve Book (API)
-
-### Goal
-ให้ member สามารถจองหนังสือที่ต้องการยืม
-
-### Preconditions
-- **Login state:** ต้อง login เป็น member
-- **Database state:** 
-  - หนังสือต้องมีอยู่และ `available > 0`
-  - ผู้ใช้ไม่มี pending reservation สำหรับหนังสือเล่มเดียวกัน
-
-### Trigger
-- **Endpoint:** `/api/reserve_book.php`
-- **Method:** `POST`
-
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| book_id | int | Yes | ID ของหนังสือที่ต้องการจอง |
-| csrf_token | string | Yes | CSRF token จาก session |
-
-- **Headers:** Content-Type: application/x-www-form-urlencoded หรือ JSON
-- **Session:** ต้องมี `$_SESSION['user_id']`
-
-### Steps
-1. ตรวจสอบ method = POST
-2. ตรวจสอบ login status
-3. Validate CSRF token
-4. Validate book_id
-5. Call `ReservationService::createReservation($userId, $bookId)`
-   - Begin transaction
-   - Check existing pending reservation
-   - Lock book row: `SELECT ... FOR UPDATE`
-   - Check availability
-   - Insert reservation (expires in 2 days)
-   - Decrement `books.available`
-   - Commit
-
-### Expected Results
-
-**Success:**
-- **HTTP Status:** 200
-- **Content-Type:** `application/json`
-- **Response:**
-```json
-{
-  "success": true,
-  "message": "จองสำเร็จ! กรุณามารับหนังสือ \"...\" ภายในวันที่ ..."
-}
 ```
-- **Database changes:**
-  - New row in `reservations` (status = 'pending')
-  - `books.available` -= 1
+1. ตรวจว่ามี member ในระบบ (user_id = X)
+2. ตรวจว่ามีหนังสือที่ available > 0 (book_id = Y)
+3. จด books.available ก่อนทดสอบ
+4. Login เป็น staff/admin
+5. ไปที่ /admin/borrow_form.php
+6. เลือกสมาชิก (user_id = X)
+7. เลือกหนังสือ (book_id = Y)
+8. ตั้งวันยืม = 7 วัน
+9. กดปุ่ม "บันทึกการยืม"
+10. ตรวจ flash message "ยืมสำเร็จ"
+11. SELECT * FROM borrows WHERE user_id=X AND book_id=Y
+12. ตรวจ status = 'borrowing', due_date = วันนี้ + 7
+13. ตรวจ books.available ลดลง 1
+```
 
-### Failure Paths
-| Scenario | HTTP Status | Response |
-|----------|-------------|----------|
-| ไม่ได้ login | 401 | `{"success": false, "message": "กรุณาเข้าสู่ระบบ"}` |
-| CSRF invalid | 403 | `{"success": false, "message": "Invalid CSRF token"}` |
-| Method != POST | 405 | `{"success": false, "message": "Method not allowed"}` |
-| book_id invalid | 400 | `{"success": false, "message": "Invalid book ID"}` |
-| หนังสือไม่มี | 400 | `{"success": false, "message": "ไม่พบหนังสือ"}` |
-| available = 0 | 400 | `{"success": false, "message": "หนังสือไม่พร้อมให้ยืม"}` |
-| จองซ้ำ | 400 | `{"success": false, "message": "คุณได้จองหนังสือเล่มนี้แล้ว"}` |
+### 7) Expected Results
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Duplicate submit** | ครั้งที่ 2 จะเจอ error "จองแล้ว" |
-| **Race condition** | Row locking (`FOR UPDATE`) ป้องกัน |
-| **Multi-tab** | Tab แรกสำเร็จ, tab อื่นเจอ error |
-| **Session timeout** | Return 401 |
+| Aspect | Expected |
+|--------|----------|
+| HTTP Status | 302 (redirect) |
+| borrows | INSERT: status='borrowing', due_date calculated |
+| books.available | -1 |
+| Flash Message | "ยืมสำเร็จ X เล่ม" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| User ไม่ใช่ member | user_id ของ staff | Error: "ไม่พบสมาชิก" |
+| หนังสือหมด | book ที่ available=0 | Skip พร้อม message |
+| เกินโควต้า | ยืมเล่มที่ 4 | Error: "สมาชิกยืมได้สูงสุด 3 เล่ม" |
+| ยืมซ้ำ | book ที่กำลังยืมอยู่ | Skip: "กำลังยืมอยู่แล้ว" |
+| CSRF invalid | wrong token | Error: "คำขอไม่ถูกต้อง" |
+| Not staff | login เป็น member | Redirect to login |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Concurrent Borrow** | 2 staff ยืมหนังสือเดียวกันพร้อมกัน | คนแรกสำเร็จ, คนสอง stock หมด |
+| **Race Condition Quota** | User มี 2 เล่ม, 2 staff ยืมให้พร้อมกัน | คนแรกสำเร็จ, คนสองเกินโควต้า |
+| **Mixed Success** | เลือก 3 เล่ม, 1 หมด | สำเร็จ 2 เล่ม, skip 1 เล่ม |
 
 ---
 
-## 6. Create Borrow
+## Flow 4: Return Book
 
-### Goal
-ให้ staff/admin สามารถบันทึกการยืมหนังสือสำหรับ member
+### 1) Flow Name
+**Return Book** - คืนหนังสือ
 
-### Preconditions
-- **Login state:** ต้องเป็น staff หรือ admin
-- **Database state:** 
-  - User (member) ต้องมีอยู่
-  - หนังสือต้องมี `available > 0`
-  - Member ยังไม่ถึง borrow limit
+### 2) Goal
+Staff บันทึกการคืนหนังสือ คำนวณค่าปรับ (ถ้ามี) และคืนจำนวนหนังสือกลับ stock
 
-### Trigger
-- **Endpoint:** `/admin/borrow_form.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Borrow Record | ต้องมี status = 'borrowing' |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/borrows.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| csrf_token | string | Yes | CSRF token |
-| user_id | int | Yes | Member ID ที่จะยืม |
-| book_ids[] | array | Yes | Array ของ book IDs |
-| borrow_days | int | No | 1-30 วัน (default: `DEFAULT_BORROW_DAYS`) |
+| `action` | string | ✅ | = 'return' |
+| `borrow_id` | int | ✅ | > 0, status='borrowing' |
+| `pay_now` | checkbox | ❌ | จ่ายค่าปรับทันที |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
 
-### Steps
-1. Validate CSRF token
-2. ตรวจสอบ user_id เป็น member ที่มีอยู่จริง
-3. ตรวจสอบ book_ids ไม่เกิน `MAX_BORROW_BOOKS`
-4. สำหรับแต่ละ book:
-   - ตรวจสอบ available > 0
-   - ตรวจสอบ user ไม่ได้ยืมเล่มเดียวกันอยู่
-5. Begin transaction
-6. สำหรับแต่ละ book:
-   - INSERT into `borrows` (status = 'borrowing')
-   - UPDATE `books` SET `available = available - 1`
-7. Commit
-8. Redirect with success message
+### 6) Steps
 
-### Expected Results
+```
+[คืนปกติ - ไม่เกินกำหนด]
+1. ต้องมีรายการยืมที่ status='borrowing'
+2. จด books.available ก่อนทดสอบ
+3. Login เป็น staff/admin
+4. ไปที่ /admin/borrows.php
+5. ค้นหารายการยืมที่ยังไม่เกินกำหนด
+6. กดปุ่ม "คืนหนังสือ"
+7. ตรวจ flash message "คืนหนังสือเรียบร้อย"
+8. ตรวจ borrows.status = 'returned'
+9. ตรวจ borrows.return_date = วันนี้
+10. ตรวจ borrows.fine_amount = 0
+11. ตรวจ books.available เพิ่มขึ้น 1
 
-**Success:**
-- **HTTP Status:** 302 Redirect to `/admin/borrows.php`
-- **Database changes:**
-  - New rows in `borrows`:
-    - `user_id` = member ID
-    - `book_id` = book ID
-    - `borrow_date` = CURDATE()
-    - `due_date` = CURDATE() + borrow_days
-    - `status` = 'borrowing'
-  - `books.available` -= 1 สำหรับแต่ละเล่ม
-- **Flash message:** "บันทึกการยืมสำเร็จ"
+[คืนเกินกำหนด]
+12. UPDATE borrows SET due_date='2024-01-01' WHERE id=?
+13. กด "คืนหนังสือ"
+14. ตรวจ fine_amount = วันเกิน × FINE_PER_DAY (10)
+```
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| CSRF invalid | Redirect with error |
-| User ไม่ใช่ member | "ไม่พบสมาชิก" |
-| ไม่เลือก book | "กรุณาเลือกหนังสือ" |
-| Book unavailable | "หนังสือ {title} ไม่พร้อมให้ยืม" |
-| User ยืมเล่มเดิมอยู่ | "สมาชิกยืมหนังสือเล่มนี้อยู่แล้ว" |
-| เกิน borrow limit | "เกินจำนวนที่ยืมได้" |
+### 7) Expected Results
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Duplicate submit** | ครั้งที่ 2 จะเจอ error "ยืมอยู่แล้ว" |
-| **Concurrent borrow** | Transaction + available check ป้องกัน |
-| **Last copy** | ถ้า available = 1 และ 2 คนยืมพร้อมกัน → คนแรกได้ |
+| Aspect | ปกติ | เกินกำหนด |
+|--------|------|-----------|
+| borrows.status | 'returned' | 'returned' |
+| borrows.return_date | NOW() | NOW() |
+| borrows.fine_amount | 0 | days × 10 |
+| books.available | +1 | +1 |
+| payments | ไม่สร้าง | สร้างถ้า pay_now=true |
 
----
+### 8) Failure Paths
 
-## 7. Return Book with Fine Calculation
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| Borrow ไม่พบ | borrow_id=99999 | Error: "ไม่พบรายการยืม" |
+| คืนไปแล้ว | status='returned' | Error: "รายการนี้ถูกคืนไปแล้ว" |
+| CSRF invalid | wrong token | Error + redirect |
+| Not staff | member login | Redirect to login |
 
-### Goal
-ให้ staff/admin สามารถบันทึกการคืนหนังสือ พร้อมคำนวณและเก็บค่าปรับ (ถ้ามี)
+### 9) Edge Cases
 
-### Preconditions
-- **Login state:** ต้องเป็น staff หรือ admin
-- **Database state:** 
-  - มี borrow record ที่ `status = 'borrowing'`
-
-### Trigger
-- **Endpoint:** `/admin/borrows.php`
-- **Method:** `POST`
-
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| action | string | Yes | = 'return' |
-| borrow_id | int | Yes | ID ของการยืม |
-| pay_now | checkbox | No | ถ้า checked = จ่ายค่าปรับทันที |
-
-### Steps
-1. Validate CSRF token และ action = 'return'
-2. Load borrow record พร้อม book data
-3. ตรวจสอบ status = 'borrowing'
-4. Call `BorrowService::returnBook($borrowId, $payNow, $staffId)`
-   - Begin transaction
-   - คำนวณค่าปรับ: (CURDATE - due_date) × FINE_PER_DAY
-   - UPDATE `borrows`:
-     - `status` = 'returned'
-     - `return_date` = CURDATE()
-     - `fine_amount` = calculated fine
-   - UPDATE `books` SET `available = available + 1`
-   - ถ้า pay_now และมี fine:
-     - INSERT into `payments`
-   - Commit
-5. Redirect with message
-
-### Expected Results
-
-**Success (ไม่เกินกำหนด):**
-- **HTTP Status:** 302 Redirect
-- **Database changes:**
-  - `borrows.status` = 'returned'
-  - `borrows.return_date` = วันที่คืน
-  - `borrows.fine_amount` = 0
-  - `books.available` += 1
-- **Flash message:** "บันทึกการคืนเรียบร้อย"
-
-**Success (เกินกำหนด + จ่ายค่าปรับ):**
-- **Database changes:**
-  - `borrows.fine_amount` = จำนวนค่าปรับ
-  - New row in `payments`:
-    - `borrow_id`, `amount`, `paid_at`, `received_by`
-- **Flash message:** "บันทึกการคืนและรับค่าปรับ {amount} บาท เรียบร้อย"
-
-**Success (เกินกำหนด + ไม่จ่าย):**
-- **Flash message (warning):** "บันทึกการคืนเรียบร้อย (มีค่าปรับค้างชำระ {amount} บาท)"
-
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Borrow ไม่พบ | "ไม่พบรายการยืม" |
-| Status != 'borrowing' | "รายการนี้คืนแล้ว" |
-| Transaction fail | "เกิดข้อผิดพลาด" + rollback |
-
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **คืนวันเดียวกับยืม** | Fine = 0 |
-| **คืนก่อนกำหนด** | Fine = 0 |
-| **คืนเกิน 1 ปี** | Fine คำนวณตามปกติ (ไม่มี cap) |
-| **Duplicate submit** | ครั้งที่ 2 เจอ "คืนแล้ว" |
-| **Concurrent return** | Transaction ป้องกัน |
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Double Submit** | กด F5 หลังคืน | Idempotency: "รายการนี้ถูกบันทึกไปแล้ว" |
+| **Concurrent Return** | 2 staff คืนรายการเดียวกัน | คนแรกสำเร็จ, คนสอง "ถูกคืนไปแล้ว" |
 
 ---
 
-## 8. Create/Update Book
+## Flow 5: Create Reservation
 
-### Goal
-ให้ staff/admin สามารถเพิ่มหรือแก้ไขข้อมูลหนังสือในระบบ
+### 1) Flow Name
+**Create Reservation** - จองหนังสือ
 
-### Preconditions
-- **Login state:** ต้องเป็น staff หรือ admin
-- **Database state:** 
-  - `categories` table มี categories (optional)
-  - (Update) book ID ต้องมีอยู่
+### 2) Goal
+สมาชิกจองหนังสือเพื่อกัน stock ไว้ก่อนมารับจริง
 
-### Trigger
-- **Endpoint:** `/admin/book_form.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login (member+) |
+| Book | available > 0 |
+| Existing Reservation | ไม่มี pending reservation ซ้ำ |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/api/reserve_book.php` |
+| Method | `POST` |
+| Response | JSON |
+
+### 5) Inputs
+
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| csrf_token | string | Yes | CSRF token |
-| id | int | No | (Update only) Book ID |
-| title | string | Yes | ไม่เกิน 200 ตัวอักษร |
-| author | string | Yes | ไม่เกิน 100 ตัวอักษร |
-| isbn | string | No | Unique (ถ้ากรอก) |
-| category_id | int | No | Category ID |
-| description | text | No | รายละเอียดหนังสือ |
-| quantity | int | No | >= 1 (default: 1) |
-| cover_image | file | No | JPEG/PNG/GIF/WEBP, max 2MB |
+| `book_id` | int | ✅ | > 0 |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
 
-### Steps
+**หมายเหตุ:** `user_id` ดึงจาก `$_SESSION['user_id']` (ห้ามรับจาก POST)
 
-**Create:**
-1. Validate CSRF token
-2. Validate required fields
-3. Check ISBN uniqueness (ถ้ากรอก)
-4. Handle cover image upload:
-   - Validate MIME type (finfo)
-   - Validate size <= 2MB
-   - Save to `uploads/covers/`
-5. INSERT into `books` (available = quantity)
-6. Redirect to books.php
+### 6) Steps
 
-**Update:**
-1. Steps 1-4 เหมือน create
-2. Check ISBN uniqueness (exclude current book)
-3. UPDATE `books` WHERE id = ?
-4. Delete old cover ถ้า upload ใหม่
-5. Redirect to books.php
+```
+1. ต้องมีหนังสือที่ available > 0
+2. จด books.available ก่อนทดสอบ
+3. Login เป็น member
+4. ไปที่ /book.php?id=X
+5. กดปุ่ม "จองหนังสือ"
+6. ตรวจ Response: {"success": true}
+7. SELECT * FROM reservations WHERE user_id=? AND book_id=?
+8. ตรวจ status = 'pending'
+9. ตรวจ books.available ลดลง 1 (หักทันที)
+```
 
-### Expected Results
+### 7) Expected Results
 
-**Success (Create):**
-- **HTTP Status:** 302 Redirect to `/admin/books.php`
-- **Database changes:**
-  - New row in `books`
-  - `available` = `quantity`
-- **File system:** Cover image saved (ถ้า upload)
-- **Flash message:** "เพิ่มหนังสือสำเร็จ"
+| Aspect | Expected |
+|--------|----------|
+| HTTP Status | 200 |
+| Response | `{"success": true, "message": "..."}` |
+| reservations | INSERT: status='pending', expires_at set |
+| books.available | -1 (หักทันที) |
 
-**Success (Update):**
-- **Database changes:** Updated row in `books`
-- **Flash message:** "แก้ไขหนังสือสำเร็จ"
+### 8) Failure Paths
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Title/Author ว่าง | "กรุณากรอก..." |
-| ISBN ซ้ำ | "ISBN นี้มีในระบบแล้ว" |
-| File ใหญ่เกิน 2MB | "ไฟล์ใหญ่เกินไป" |
-| File type ไม่รองรับ | "รองรับเฉพาะ JPEG, PNG, GIF, WEBP" |
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ไม่ได้ login | no session | 401: "กรุณาเข้าสู่ระบบก่อน" |
+| Method ไม่ใช่ POST | GET | 405: "Method not allowed" |
+| CSRF invalid | wrong token | 403: "Invalid token" |
+| book_id invalid | book_id=0 | 400: "ข้อมูลไม่ถูกต้อง" |
+| หนังสือหมด | available=0 | 400: "หนังสือไม่พร้อมให้จอง" |
+| จองซ้ำ | pending อยู่แล้ว | 400: "คุณจองหนังสือเล่มนี้อยู่แล้ว" |
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Update quantity < borrowed** | ต้องจัดการ available ให้ถูกต้อง |
-| **Empty ISBN** | บันทึกเป็น NULL |
-| **Category ถูกลบ** | Foreign key set NULL |
-| **Cover upload fail** | แสดง error, ไม่บันทึก |
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Race Condition** | 2 users จองหนังสือเล่มสุดท้ายพร้อมกัน | คนแรกได้, คนสอง "หนังสือหมด" |
+| **Multi-tab** | เปิด 2 tab, จองใน tab แรก, กดจองใน tab สอง | Tab สอง "จองอยู่แล้ว" |
 
 ---
 
-## 9. Delete Book
+## Flow 6: Fulfill Reservation
 
-### Goal
-ให้ staff/admin สามารถลบหนังสือที่ไม่ต้องการออกจากระบบ
+### 1) Flow Name
+**Fulfill Reservation** - อนุมัติการจอง
 
-### Preconditions
-- **Login state:** ต้องเป็น staff หรือ admin
-- **Database state:** 
-  - หนังสือต้องมีอยู่
-  - ไม่มีการยืมที่ยังไม่คืน (`status != 'borrowing'`)
-  - `available == quantity` (ทุกเล่มพร้อมอยู่)
+### 2) Goal
+Staff อนุมัติการจอง แปลงเป็น borrow record
 
-### Trigger
-- **Endpoint:** `/admin/books.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| action | string | Yes | = 'delete' |
-| id | int | Yes | Book ID |
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Reservation | status = 'pending' |
+| User Quota | user ยืมอยู่ < MAX_BORROW_BOOKS |
 
-### Steps
-1. Validate CSRF token และ action = 'delete'
-2. Begin transaction
-3. Lock book row: `SELECT ... FOR UPDATE`
-4. Check ไม่มี active borrows: `SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'`
-5. Check all copies available: `available == quantity`
-6. DELETE from `books`
-7. Delete cover image file (ถ้ามี)
-8. Commit
-9. Redirect with success
+### 4) Trigger
 
-### Expected Results
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/reservations.php` |
+| Method | `POST` |
 
-**Success:**
-- **HTTP Status:** 302 Redirect
-- **Database changes:**
-  - Book row deleted from `books`
-  - Related `borrows` records remain (history)
-- **File system:** Cover image deleted
-- **Flash message:** "ลบหนังสือสำเร็จ"
+### 5) Inputs
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Book ไม่พบ | "ไม่พบหนังสือ" |
-| มีการยืมอยู่ | "ไม่สามารถลบได้ มีการยืมอยู่" |
-| บางเล่มถูกยืม | "ไม่สามารถลบได้ หนังสือบางเล่มถูกยืมอยู่" |
-
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Delete ขณะมีคนกำลังยืม** | Transaction + lock ป้องกัน |
-| **Book มี reservation pending** | ควรตรวจสอบ (ขึ้นอยู่กับ business rule) |
-| **Delete แล้ว refresh** | เจอ error "ไม่พบหนังสือ" |
-
----
-
-## 10. AJAX Add Member
-
-### Goal
-ให้ admin สามารถเพิ่ม member ใหม่แบบ quick add ขณะสร้าง borrow
-
-### Preconditions
-- **Login state:** ต้องเป็น admin เท่านั้น (staff ไม่ได้)
-- **Database state:** Email ต้องไม่ซ้ำ
-
-### Trigger
-- **Endpoint:** `/admin/ajax_add_member.php`
-- **Method:** `POST`
-
-### Inputs
 | Parameter | Type | Required | Validation |
 |-----------|------|----------|------------|
-| csrf_token | string | Yes | CSRF token |
-| name | string | Yes | 2-100 ตัวอักษร |
-| email | string | Yes | Valid email, unique |
-| phone | string | No | Valid phone format (ถ้ากรอก) |
+| `action` | string | ✅ | = 'approve' |
+| `id` | int | ✅ | reservation_id |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
 
-- **Headers:** Accept: application/json
+### 6) Steps
 
-### Steps
-1. Validate CSRF token
-2. Check `isAdmin()` → return 403 ถ้าไม่ใช่ admin
-3. Validate name (2-100 chars)
-4. Validate email format และ uniqueness
-5. Validate phone (optional)
-6. Generate random password: `bin2hex(random_bytes(4))` (8 chars)
-7. INSERT into `users` (role = 'member')
-8. Return JSON response
-
-### Expected Results
-
-**Success:**
-- **HTTP Status:** 200
-- **Content-Type:** `application/json`
-- **Response:**
-```json
-{
-  "success": true,
-  "message": "เพิ่มสมาชิกสำเร็จ",
-  "member": {
-    "id": 123,
-    "name": "ชื่อ",
-    "email": "email@example.com"
-  }
-}
 ```
-- **Database changes:**
-  - New row in `users`:
-    - `role` = 'member'
-    - `password` = random bcrypt hash
+1. ต้องมี reservation ที่ status='pending'
+2. Login เป็น staff/admin
+3. ไปที่ /admin/reservations.php
+4. ค้นหารายการจองที่รออนุมัติ
+5. กดปุ่ม "อนุมัติ"
+6. ตรวจ flash message "อนุมัติสำเร็จ"
+7. ตรวจ reservations.status = 'fulfilled'
+8. ตรวจ borrows มี record ใหม่ (status='borrowing')
+9. ตรวจ books.available ไม่เปลี่ยน (หักตอนจองแล้ว)
+```
 
-### Failure Paths
-| Scenario | HTTP Status | Response |
-|----------|-------------|----------|
-| ไม่ใช่ admin | 403 | `{"success": false, "message": "ไม่มีสิทธิ์"}` |
-| CSRF invalid | 403 | `{"success": false, "message": "CSRF error"}` |
-| Name สั้นเกิน | 400 | `{"success": false, "message": "ชื่อต้องมี 2-100 ตัวอักษร"}` |
-| Email ซ้ำ | 400 | `{"success": false, "message": "อีเมลนี้มีในระบบแล้ว"}` |
-| Email format ผิด | 400 | `{"success": false, "message": "รูปแบบอีเมลไม่ถูกต้อง"}` |
+### 7) Expected Results
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Staff เรียก API** | Return 403 |
-| **Duplicate email submit** | ครั้งที่ 2 เจอ email ซ้ำ |
-| **Random password** | Member ต้องใช้ forgot password |
+| Aspect | Expected |
+|--------|----------|
+| reservations.status | 'fulfilled' |
+| borrows | INSERT new record |
+| books.available | ไม่เปลี่ยน |
+| Flash Message | "อนุมัติการจองเรียบร้อย" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ไม่ใช่ pending | status='cancelled' | Error: "ไม่สามารถอนุมัติได้" |
+| User เกินโควต้า | user มี 3 เล่มแล้ว | Error: "เกินจำนวนที่ยืมได้" |
+| CSRF invalid | wrong token | Error + redirect |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Double Submit** | กด approve 2 ครั้ง | Idempotency ป้องกัน |
+| **Concurrent Approve** | 2 staff approve พร้อมกัน | คนแรกสำเร็จ, คนสองไม่ใช่ pending |
 
 ---
 
-## 11. Import Books from CSV
+## Flow 7: Cancel Reservation
 
-### Goal
-ให้ staff/admin สามารถ import หนังสือหลายเล่มจากไฟล์ CSV
+### 1) Flow Name
+**Cancel Reservation** - ยกเลิกการจอง
 
-### Preconditions
-- **Login state:** ต้องเป็น staff หรือ admin
-- **Database state:** ระบบพร้อมรับข้อมูล
+### 2) Goal
+Staff ยกเลิกการจองและคืน stock กลับ
 
-### Trigger
-- **Endpoint:** `/admin/import_books.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| csv_file | file | Yes | .csv file |
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Reservation | status = 'pending' |
 
-**CSV Format:**
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/reservations.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `action` | string | ✅ | = 'cancel' |
+| `id` | int | ✅ | reservation_id |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
+
+### 6) Steps
+
 ```
-Title, Author, ISBN, Category, Quantity
-หนังสือ A, ผู้แต่ง A, 978-xxx, หมวด 1, 5
-หนังสือ B, ผู้แต่ง B, , หมวด 2, 3
+1. ต้องมี reservation ที่ status='pending'
+2. จด books.available ก่อนยกเลิก
+3. Login เป็น staff/admin
+4. ไปที่ /admin/reservations.php
+5. กดปุ่ม "ยกเลิก"
+6. ตรวจ flash message "ยกเลิกสำเร็จ"
+7. ตรวจ reservations.status = 'cancelled'
+8. ตรวจ books.available เพิ่มขึ้น 1 (คืน stock)
 ```
 
-### Steps
-1. Validate CSRF token
-2. Validate file extension = .csv
-3. Begin transaction
-4. Read CSV line by line:
-   - Skip header (optional detection)
-   - Parse: title, author, isbn, category, quantity
-   - ถ้า category ไม่มี → สร้างใหม่
-   - ถ้า book exists (by title + author) → UPDATE quantity
-   - ถ้า book ไม่มี → INSERT
-5. Track: imported, updated, skipped counts
-6. Commit
-7. Redirect with summary
+### 7) Expected Results
 
-### Expected Results
+| Aspect | Expected |
+|--------|----------|
+| reservations.status | 'cancelled' |
+| books.available | +1 |
+| Flash Message | "ยกเลิกการจองและคืนสต็อกหนังสือเรียบร้อยแล้ว" |
 
-**Success:**
-- **HTTP Status:** 302 Redirect
-- **Database changes:**
-  - New rows in `books` (imported)
-  - Updated rows in `books` (quantity เพิ่ม)
-  - New rows in `categories` (ถ้า auto-create)
-- **Flash message:** "นำเข้าสำเร็จ: เพิ่ม X เล่ม, อัพเดต Y เล่ม, ข้าม Z แถว"
+### 8) Failure Paths
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| File ไม่ใช่ .csv | "กรุณาอัพโหลดไฟล์ CSV" |
-| File parse error | Row ถูก skip + แสดงใน summary |
-| Transaction fail | Rollback ทั้งหมด |
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ไม่ใช่ pending | status='fulfilled' | Error: "ไม่สามารถยกเลิกได้" |
+| CSRF invalid | wrong token | Error + redirect |
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Empty file** | Success แต่ 0 imported |
-| **Duplicate in CSV** | แถวแรกสร้าง, แถวหลัง update |
-| **UTF-8 BOM** | ควรจัดการได้ (หรือ skip header) |
-| **มี comma ใน title** | ต้อง quote ใน CSV |
-| **Very large file** | อาจ timeout (ขึ้นกับ server config) |
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Double Submit** | กด cancel 2 ครั้ง | Idempotency ป้องกัน |
 
 ---
 
-## 12. Approve/Cancel Reservation
+## Flow 8: Create Book
 
-### Goal
-ให้ admin สามารถอนุมัติหรือยกเลิกการจองหนังสือ
+### 1) Flow Name
+**Create Book** - เพิ่มหนังสือ
 
-### Preconditions
-- **Login state:** ต้องเป็น admin เท่านั้น
-- **Database state:** 
-  - มี reservation ที่ `status = 'pending'`
+### 2) Goal
+Staff เพิ่มหนังสือใหม่เข้าระบบพร้อมอัปโหลดรูปปก
 
-### Trigger
-- **Endpoint:** `/admin/reservations.php`
-- **Method:** `POST`
+### 3) Preconditions
 
-### Inputs (Approve)
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| action | string | Yes | = 'approve' |
-| id | int | Yes | Reservation ID |
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| ISBN | ต้องไม่ซ้ำ (ถ้ากรอก) |
 
-### Inputs (Cancel)
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| csrf_token | string | Yes | CSRF token |
-| action | string | Yes | = 'cancel' |
-| id | int | Yes | Reservation ID |
+### 4) Trigger
 
-### Steps (Approve)
-1. Validate CSRF token
-2. Load reservation (must be pending)
-3. Begin transaction
-4. INSERT into `borrows` (เริ่มการยืมทันที)
-5. UPDATE `reservations` SET `status = 'fulfilled'`
-6. Commit
-7. Redirect with success
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/book_form.php` |
+| Method | `POST` |
+| Encoding | `multipart/form-data` |
 
-### Steps (Cancel)
-1. Validate CSRF token
-2. Load reservation (must be pending)
-3. Begin transaction
-4. UPDATE `books` SET `available = available + 1`
-5. UPDATE `reservations` SET `status = 'cancelled'`
-6. Commit
-7. Redirect with success
+### 5) Inputs
 
-### Expected Results
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `title` | string | ✅ | ไม่ว่าง, ≤200 |
+| `author` | string | ✅ | ไม่ว่าง, ≤100 |
+| `isbn` | string | ❌ | unique |
+| `category_id` | int | ❌ | ต้องมีใน categories |
+| `quantity` | int | ✅ | ≥1 |
+| `cover_image` | file | ❌ | JPEG/PNG/GIF/WEBP, ≤2MB |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
 
-**Success (Approve):**
-- **HTTP Status:** 302 Redirect
-- **Database changes:**
-  - `reservations.status` = 'fulfilled'
-  - New row in `borrows`:
-    - `user_id`, `book_id` from reservation
-    - `status` = 'borrowing'
-    - `borrow_date` = CURDATE()
-- **Flash message:** "อนุมัติการจองสำเร็จ"
+### 6) Steps
 
-**Success (Cancel):**
-- **HTTP Status:** 302 Redirect
-- **Database changes:**
-  - `reservations.status` = 'cancelled'
-  - `books.available` += 1
-- **Flash message:** "ยกเลิกการจองเรียบร้อย"
+```
+1. Login เป็น staff/admin
+2. ไปที่ /admin/book_form.php
+3. กรอกข้อมูล:
+   - ชื่อหนังสือ: หนังสือทดสอบ
+   - ผู้แต่ง: ผู้เขียน XYZ
+   - ISBN: 1234567890123
+   - จำนวน: 5
+   - อัปโหลดรูปปก (JPEG)
+4. กดบันทึก
+5. ตรวจ redirect ไป /admin/books.php
+6. ตรวจ flash message "เพิ่มหนังสือสำเร็จ"
+7. ตรวจ quantity = 5, available = 5
+8. ตรวจ cover_image มีไฟล์ใน uploads/covers/
+```
 
-### Failure Paths
-| Scenario | Error Message |
-|----------|---------------|
-| Reservation ไม่พบ | "ไม่พบรายการจอง" |
-| Status != pending | "รายการนี้ถูกดำเนินการแล้ว" |
-| ไม่ใช่ admin | Redirect to login |
+### 7) Expected Results
 
-### Edge Cases
-| Scenario | Expected Behavior |
-|----------|------------------|
-| **Approve ซ้ำ** | ครั้งที่ 2 เจอ "ดำเนินการแล้ว" |
-| **Cancel หลัง approved** | เจอ "ดำเนินการแล้ว" |
-| **Concurrent approve/cancel** | Transaction ป้องกัน, คนแรกได้ |
-| **Expired reservation** | ยังคง pending (ต้อง cancel manual) |
+| Aspect | Expected |
+|--------|----------|
+| books | INSERT with available = quantity |
+| cover_image | ไฟล์บันทึกใน uploads/covers/ |
+| Flash Message | "เพิ่มหนังสือสำเร็จ" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ชื่อว่าง | title="" | Error: "กรุณากรอกชื่อหนังสือ" |
+| ISBN ซ้ำ | isbn ที่มีอยู่ | Error: "ISBN นี้มีในระบบแล้ว" |
+| ไฟล์ไม่ใช่รูป | upload .txt | Error: "รองรับเฉพาะไฟล์รูปภาพ" |
+| ไฟล์เกิน 2MB | large image | Error: "ขนาดไฟล์ต้องไม่เกิน 2MB" |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Path Traversal** | filename="../../../passwd" | ชื่อไฟล์ถูก sanitize (uniqid) |
+| **Double Extension** | file.php.jpg | ตรวจ MIME จริงด้วย finfo |
 
 ---
 
-## Appendix: Common Test Data
+## Flow 9: Delete Book
 
-### Test Users
-```sql
--- Admin
-INSERT INTO users (name, email, password, role) VALUES 
-('Admin User', 'admin@test.com', '$2y$10$...', 'admin');
+### 1) Flow Name
+**Delete Book** - ลบหนังสือ
 
--- Member
-INSERT INTO users (name, email, password, role) VALUES 
-('Test Member', 'member@test.com', '$2y$10$...', 'member');
+### 2) Goal
+Staff ลบหนังสือออกจากระบบ
+
+### 3) Preconditions
+
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Book | available = quantity (ไม่มีคนยืมอยู่) |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/books.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `action` | string | ✅ | = 'delete' |
+| `id` | int | ✅ | book_id |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
+
+### 6) Steps
+
+```
+1. สร้างหนังสือใหม่ที่ไม่มีใครยืม
+2. Login เป็น staff/admin
+3. ไปที่ /admin/books.php
+4. กดปุ่ม "ลบ" ที่หนังสือที่สร้าง
+5. ยืนยันการลบ
+6. ตรวจ flash message "ลบสำเร็จ"
+7. ตรวจ books ไม่มี record นั้นแล้ว
 ```
 
-### Test Books
-```sql
-INSERT INTO books (title, author, isbn, quantity, available) VALUES 
-('Test Book 1', 'Author A', '978-0001', 5, 5),
-('Test Book 2', 'Author B', '978-0002', 1, 1),
-('Test Book 3', 'Author C', '978-0003', 2, 0); -- ไม่มีของ
-```
+### 7) Expected Results
 
-### Configuration Constants
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `MAX_BORROW_BOOKS` | 5 | จำนวน books สูงสุดต่อการยืม |
-| `DEFAULT_BORROW_DAYS` | 7 | วันยืมเริ่มต้น |
-| `FINE_PER_DAY` | 10 | ค่าปรับต่อวัน (บาท) |
-| `RESERVATION_DAYS` | 2 | วันหมดอายุการจอง |
+| Aspect | Expected |
+|--------|----------|
+| books | DELETE row |
+| File | cover image ถูกลบ |
+| Flash Message | "ลบหนังสือสำเร็จ" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| มีคนยืมอยู่ | available < quantity | Error: "ไม่สามารถลบได้" |
+| Foreign key | มี borrow history | Error หรือ cascade |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **No cover file** | หนังสือไม่มีรูปปก | ลบได้โดยไม่ error |
 
 ---
 
-## Revision History
+## Flow 10: Create Member
 
-| Date | Version | Author | Changes |
-|------|---------|--------|---------|
-| 2026-01-31 | 1.0 | QA Team | Initial document |
+### 1) Flow Name
+**Create Member** - เพิ่มสมาชิก (โดย Staff)
+
+### 2) Goal
+Staff เพิ่มสมาชิกใหม่โดยไม่ต้องรอให้สมัครเอง
+
+### 3) Preconditions
+
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Email | ต้องไม่ซ้ำ |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/member_form.php` หรือ `/api/add_member.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `name` | string | ✅ | ไม่ว่าง, ≤100 |
+| `email` | string | ✅ | email format, unique |
+| `phone` | string | ❌ | 9-10 หลัก |
+| `password` | string | ❌ | ≥6 (ถ้าไม่กรอกจะ generate) |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
+
+### 6) Steps
+
+```
+1. Login เป็น staff/admin
+2. ไปที่ /admin/member_form.php
+3. กรอกข้อมูล:
+   - ชื่อ: สมาชิกใหม่
+   - อีเมล: newmember@test.com
+   - เบอร์โทร: 0899999999
+   - รหัสผ่าน: (เว้นว่างให้ generate)
+4. กดบันทึก
+5. ตรวจ redirect + flash แสดง password
+6. ตรวจ users.role = 'member'
+7. ตรวจ password เป็น hash
+```
+
+### 7) Expected Results
+
+| Aspect | Expected |
+|--------|----------|
+| users | INSERT with role='member' |
+| password | Hashed (bcrypt) |
+| Response (API) | JSON with generated_password |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| Email ซ้ำ | email ที่มีอยู่ | Error: "อีเมลนี้มีในระบบแล้ว" |
+| Email format ผิด | "invalid" | Error: "รูปแบบอีเมลไม่ถูกต้อง" |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Auto-generate** | ไม่กรอก password | สร้าง random และแสดงให้ staff |
+
+---
+
+## Flow 11: Pay Fine
+
+### 1) Flow Name
+**Pay Fine** - ชำระค่าปรับ
+
+### 2) Goal
+Staff รับชำระค่าปรับจากสมาชิกที่คืนหนังสือเกินกำหนด
+
+### 3) Preconditions
+
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ✅ ต้อง login เป็น staff หรือ admin |
+| Borrow | status='returned', fine_amount > 0 |
+| Payment | ยังไม่มี payment record |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/admin/payments.php` |
+| Method | `POST` |
+
+### 5) Inputs
+
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `action` | string | ✅ | = 'pay' |
+| `borrow_id` | int | ✅ | borrow ที่มี fine > 0 |
+| `csrf_token` | string | ✅ | ต้องตรงกับ session |
+
+### 6) Steps
+
+```
+1. ต้องมี borrow ที่ status='returned' และ fine_amount > 0
+2. ต้องยังไม่มี payment record
+3. Login เป็น staff/admin
+4. ไปที่ /admin/payments.php
+5. กดปุ่ม "รับชำระ"
+6. ตรวจ flash message "รับชำระค่าปรับเรียบร้อย"
+7. ตรวจ payments มี record ใหม่
+8. ตรวจ payments.amount = borrow.fine_amount
+```
+
+### 7) Expected Results
+
+| Aspect | Expected |
+|--------|----------|
+| payments | INSERT new record |
+| payments.amount | = borrows.fine_amount |
+| Flash Message | "รับชำระค่าปรับเรียบร้อย" |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ไม่มีค่าปรับ | fine_amount=0 | ไม่แสดงปุ่ม |
+| จ่ายแล้ว | มี payment record | Error: "ชำระเงินแล้ว" |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **Double Submit** | กด pay 2 ครั้ง | Unique constraint ป้องกัน |
+
+---
+
+## Flow 12: Search Books API
+
+### 1) Flow Name
+**Search Books API** - ค้นหาหนังสือ
+
+### 2) Goal
+ค้นหาหนังสือสำหรับ autocomplete หรือ AJAX search
+
+### 3) Preconditions
+
+| Condition | Required State |
+|-----------|---------------|
+| Login State | ❌ ไม่จำเป็น (public API) |
+
+### 4) Trigger
+
+| Property | Value |
+|----------|-------|
+| Endpoint | `/api/search_books.php` |
+| Method | `GET` |
+| Response | JSON |
+
+### 5) Inputs
+
+| Parameter | Type | Required | Validation |
+|-----------|------|----------|------------|
+| `search` | string | ❌ | keyword |
+| `category` | int | ❌ | category_id |
+| `available` | bool | ❌ | filter available > 0 |
+
+### 6) Steps
+
+```
+1. GET /api/search_books.php?search=php
+2. ตรวจ Response: JSON array
+
+3. GET /api/search_books.php?category=1&available=1
+4. ตรวจ: หนังสือในหมวด 1 ที่ available > 0
+```
+
+### 7) Expected Results
+
+| Aspect | Expected |
+|--------|----------|
+| HTTP Status | 200 |
+| Content-Type | application/json |
+| Response | Array of book objects |
+
+### 8) Failure Paths
+
+| Scenario | Input | Expected |
+|----------|-------|----------|
+| ไม่พบ | search="ไม่มี" | Empty array [] |
+| Invalid category | category=99999 | Empty array [] |
+
+### 9) Edge Cases
+
+| Case | Test Steps | Expected |
+|------|------------|----------|
+| **SQL Injection** | search="'; DROP TABLE" | Safe (prepared statement) |
+| **Unicode** | search="日本語" | Match ถ้ามี |
+
+---
+
+## Quick Test Checklist
+
+### Authentication
+- [ ] Login success (member/staff/admin)
+- [ ] Login fail (wrong password)
+- [ ] Login rate limit
+- [ ] Register success
+- [ ] Register email duplicate
+- [ ] Logout
+
+### Borrow
+- [ ] Create borrow (single/multiple)
+- [ ] Create borrow (quota exceeded)
+- [ ] Return book (no fine)
+- [ ] Return book (with fine)
+- [ ] Pay fine
+
+### Reservation
+- [ ] Create reservation
+- [ ] Create reservation (duplicate/no stock)
+- [ ] Fulfill reservation
+- [ ] Cancel reservation
+
+### CRUD
+- [ ] Create/Update/Delete book
+- [ ] Create/Update/Delete member
+
+### Security
+- [ ] CSRF protection
+- [ ] Rate limiting
+- [ ] Session fixation prevention
+- [ ] Authorization checks
+
+---
+
+*เอกสารนี้อ้างอิงจากโค้ดจริง ไม่มีการเดาหรือแต่งเพิ่ม*

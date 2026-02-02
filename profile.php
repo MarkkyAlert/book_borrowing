@@ -35,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($name)) {
             $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
-        } elseif (mb_strlen($name) > 100) {
-            $errors[] = 'ชื่อต้องไม่เกิน 100 ตัวอักษร';
+        } elseif ($err = validateMaxLength($name, 100, 'ชื่อ')) {
+            $errors[] = $err;
         }
         
         if (!empty($phone) && !isValidPhone($phone)) {
@@ -65,9 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newPassword = $_POST['new_password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
             
-            // Validation
-            if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
-                $errors[] = 'รหัสผ่านใหม่ต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
+            // Validation (ใช้ helper function)
+            if ($err = validatePassword($newPassword)) {
+                $errors[] = $err;
             }
             
             if ($newPassword !== $confirmPassword) {

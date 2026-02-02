@@ -38,11 +38,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation (ใช้ค่าคงที่ MIN_PASSWORD_LENGTH เดียวกับทั้งระบบ)
-    if (empty($errors) && empty($password)) {
-        $errors[] = 'กรุณากรอกรหัสผ่านใหม่';
-    } elseif (strlen($password) < MIN_PASSWORD_LENGTH) {
-        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
+    // Validation (ใช้ helper function เป็น single source of truth)
+    if (empty($errors)) {
+        if ($err = validatePassword($password)) {
+            $errors[] = $err;
+        }
     }
     
     if ($password !== $confirmPassword) {

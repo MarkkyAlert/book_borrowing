@@ -11,11 +11,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
     } else {
-        updateSetting('org_name', $_POST['org_name']);
-        updateSetting('card_color_primary', $_POST['card_color_primary']);
-        updateSetting('card_color_secondary', $_POST['card_color_secondary']);
+        // [VALIDATION] ตรวจสอบค่าก่อนบันทึก
+        $orgName = trim($_POST['org_name'] ?? '');
+        $colorPrimary = trim($_POST['card_color_primary'] ?? '#1e3a8a');
+        $colorSecondary = trim($_POST['card_color_secondary'] ?? '#3b82f6');
         
-        setFlash('success', 'บันทึกการตั้งค่าเรียบร้อยแล้ว');
+        $errors = [];
+        
+        if (empty($orgName)) {
+            $errors[] = 'กรุณากรอกชื่อหน่วยงาน';
+        } elseif (mb_strlen($orgName) > 100) {
+            $errors[] = 'ชื่อหน่วยงานต้องไม่เกิน 100 ตัวอักษร';
+        }
+        
+        // Validate color format (#XXXXXX)
+        if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $colorPrimary)) {
+            $errors[] = 'รูปแบบสีหลักไม่ถูกต้อง';
+        }
+        if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $colorSecondary)) {
+            $errors[] = 'รูปแบบสีรองไม่ถูกต้อง';
+        }
+        
+        if (!empty($errors)) {
+            setFlash('error', implode('<br>', $errors), true);
+        } else {
+            updateSetting('org_name', $orgName);
+            updateSetting('card_color_primary', $colorPrimary);
+            updateSetting('card_color_secondary', $colorSecondary);
+            
+            setFlash('success', 'บันทึกการตั้งค่าเรียบร้อยแล้ว');
+        }
         redirect('settings.php');
     }
 }

@@ -1,4 +1,4 @@
-# Project Structure - โครงสร้างโปรเจกต์ระบบยืมคืนหนังสือ
+# Project Structure - ระบบยืมคืนหนังสือ
 
 เอกสารนี้อธิบายโครงสร้างโปรเจกต์เพื่อให้เจ้าของโปรเจกต์เข้าใจและอ่านโค้ดต่อได้
 
@@ -8,469 +8,562 @@
 
 ```
 book_borrowing/
-├── admin/              # หน้า Admin (Staff/Admin only)
-├── api/                # API Endpoints (AJAX/Public)
-├── app/                # Application Layer (Business Logic)
-│   ├── Config/         # Configuration classes
-│   ├── Helpers/        # Utility functions (namespaced)
-│   ├── Repositories/   # Data Access Layer (SQL)
-│   └── Services/       # Business Logic Layer
-├── css/                # Stylesheets
-├── database/           # SQL Schema & Migrations
-├── docs/               # Documentation
-├── includes/           # Shared PHP includes
-├── tests/              # Test files
-├── uploads/            # User uploads (covers)
-│   └── covers/         # Book cover images
-├── index.php           # Homepage (Public)
-├── login.php           # Login page
-├── register.php        # Registration page
-├── profile.php         # User profile
-├── book.php            # Book detail page
-├── bootstrap.php       # Application bootstrap (Phase 2)
-└── install.php         # Installation wizard
+│
+├── *.php                    # Public Entry Points (หน้าเว็บสาธารณะ)
+│   ├── index.php            # หน้าแรก - แสดงรายการหนังสือ
+│   ├── login.php            # เข้าสู่ระบบ
+│   ├── logout.php           # ออกจากระบบ
+│   ├── register.php         # สมัครสมาชิก
+│   ├── book.php             # รายละเอียดหนังสือ
+│   ├── profile.php          # โปรไฟล์ผู้ใช้
+│   ├── forgot_password.php  # ลืมรหัสผ่าน
+│   ├── reset_password.php   # รีเซ็ตรหัสผ่าน
+│   ├── install.php          # ติดตั้งระบบ (ใช้ครั้งแรก)
+│   └── bootstrap.php        # ⭐ จุดเริ่มต้นทุก request
+│
+├── admin/                   # Admin Panel (Staff/Admin only)
+│   ├── index.php            # Dashboard
+│   ├── books.php            # จัดการหนังสือ
+│   ├── book_form.php        # เพิ่ม/แก้ไขหนังสือ
+│   ├── members.php          # จัดการสมาชิก
+│   ├── member_form.php      # เพิ่ม/แก้ไขสมาชิก
+│   ├── borrows.php          # จัดการการยืม
+│   ├── borrow_form.php      # บันทึกการยืม
+│   ├── reservations.php     # จัดการการจอง
+│   ├── payments.php         # จัดการการชำระเงิน
+│   ├── categories.php       # จัดการหมวดหมู่
+│   ├── reports.php          # รายงาน
+│   ├── settings.php         # ตั้งค่าระบบ (Admin only)
+│   ├── import_*.php         # นำเข้าข้อมูล
+│   ├── export_*.php         # ส่งออกข้อมูล
+│   ├── header.php           # Header template (admin)
+│   └── footer.php           # Footer template (admin)
+│
+├── api/                     # JSON API Endpoints
+│   ├── search_books.php     # ค้นหาหนังสือ (public)
+│   ├── reserve_book.php     # จองหนังสือ (member+)
+│   └── add_member.php       # เพิ่มสมาชิก (staff+)
+│
+├── app/                     # Application Logic Layer
+│   ├── Services/            # ⭐ Business Logic
+│   │   ├── AuthService.php
+│   │   ├── BookService.php
+│   │   ├── BorrowService.php
+│   │   ├── ReservationService.php
+│   │   ├── MemberService.php
+│   │   ├── DashboardService.php
+│   │   ├── ReportService.php
+│   │   └── HomeService.php
+│   │
+│   └── Repositories/        # ⭐ Database Access (SQL)
+│       ├── BookRepository.php
+│       ├── BorrowRepository.php
+│       ├── UserRepository.php
+│       ├── ReservationRepository.php
+│       ├── CategoryRepository.php
+│       ├── PaymentRepository.php
+│       ├── SettingsRepository.php
+│       ├── PasswordResetRepository.php
+│       └── ReportRepository.php
+│
+├── includes/                # Shared Components
+│   ├── config.php           # ⭐ ค่าคงที่ทั้งระบบ
+│   ├── db.php               # ⭐ PDO Connection (Singleton)
+│   ├── functions.php        # ⭐ Helper functions ทั้งหมด
+│   ├── header.php           # Header template (public)
+│   ├── footer.php           # Footer template (public)
+│   ├── book_grid.php        # Book grid component
+│   └── modal.js             # Modal JavaScript
+│
+├── database/                # Database Files
+│   ├── schema.sql           # โครงสร้างตาราง
+│   ├── sample_data.sql      # ข้อมูลตัวอย่าง
+│   └── migrations/          # Migration files
+│
+├── uploads/                 # User Uploads
+│   ├── .htaccess            # Security (deny direct access)
+│   └── covers/              # รูปปกหนังสือ
+│
+├── cron/                    # Scheduled Tasks
+│   ├── expire_reservations.php  # หมดอายุการจอง
+│   └── cleanup_tokens.php       # ลบ token หมดอายุ
+│
+├── logs/                    # Log Files
+├── css/                     # Stylesheets
+├── tests/                   # Test Files
+├── docs/                    # Documentation
+│
+├── .env.example             # Environment template
+├── .env                     # Environment variables (ไม่ commit)
+└── .gitignore
 ```
 
 ---
 
 ## 2. บทบาทของแต่ละโฟลเดอร์
 
-### 2.1 Root Level (/) - Public Pages
+### 2.1 Root PHP Files (Public Entry Points)
 
-| ไฟล์ | หน้าที่ |
-|------|--------|
-| `index.php` | หน้าแรก - แสดงรายการหนังสือ, ค้นหา, กรอง |
-| `login.php` | หน้า Login |
-| `register.php` | หน้าสมัครสมาชิก |
-| `logout.php` | ออกจากระบบ (clear session) |
-| `profile.php` | หน้าโปรไฟล์ผู้ใช้ (ต้อง login) |
-| `book.php` | หน้ารายละเอียดหนังสือ |
-| `forgot_password.php` | ขอรีเซ็ตรหัสผ่าน |
-| `reset_password.php` | รีเซ็ตรหัสผ่านด้วย token |
-| `install.php` | ติดตั้งระบบ (สร้าง database) |
-| `bootstrap.php` | Bootstrap file (เตรียมไว้ Phase 2) |
+| ไฟล์ | บทบาท | ใครเข้าถึงได้ |
+|------|-------|--------------|
+| `index.php` | หน้าแรก - แสดงหนังสือทั้งหมด, filter, search | ทุกคน |
+| `book.php` | รายละเอียดหนังสือ, ปุ่มจอง | ทุกคน (จองได้เฉพาะ member) |
+| `login.php` | ฟอร์มเข้าสู่ระบบ + rate limiting | ทุกคน |
+| `register.php` | ฟอร์มสมัครสมาชิก + validation | ทุกคน |
+| `profile.php` | ดู/แก้ไขโปรไฟล์, ประวัติยืม | member+ |
+| `logout.php` | ทำลาย session | member+ |
+| `forgot_password.php` | ขอ reset password | ทุกคน |
+| `reset_password.php` | ตั้งรหัสผ่านใหม่ | ทุกคน (ต้องมี token) |
+| `install.php` | ติดตั้งระบบครั้งแรก | ทุกคน (ใช้ครั้งเดียว) |
+| `bootstrap.php` | **โหลดทุก request** - config, db, helpers, autoloader | - |
 
-**Pattern:** ไฟล์ root level ทำหน้าที่เป็น "Controller" - รับ request, เรียก business logic, render view
+### 2.2 admin/ (Admin Panel)
 
----
+**Access:** ต้อง login + role = staff หรือ admin
 
-### 2.2 admin/ - หน้า Admin Panel
-
-| ไฟล์ | หน้าที่ |
-|------|--------|
-| `index.php` | Dashboard - สถิติรวม, Charts |
-| `books.php` | รายการหนังสือ + ลบหนังสือ |
-| `book_form.php` | ฟอร์มเพิ่ม/แก้ไขหนังสือ |
-| `borrows.php` | รายการยืม + คืนหนังสือ |
-| `borrow_form.php` | ฟอร์มบันทึกการยืม |
-| `members.php` | รายการสมาชิก + ลบสมาชิก |
-| `member_form.php` | ฟอร์มเพิ่ม/แก้ไขสมาชิก |
-| `categories.php` | จัดการหมวดหมู่ (CRUD ใน 1 ไฟล์) |
-| `reservations.php` | จัดการการจอง (อนุมัติ/ยกเลิก) |
+| ไฟล์ | บทบาท |
+|------|-------|
+| `index.php` | Dashboard - สถิติ, รายการเร่งด่วน |
+| `books.php` | รายการหนังสือ + filter + ลบ |
+| `book_form.php` | เพิ่ม/แก้ไขหนังสือ + upload cover |
+| `members.php` | รายการสมาชิก + filter |
+| `member_form.php` | เพิ่ม/แก้ไขสมาชิก |
+| `borrows.php` | รายการยืม + คืนหนังสือ + รับค่าปรับ |
+| `borrow_form.php` | บันทึกการยืม (scan/เลือกหนังสือ) |
+| `reservations.php` | รายการจอง + อนุมัติ/ยกเลิก |
 | `payments.php` | รายการชำระค่าปรับ |
-| `reports.php` | รายงานต่างๆ + Export CSV |
-| `settings.php` | ตั้งค่าระบบ |
+| `categories.php` | จัดการหมวดหมู่หนังสือ |
+| `reports.php` | รายงานสถิติต่างๆ |
+| `settings.php` | ตั้งค่าระบบ (**Admin only**) |
 | `import_books.php` | นำเข้าหนังสือจาก CSV |
 | `import_members.php` | นำเข้าสมาชิกจาก CSV |
-| `ajax_add_member.php` | AJAX: เพิ่มสมาชิกด่วน |
-| `book_labels.php` | พิมพ์ label/barcode |
+| `export_pdf.php` | ส่งออก PDF |
+| `book_labels.php` | พิมพ์ป้ายหนังสือ |
 | `member_card.php` | พิมพ์บัตรสมาชิก |
-| `export_pdf.php` | Export PDF |
-| `header.php` | Admin header/nav |
-| `footer.php` | Admin footer |
 
-**Access Control:**
-- ทุกไฟล์เรียก `requireStaff()` หรือ `requireAdmin()` ที่บรรทัดแรก
-- `requireStaff()` = admin หรือ staff เข้าได้
-- `requireAdmin()` = เฉพาะ admin (เช่น settings.php)
+### 2.3 api/ (JSON API Endpoints)
 
----
+**Response:** JSON เท่านั้น (`Content-Type: application/json`)
 
-### 2.3 api/ - API Endpoints
+| ไฟล์ | Method | บทบาท | Auth |
+|------|--------|-------|------|
+| `search_books.php` | GET | ค้นหาหนังสือ (AJAX autocomplete) | ไม่ต้อง |
+| `reserve_book.php` | POST | จองหนังสือ | member+ |
+| `add_member.php` | POST | Quick add สมาชิก | staff+ |
 
-| ไฟล์ | หน้าที่ |
-|------|--------|
-| `search_books.php` | AJAX: ค้นหาหนังสือ (return HTML partial) |
-| `reserve_book.php` | AJAX: จองหนังสือ (return JSON) |
+### 2.4 app/Services/ (Business Logic Layer)
 
-**Pattern:**
-```
-1. Validate input
-2. เรียก Repository/Service
-3. Return response (HTML หรือ JSON)
-```
+**บทบาท:** จัดการ business logic, transactions, validation rules
 
-**หมายเหตุ:** `search_books.php` return HTML partial (ไม่ใช่ JSON) เพราะใช้กับ AJAX ที่ต้องการ replace innerHTML โดยตรง
-
----
-
-### 2.4 includes/ - Shared PHP Files
-
-| ไฟล์ | หน้าที่ |
-|------|--------|
-| `config.php` | **Configuration หลัก** - อ่าน .env, define constants |
-| `db.php` | Database connection (PDO Singleton) |
-| `functions.php` | **Helper functions หลัก** - auth, CSRF, validation, flash |
-| `header.php` | Public header (HTML head, nav) |
-| `footer.php` | Public footer |
-| `book_grid.php` | Partial: แสดง grid หนังสือ (ใช้ซ้ำ) |
-
-**สำคัญ:** `includes/functions.php` คือ "Single Source of Truth" สำหรับ:
-- Authentication (`isLoggedIn`, `isAdmin`, `isStaff`)
-- Authorization (`requireLogin`, `requireAdmin`, `requireStaff`)
-- CSRF (`generateCSRFToken`, `validateCSRFToken`)
-- Flash messages (`setFlash`, `getFlash`, `displayFlash`)
-- Validation (`isValidEmail`, `isValidPhone`)
-- Output (`e` สำหรับ XSS protection)
-
----
-
-### 2.5 app/ - Application Layer
-
-```
-app/
-├── Config/
-│   └── settings.php    # Settings class (Phase 2)
-├── Helpers/
-│   └── functions.php   # Namespaced utility functions
-├── Repositories/       # Data Access Layer
-│   ├── BookRepository.php
-│   ├── BorrowRepository.php
-│   ├── CategoryRepository.php
-│   └── UserRepository.php
-└── Services/           # Business Logic Layer
-    ├── BookService.php
-    ├── BorrowService.php
-    ├── MemberService.php
-    ├── ReportService.php
-    └── ReservationService.php
-```
-
-#### 2.5.1 Repositories/ - Data Access Layer
-
-**หน้าที่:** อ่าน/เขียน Database เท่านั้น (CRUD operations)
-**ห้าม:** Business logic, validation, authorization
-
-| Repository | Tables |
-|------------|--------|
-| `BookRepository` | books |
-| `BorrowRepository` | borrows |
-| `CategoryRepository` | categories |
-| `UserRepository` | users |
-
-**Pattern:**
-```php
-class BookRepository {
-    public function findAll(array $filters = []): array
-    public function findById(int $id): ?array
-    public function create(array $data): int
-    public function update(int $id, array $data): bool
-    public function delete(int $id): bool
-    public function findByIdForUpdate(int $id): ?array  // FOR UPDATE lock
-}
-```
-
-#### 2.5.2 Services/ - Business Logic Layer
-
-**หน้าที่:** Business logic, validation, transaction management
-**เรียก:** Repository สำหรับ database access
-
-| Service | หน้าที่ |
-|---------|--------|
-| `BorrowService` | ยืม/คืนหนังสือ, คำนวณค่าปรับ |
-| `ReservationService` | จองหนังสือ, ยกเลิกการจอง |
-| `BookService` | Logic เกี่ยวกับหนังสือ |
-| `MemberService` | Logic เกี่ยวกับสมาชิก |
+| Service | ความรับผิดชอบ |
+|---------|--------------|
+| `AuthService` | Login, register, password reset, เปลี่ยนรหัสผ่าน |
+| `BookService` | CRUD หนังสือ, ตรวจ ISBN ซ้ำ, จัดการ cover |
+| `BorrowService` | ⭐ ยืม/คืน/คำนวณค่าปรับ - core ของระบบ |
+| `ReservationService` | จอง/อนุมัติ/ยกเลิก/หมดอายุ |
+| `MemberService` | CRUD สมาชิก |
+| `DashboardService` | รวบรวมข้อมูล dashboard |
 | `ReportService` | สร้างรายงาน |
+| `HomeService` | ข้อมูลหน้าแรก (หนังสือใหม่, ยอดนิยม) |
 
-**Pattern:**
-```php
-class BorrowService {
-    public function createBorrow(int $userId, array $bookIds): array
-    public function returnBook(int $borrowId, bool $payNow = false): array
-    public function calculateFine(string $dueDate): array
-}
-```
+### 2.5 app/Repositories/ (Data Access Layer)
 
----
+**บทบาท:** SQL queries เท่านั้น - ไม่มี business logic
 
-### 2.6 database/ - SQL Files
+| Repository | ตาราง | หมายเหตุ |
+|------------|-------|---------|
+| `BookRepository` | `books` | มี `findByIdForUpdate()` สำหรับ locking |
+| `BorrowRepository` | `borrows` | มี `findByIdForUpdate()`, `countActiveBorrowsForUpdate()` |
+| `UserRepository` | `users` | มี `findByEmail()` สำหรับ login |
+| `ReservationRepository` | `reservations` | มี `findPendingForUpdate()` |
+| `CategoryRepository` | `categories` | รวม `findAllWithBookCount()` |
+| `PaymentRepository` | `payments` | บันทึกการชำระค่าปรับ |
+| `SettingsRepository` | `settings` | key-value settings |
+| `PasswordResetRepository` | `password_resets` | tokens สำหรับ reset password |
+| `ReportRepository` | หลายตาราง | queries สำหรับ reports |
 
-| ไฟล์/โฟลเดอร์ | หน้าที่ |
-|--------------|--------|
-| `schema.sql` | โครงสร้างตาราง (CREATE TABLE) |
-| `sample_data.sql` | ข้อมูลตัวอย่าง |
-| `create_password_resets.sql` | ตาราง password_resets |
-| `migrations/` | SQL migrations |
-| `migrations/migrate_fines_roles.sql` | เพิ่ม roles, payments |
-| `migrations/migrate_quantity.sql` | เพิ่ม quantity/available |
-| `migrations/migrate_reservations.sql` | เพิ่ม reservations |
+### 2.6 includes/ (Shared Components)
 
----
+| ไฟล์ | บทบาท |
+|------|-------|
+| `config.php` | ค่าคงที่ทั้งระบบ (อ่านจาก `.env`) |
+| `db.php` | PDO connection (Singleton pattern) |
+| `functions.php` | ⭐ Helper functions ทุกประเภท |
+| `header.php` | HTML header (public pages) |
+| `footer.php` | HTML footer (public pages) |
+| `book_grid.php` | Book card component |
+| `modal.js` | JavaScript สำหรับ modals |
 
-### 2.7 uploads/ - User Uploads
+### 2.7 โฟลเดอร์อื่นๆ
 
-```
-uploads/
-└── covers/             # Book cover images
-    └── cover_*.png     # Format: cover_{timestamp}_{random}.ext
-```
-
-**Security:**
-- ตรวจ MIME type ก่อน upload
-- ใช้ชื่อไฟล์ที่สร้างใหม่ (ไม่ใช้ชื่อเดิมจาก user)
+| โฟลเดอร์ | บทบาท |
+|---------|-------|
+| `database/` | SQL schema, migrations, sample data |
+| `uploads/` | ไฟล์ที่ user upload (มี .htaccess ป้องกัน) |
+| `cron/` | Scripts ที่รันตามเวลา (via cron job) |
+| `logs/` | Log files |
+| `css/` | Stylesheets |
+| `tests/` | Test files |
+| `docs/` | Documentation |
 
 ---
 
 ## 3. Entry Points สำคัญที่ควรอ่านก่อน
 
-### 3.1 ไฟล์ Configuration & Setup
+### ลำดับแนะนำ (5-8 ไฟล์)
 
-| ลำดับ | ไฟล์ | เหตุผลที่ควรอ่าน |
-|-------|------|-----------------|
-| 1 | `includes/config.php` | เข้าใจ constants ทั้งหมด (DB, borrow settings, app settings) |
-| 2 | `includes/db.php` | เข้าใจ database connection (PDO options, Singleton) |
-| 3 | `includes/functions.php` | เข้าใจ helper functions ที่ใช้ทั้งระบบ (auth, CSRF, validation) |
+| ลำดับ | ไฟล์ | เหตุผลที่ต้องอ่าน |
+|-------|------|------------------|
+| **1** | `bootstrap.php` | **จุดเริ่มต้นทุก request** - เข้าใจว่าระบบโหลดอะไรบ้าง |
+| **2** | `includes/config.php` | **ค่าคงที่ทั้งหมด** - business rules, limits, timeouts |
+| **3** | `includes/functions.php` | **Helper ทั้งหมด** - auth, CSRF, validation, rate limit |
+| **4** | `includes/db.php` | **DB connection** - Singleton pattern, PDO config |
+| **5** | `login.php` | **ตัวอย่าง auth flow** - rate limit, session, redirect |
+| **6** | `app/Services/BorrowService.php` | **Core business logic** - ยืม/คืน/ค่าปรับ |
+| **7** | `admin/borrows.php` | **ตัวอย่าง admin page** - CSRF, idempotency, state change |
+| **8** | `api/reserve_book.php` | **ตัวอย่าง API** - JSON response, auth check |
 
-### 3.2 ไฟล์ Flow หลัก
+### รายละเอียดแต่ละไฟล์
 
-| ลำดับ | ไฟล์ | เหตุผลที่ควรอ่าน |
-|-------|------|-----------------|
-| 4 | `login.php` | เข้าใจ authentication flow, session, rate limiting |
-| 5 | `admin/borrow_form.php` | เข้าใจ core business flow (ยืมหนังสือ), CSRF, transaction |
-| 6 | `app/Services/BorrowService.php` | เข้าใจ business logic layer, transaction, fine calculation |
-| 7 | `app/Repositories/BookRepository.php` | เข้าใจ data access pattern |
-| 8 | `api/reserve_book.php` | เข้าใจ API pattern (JSON response, error handling) |
-
----
-
-## 4. Request → Response Flow
-
-### 4.1 ภาพรวม Flow
-
+#### 1. bootstrap.php
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           BROWSER                                    │
-│                         (HTTP Request)                               │
-└─────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. ENTRY POINT (PHP File)                                          │
-│     ─────────────────────────────────────────────────────────────   │
-│     • login.php, admin/books.php, api/reserve_book.php              │
-│     • Load: includes/functions.php, includes/db.php                 │
-│     • Check: auth (requireLogin/requireStaff/requireAdmin)          │
-│     • Check: CSRF token (POST requests)                             │
-└─────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  2. CONTROLLER LOGIC (ใน PHP File เดียวกัน)                          │
-│     ─────────────────────────────────────────────────────────────   │
-│     • Validate input ($_GET, $_POST)                                │
-│     • เรียก Service หรือ Repository                                  │
-│     • Handle errors                                                  │
-└─────────────────────────────────────────────────────────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    ▼                         ▼
-┌─────────────────────────────┐   ┌─────────────────────────────┐
-│  3a. SERVICE LAYER          │   │  3b. REPOSITORY LAYER       │
-│      (Business Logic)       │   │      (Simple CRUD)          │
-│  ─────────────────────────  │   │  ─────────────────────────  │
-│  • BorrowService            │   │  • BookRepository           │
-│  • ReservationService       │   │  • UserRepository           │
-│  • Transaction management   │   │  • Direct DB access         │
-│  • Business rules           │   │  • No business logic        │
-│  • Fine calculation         │   │                             │
-└─────────────────────────────┘   └─────────────────────────────┘
-                    │                         │
-                    └────────────┬────────────┘
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  4. DATABASE (PDO)                                                   │
-│     ─────────────────────────────────────────────────────────────   │
-│     • MySQL / MariaDB                                                │
-│     • Prepared statements                                            │
-│     • Transactions (BEGIN / COMMIT / ROLLBACK)                       │
-└─────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  5. RESPONSE                                                         │
-│     ─────────────────────────────────────────────────────────────   │
-│     • HTML Page (includes/header.php + content + includes/footer)   │
-│     • HTML Partial (api/search_books.php)                           │
-│     • JSON (api/reserve_book.php)                                   │
-│     • Redirect + Flash message                                       │
-└─────────────────────────────────────────────────────────────────────┘
+ทุกหน้าเริ่มต้นที่นี่:
+- require 'includes/config.php'   → ค่าคงที่
+- require 'includes/db.php'       → getDB() function
+- require 'includes/functions.php' → helpers
+- spl_autoload_register()         → autoload app/ classes
 ```
 
-### 4.2 ตัวอย่าง Flow: การยืมหนังสือ
-
+#### 2. includes/config.php
 ```
-1. Browser → POST /admin/borrow_form.php
-   ├── Headers: Cookie (session_id)
-   └── Body: csrf_token, user_id, book_ids[], borrow_days
+ค่าที่ต้องรู้:
+- DEFAULT_BORROW_DAYS = 7
+- MAX_BORROW_BOOKS = 3
+- FINE_PER_DAY = 10
+- RATE_LIMIT_MAX_ATTEMPTS = 5
+- SESSION_LIFETIME = 3600
+```
 
-2. borrow_form.php (Entry Point)
-   ├── require includes/functions.php
-   ├── require includes/db.php
-   ├── requireStaff()           ← ตรวจสิทธิ์
-   └── validateCSRFToken()      ← ตรวจ CSRF
+#### 3. includes/functions.php
+```
+Functions สำคัญ:
+Security:     e(), generateCSRFToken(), validateCSRFToken()
+Auth:         isLoggedIn(), isStaff(), isAdmin()
+Access:       requireLogin(), requireStaff(), requireAdmin()
+Rate Limit:   checkRateLimit(), incrementRateLimit()
+Validation:   isValidEmail(), isValidPhone(), validatePassword()
+UI:           setFlash(), getFlash(), redirect()
+```
 
-3. borrow_form.php (Controller Logic)
-   ├── Validate input
-   ├── new BorrowService($pdo)
-   └── $service->createBorrow($userId, $bookIds)
+#### 4. login.php
+```
+Flow ที่ควรเข้าใจ:
+1. Rate limit check
+2. Input validation
+3. AuthService::login()
+4. Session regeneration (ป้องกัน fixation)
+5. Role-based redirect
+```
 
-4. BorrowService::createBorrow() (Service Layer)
-   ├── $pdo->beginTransaction()
-   ├── SELECT ... FOR UPDATE    ← Lock rows
-   ├── Check quota (MAX_BORROW_BOOKS)
-   ├── Check availability
-   ├── INSERT INTO borrows
-   ├── UPDATE books SET available = available - 1
-   └── $pdo->commit()
+#### 5. app/Services/BorrowService.php
+```
+Methods หลัก:
+- createBorrow()   → ยืมหนังสือ (transaction + locking)
+- returnBook()     → คืน + คำนวณค่าปรับ
+- calculateFine()  → สูตรค่าปรับ
+- payFine()        → รับค่าปรับ
+```
 
-5. Response
-   ├── setFlash('success', 'บันทึกการยืมสำเร็จ')
-   └── redirect('borrows.php')
+#### 6. admin/borrows.php
+```
+Pattern ที่ควรเรียนรู้:
+1. requireStaff()           → access control
+2. validateCSRFToken()      → CSRF protection
+3. idempotency check        → ป้องกัน double-submit
+4. Service method call      → business logic
+5. setFlash() + redirect()  → user feedback
 ```
 
 ---
 
-## 5. Boundary ระหว่าง Layers
+## 4. Boundary ระหว่าง Layers
 
-### 5.1 แผนภาพ Layer
+### 4.1 Layer Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PRESENTATION LAYER                            │
-│  ─────────────────────────────────────────────────────────────  │
-│  • PHP Files (*.php ที่ root และ admin/)                         │
-│  • includes/header.php, footer.php                              │
-│  • HTML output, form handling                                    │
-│                                                                  │
-│  ✓ รับ input จาก user                                            │
-│  ✓ แสดงผล HTML                                                   │
-│  ✓ Redirect & Flash messages                                     │
-│  ✗ ห้ามมี business logic ซับซ้อน                                  │
-│  ✗ ห้ามเขียน SQL โดยตรง (ยกเว้น simple queries)                  │
+│                     Entry Points                                │
+│  *.php (root)  │  admin/*.php  │  api/*.php                    │
+│                                                                 │
+│  ✓ รับ HTTP Request                                             │
+│  ✓ Auth Check (requireLogin, requireStaff, requireAdmin)       │
+│  ✓ CSRF Check (validateCSRFToken)                              │
+│  ✓ Rate Limit (checkRateLimit)                                 │
+│  ✓ Input Sanitization (trim, intval, etc.)                     │
+│  ✓ Basic Validation                                            │
+│  ✗ ห้ามเขียน SQL                                               │
+│  ✗ ห้ามมี business logic ซับซ้อน                               │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼
+                              ▼ Validated Data
 ┌─────────────────────────────────────────────────────────────────┐
-│                    BUSINESS LOGIC LAYER                          │
-│  ─────────────────────────────────────────────────────────────  │
-│  • app/Services/*.php                                            │
-│                                                                  │
-│  ✓ Business rules (ยืมได้ไม่เกิน 3 เล่ม)                          │
-│  ✓ Calculations (ค่าปรับ)                                        │
-│  ✓ Transaction management                                        │
-│  ✓ Concurrency control (FOR UPDATE)                             │
-│  ✓ Validation ที่เป็น business rule                              │
-│  ✗ ห้ามมี HTML                                                   │
-│  ✗ ห้ามเข้าถึง $_GET, $_POST, $_SESSION โดยตรง                   │
+│                     Service Layer                               │
+│                   app/Services/*.php                            │
+│                                                                 │
+│  ✓ Business Logic & Rules                                      │
+│  ✓ Transaction Management (begin/commit/rollback)              │
+│  ✓ Complex Validation (quota check, availability)              │
+│  ✓ Coordinate multiple Repository calls                        │
+│  ✓ Throw Exception on failure                                  │
+│  ✗ ห้ามเขียน SQL โดยตรง                                        │
+│  ✗ ห้ามเข้าถึง $_GET, $_POST, $_SESSION                        │
+│  ✗ ห้าม echo/output                                            │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼
+                              ▼ Repository Method Calls
 ┌─────────────────────────────────────────────────────────────────┐
-│                    DATA ACCESS LAYER                             │
-│  ─────────────────────────────────────────────────────────────  │
-│  • app/Repositories/*.php                                        │
-│                                                                  │
-│  ✓ CRUD operations                                               │
-│  ✓ SQL queries                                                   │
-│  ✓ Return raw data (arrays)                                      │
-│  ✗ ห้ามมี business logic                                         │
-│  ✗ ห้ามมี transaction (ยกเว้น findForUpdate)                     │
+│                    Repository Layer                             │
+│                 app/Repositories/*.php                          │
+│                                                                 │
+│  ✓ SQL Queries (SELECT, INSERT, UPDATE, DELETE)                │
+│  ✓ Prepared Statements (? placeholders)                        │
+│  ✓ Row Locking (FOR UPDATE)                                    │
+│  ✓ Return arrays                                               │
+│  ✗ ห้ามมี business logic                                       │
+│  ✗ ห้าม validate                                               │
+│  ✗ ห้ามจัดการ transaction (ปล่อยให้ Service จัดการ)             │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼
+                              ▼ PDO Queries
 ┌─────────────────────────────────────────────────────────────────┐
-│                    DATABASE LAYER                                │
-│  ─────────────────────────────────────────────────────────────  │
-│  • includes/db.php (PDO connection)                              │
-│  • MySQL / MariaDB                                               │
+│                      Database (MySQL)                           │
+│                                                                 │
+│  Tables: users, books, categories, borrows, reservations,      │
+│          payments, password_resets, settings                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 ตำแหน่ง Logic ที่ถูกต้อง
-
-| Logic Type | ที่ควรอยู่ | ตัวอย่าง |
-|------------|-----------|----------|
-| **Input Validation** | Controller (PHP file) | `empty($_POST['email'])` |
-| **Format Validation** | `includes/functions.php` | `isValidEmail()`, `isValidPhone()` |
-| **Business Validation** | Service | ยืมเกินโควต้าไหม? หนังสือว่างไหม? |
-| **Authorization** | Controller + `functions.php` | `requireStaff()`, `isAdmin()` |
-| **CSRF Check** | Controller | `validateCSRFToken()` |
-| **Database Query** | Repository | `findAll()`, `create()` |
-| **Transaction** | Service | `beginTransaction()`, `commit()` |
-| **Fine Calculation** | Service | `calculateFine()` |
-
-### 5.3 การเรียกข้าม Layer
+### 4.2 Helper Functions Layer
 
 ```
-✓ ถูกต้อง:
-  Controller → Service → Repository → Database
+┌─────────────────────────────────────────────────────────────────┐
+│                    includes/functions.php                       │
+│                                                                 │
+│  ✓ Utility functions (e, redirect, formatDate)                 │
+│  ✓ Auth helpers (isLoggedIn, isStaff, requireLogin)            │
+│  ✓ Security helpers (generateCSRFToken, validateCSRFToken)     │
+│  ✓ Validation helpers (isValidEmail, validatePassword)         │
+│  ✓ Rate limiting (checkRateLimit, incrementRateLimit)          │
+│  ✓ Flash messages (setFlash, getFlash)                         │
+│  ✗ ห้ามเขียน SQL (ยกเว้น getCurrentUser ที่ cache ใน session)  │
+│  ✗ ห้ามมี business logic                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-✗ ผิด:
-  Controller → Database (ข้าม Service/Repository)
-  Service → $_POST (Service ไม่ควรเข้าถึง superglobals)
-  Repository → business logic (Repository ทำแค่ CRUD)
+### 4.3 ตัวอย่าง Request Flow
+
+**Flow: สมาชิกจองหนังสือ**
+
+```
+1. Browser POST → api/reserve_book.php
+   │
+   ├─ require bootstrap.php (โหลด config, db, functions)
+   ├─ isLoggedIn() check
+   ├─ validateCSRFToken() check
+   ├─ $bookId = intval($_POST['book_id'])
+   │
+   ▼
+2. ReservationService::createReservation($userId, $bookId)
+   │
+   ├─ $this->pdo->beginTransaction()
+   ├─ $book = $this->bookRepo->findByIdForUpdate($bookId)  ← lock
+   ├─ ตรวจ $book['available'] > 0
+   ├─ ตรวจ pending reservation ซ้ำ
+   ├─ $this->bookRepo->decrementAvailable($bookId)
+   ├─ $this->reservationRepo->create([...])
+   ├─ $this->pdo->commit()
+   │
+   ▼
+3. JSON Response
+   echo json_encode(['success' => true, 'message' => '...'])
+```
+
+### 4.4 กฎสำคัญ
+
+| Layer | ควรทำ | ห้ามทำ |
+|-------|-------|--------|
+| **Entry Point** | Auth, CSRF, input sanitization, เรียก Service | SQL, complex logic |
+| **Service** | Business logic, transactions, เรียก Repository | SQL ตรงๆ, $_POST, output |
+| **Repository** | SQL queries, prepared statements | Business logic, validation |
+| **Helpers** | Utility functions, formatting | SQL, business logic |
+
+---
+
+## 5. Database Tables
+
+| ตาราง | บทบาท | Foreign Keys |
+|-------|-------|--------------|
+| `users` | ผู้ใช้ทุก role (admin, staff, member) | - |
+| `books` | หนังสือในห้องสมุด | → categories.id |
+| `categories` | หมวดหมู่หนังสือ | - |
+| `borrows` | บันทึกการยืม | → users.id, books.id |
+| `reservations` | บันทึกการจอง | → users.id, books.id, borrows.id |
+| `payments` | บันทึกการชำระค่าปรับ | → borrows.id |
+| `password_resets` | Tokens สำหรับ reset password | → users.id |
+| `settings` | ค่าตั้งค่าระบบ (key-value) | - |
+
+---
+
+## 6. User Roles
+
+| Role | Access Level | หน้าที่เข้าถึงได้ |
+|------|-------------|-----------------|
+| `member` | ต่ำสุด | หน้าสาธารณะ, profile, จองหนังสือ |
+| `staff` | กลาง | ทุกอย่างของ member + admin panel (ยกเว้น settings) |
+| `admin` | สูงสุด | ทุกอย่าง + settings |
+
+**Access Control Functions:**
+```php
+isLoggedIn()    // ตรวจว่า login อยู่ไหม
+isStaff()       // role = staff หรือ admin
+isAdmin()       // role = admin เท่านั้น
+
+requireLogin()  // บังคับ login
+requireStaff()  // บังคับ staff+
+requireAdmin()  // บังคับ admin
 ```
 
 ---
 
-## 6. สรุป Conventions ที่ใช้ในโปรเจกต์
+## 7. Security Layers
 
-### 6.1 File Naming
-
-| ประเภท | Pattern | ตัวอย่าง |
-|--------|---------|----------|
-| Public page | lowercase.php | `login.php`, `book.php` |
-| Admin page | lowercase.php | `books.php`, `borrow_form.php` |
-| API | lowercase_underscore.php | `search_books.php` |
-| Service | PascalCase + Service.php | `BorrowService.php` |
-| Repository | PascalCase + Repository.php | `BookRepository.php` |
-
-### 6.2 Function/Method Naming
-
-| ประเภท | Pattern | ตัวอย่าง |
-|--------|---------|----------|
-| Helper | camelCase | `isLoggedIn()`, `generateCSRFToken()` |
-| Repository | camelCase (CRUD verbs) | `findAll()`, `create()`, `update()` |
-| Service | camelCase (action verbs) | `createBorrow()`, `returnBook()` |
-| Check/Boolean | is/has prefix | `isAdmin()`, `hasBorrowHistory()` |
-
-### 6.3 Response Patterns
-
-| Scenario | Pattern |
-|----------|---------|
-| POST success | `setFlash('success', '...')` → `redirect()` |
-| POST error | `setFlash('error', '...')` → `redirect()` (หรือ stay on form) |
-| AJAX HTML | `echo` HTML partial |
-| AJAX JSON | `json_encode(['success' => bool, 'message' => '...'])` |
+| Layer | Implementation | ตำแหน่ง |
+|-------|----------------|---------|
+| **XSS Prevention** | `e()` function (htmlspecialchars) | includes/functions.php |
+| **SQL Injection** | Prepared Statements (?) | Repositories |
+| **CSRF Protection** | Token per session | includes/functions.php |
+| **Rate Limiting** | Session-based counter | includes/functions.php |
+| **Session Fixation** | `session_regenerate_id()` | login.php |
+| **File Upload** | MIME whitelist, finfo check | admin/book_form.php |
+| **Password Storage** | `password_hash()` / `password_verify()` | AuthService |
+| **Row Locking** | `FOR UPDATE` in transactions | Repositories |
 
 ---
 
-## 7. ข้อสังเกตเกี่ยวกับโครงสร้างปัจจุบัน
+## 8. Configuration
 
-### 7.1 Pattern ที่ใช้
+### 8.1 Environment Variables (.env)
 
-1. **Page-based routing:** ไม่มี front controller, แต่ละ .php file คือ 1 route
-2. **Mixed MVC:** Controller logic อยู่ใน PHP file, View อยู่ใน file เดียวกัน
-3. **Service/Repository pattern:** แยก business logic ออกจาก data access
-4. **Session-based auth:** ใช้ PHP session สำหรับ authentication
+```ini
+# Database
+DB_HOST=localhost
+DB_NAME=book_borrowing
+DB_USER=root
+DB_PASS=
 
-### 7.2 หมายเหตุ
+# Application
+APP_NAME=ระบบยืมคืนหนังสือ
+APP_URL=http://localhost/book_borrowing
+APP_DEBUG=false
 
-- `bootstrap.php` เตรียมไว้สำหรับ Phase 2 (ยังไม่ถูกใช้งานจริง)
-- `app/Helpers/functions.php` มี namespace `App\Helpers` แต่ `includes/functions.php` ไม่มี namespace (ใช้ global)
-- บาง controller (เช่น `index.php`, `admin/index.php`) เขียน SQL โดยตรง แทนที่จะผ่าน Repository (ยอมรับได้สำหรับ read-only queries ที่ไม่ซับซ้อน)
+# Business Rules
+DEFAULT_BORROW_DAYS=7
+MAX_BORROW_BOOKS=3
+FINE_PER_DAY=10
+
+# Security
+MIN_PASSWORD_LENGTH=6
+RATE_LIMIT_MAX_ATTEMPTS=5
+RATE_LIMIT_WINDOW_MINUTES=15
+SESSION_LIFETIME=3600
+```
+
+### 8.2 Constants (includes/config.php)
+
+Constants ถูก define จาก `.env` หรือใช้ค่า default:
+- `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`
+- `APP_NAME`, `APP_URL`, `APP_DEBUG`
+- `DEFAULT_BORROW_DAYS`, `MAX_BORROW_BOOKS`, `FINE_PER_DAY`
+- `MIN_PASSWORD_LENGTH`, `RATE_LIMIT_*`, `SESSION_LIFETIME`
 
 ---
 
-*เอกสารนี้อ้างอิงจากโค้ดจริงในโปรเจกต์ เวอร์ชัน ณ วันที่สร้างเอกสาร*
+## 9. Quick Reference
+
+### 9.1 เพิ่มหน้า Admin ใหม่
+
+```php
+<?php
+require_once __DIR__ . '/../bootstrap.php';
+requireStaff();  // หรือ requireAdmin()
+
+$pageTitle = 'ชื่อหน้า';
+
+// Handle POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        setFlash('error', 'Invalid token');
+        redirect($_SERVER['PHP_SELF']);
+    }
+    
+    // Process...
+    $service = new SomeService(getDB());
+    $service->doSomething($data);
+    
+    setFlash('success', 'สำเร็จ');
+    redirect($_SERVER['PHP_SELF']);
+}
+
+// GET data
+$service = new SomeService(getDB());
+$items = $service->getAll();
+
+require_once 'header.php';
+?>
+<!-- HTML -->
+<?php require_once 'footer.php'; ?>
+```
+
+### 9.2 เพิ่ม API Endpoint ใหม่
+
+```php
+<?php
+require_once __DIR__ . '/../bootstrap.php';
+
+header('Content-Type: application/json');
+
+// Auth check
+if (!isLoggedIn()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
+// Method check
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+    exit;
+}
+
+// CSRF check
+if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid token']);
+    exit;
+}
+
+// Process
+try {
+    $service = new SomeService(getDB());
+    $result = $service->doSomething($_POST['input']);
+    echo json_encode(['success' => true, 'data' => $result]);
+} catch (Exception $e) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+}
+```
+
+---
+
+*เอกสารนี้สร้างจากโครงสร้างโค้ดจริง ไม่มีการเดาหรือแต่งเพิ่ม*

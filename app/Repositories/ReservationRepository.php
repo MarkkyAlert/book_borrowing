@@ -2,6 +2,20 @@
 /**
  * ReservationRepository - Database Access สำหรับการจอง
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ไฟล์นี้จัดการ SQL queries สำหรับตาราง reservations
+ * - ห้ามเรียกจากหน้าเว็บโดยตรง ให้เรียกผ่าน ReservationService
+ * 
+ * 📌 Methods สำคัญ:
+ * - create()              → INSERT reservation (status = 'pending')
+ * - updateStatus()        → เปลี่ยน status
+ * - markExpiredReservations() → [LAZY EXPIRE] หมดอายุ + คืน stock
+ * - findPendingForUpdate() → SELECT ... FOR UPDATE (ป้องกัน race)
+ * 
+ * ⚠️ ห้ามแก้:
+ * - markExpiredReservations() - ต้องคืน stock ด้วยเสมอ
+ * - findPendingForUpdate() - มี lock ที่สำคัญ
+ * 
  * @package App\Repositories
  */
 

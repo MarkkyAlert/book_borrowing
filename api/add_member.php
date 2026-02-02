@@ -23,8 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// [AUTHORIZATION] เฉพาะ admin เท่านั้น
-if (!isAdmin()) {
+// [AUTHORIZATION] Staff ขึ้นไปสามารถเพิ่มสมาชิกได้
+if (!isAdmin() && !isStaff()) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;

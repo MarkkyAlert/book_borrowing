@@ -2,6 +2,20 @@
 /**
  * BookService - Business Logic สำหรับการจัดการหนังสือ
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - Service นี้จัดการ CRUD หนังสือ
+ * - quantity = จำนวนทั้งหมด, available = จำนวนที่ว่าง
+ * - available จะลดเมื่อยืม/จอง และเพิ่มเมื่อคืน/ยกเลิก
+ * 
+ * 📍 Entrypoints:
+ * - admin/books.php      → getBooks(), deleteBook()
+ * - admin/book_form.php  → createBook(), updateBook()
+ * - index.php, book.php  → getBooks(), getBookById()
+ * 
+ * ⚠️ ห้ามแก้:
+ * - available ห้ามแก้โดยตรง - ต้องผ่าน BorrowService/ReservationService
+ * - deleteBook() ตรวจ borrow history ก่อนลบ
+ * 
  * @package App\Services
  */
 

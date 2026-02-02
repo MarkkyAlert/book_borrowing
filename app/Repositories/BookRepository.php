@@ -2,8 +2,19 @@
 /**
  * BookRepository - Data Access Layer สำหรับหนังสือ
  * 
- * Repository นี้จัดการ CRUD operations สำหรับตาราง books
- * ไม่มี business logic - เป็นแค่ data access
+ * ⭐ สำหรับคนมาใหม่:
+ * - Repository นี้จัดการ CRUD สำหรับตาราง books
+ * - ไม่มี business logic - เป็นแค่ data access
+ * - ห้ามเรียกจากหน้าเว็บโดยตรง ให้เรียกผ่าน BookService
+ * 
+ * 📌 Methods สำคัญ:
+ * - findByIdForUpdate()    → SELECT ... FOR UPDATE (ยืม/จอง)
+ * - decrementAvailable()   → ลด stock (atomic, ป้องกันติดลบ)
+ * - incrementAvailable()   → เพิ่ม stock (คืน/ยกเลิก)
+ * 
+ * ⚠️ ห้ามแก้:
+ * - decrementAvailable() มี WHERE available > 0 ป้องกันติดลบ
+ * - findByIdForUpdate() มี lock ที่สำคัญ
  * 
  * @package App\Repositories
  */

@@ -2,6 +2,20 @@
 /**
  * MemberService - Business Logic สำหรับการจัดการสมาชิก
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - Service นี้จัดการ CRUD สมาชิก (role = 'member')
+ * - ไม่จัดการ admin/staff - ใช้ UserRepository โดยตรง
+ * - การสร้างสมาชิกจะ generate password อัตโนมัติถ้าไม่ระบุ
+ * 
+ * 📍 Entrypoints:
+ * - admin/members.php      → getMembers()
+ * - admin/member_form.php  → createMember(), updateMember()
+ * - api/add_member.php     → createMember() (quick add)
+ * 
+ * ⚠️ ห้ามแก้:
+ * - emailExists() ใช้เป็น single source of truth สำหรับ duplicate check
+ * - createMember() ต้อง hash password ก่อน save เสมอ
+ * 
  * @package App\Services
  */
 

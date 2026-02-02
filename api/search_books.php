@@ -14,6 +14,13 @@ require_once __DIR__ . '/../bootstrap.php';
 
 use App\Repositories\BookRepository;
 
+// [SECURITY] Rate limiting ป้องกัน API abuse
+if (!checkRateLimit('search_books', 60, 5)) { // 60 requests per 5 minutes
+    http_response_code(429);
+    echo '<div class="text-center text-red-500 py-4">Too many requests. Please wait.</div>';
+    exit;
+}
+
 // ========== 1. รับ & Validate Input ==========
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);

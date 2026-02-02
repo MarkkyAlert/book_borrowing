@@ -20,9 +20,13 @@ class PaymentRepository
 
     /**
      * สร้างรายการชำระเงินใหม่
+     * 
+     * @security ต้องเรียกภายใต้ transaction + row lock จาก BorrowService
+     *           เพื่อป้องกัน duplicate payment (UNIQUE constraint บน borrow_id)
      */
     public function create(int $borrowId, float $amount, ?int $recordedBy = null): int
     {
+        // [DB] payments.borrow_id มี UNIQUE constraint - INSERT ซ้ำจะ error
         $stmt = $this->pdo->prepare("
             INSERT INTO payments (borrow_id, amount, recorded_by) 
             VALUES (?, ?, ?)

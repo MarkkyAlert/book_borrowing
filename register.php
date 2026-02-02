@@ -34,11 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation
+    // Validation (ใช้ helper functions เป็น single source of truth)
     if (empty($name)) {
         $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
-    } elseif (mb_strlen($name) > 100) {
-        $errors[] = 'ชื่อต้องไม่เกิน 100 ตัวอักษร';
+    } elseif ($err = validateMaxLength($name, 100, 'ชื่อ')) {
+        $errors[] = $err;
     }
     
     if (empty($email)) {
@@ -51,10 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก';
     }
     
-    if (empty($password)) {
-        $errors[] = 'กรุณากรอกรหัสผ่าน';
-    } elseif (strlen($password) < MIN_PASSWORD_LENGTH) {
-        $errors[] = 'รหัสผ่านต้องมีอย่างน้อย ' . MIN_PASSWORD_LENGTH . ' ตัวอักษร';
+    if ($err = validatePassword($password)) {
+        $errors[] = $err;
     }
     
     if ($password !== $confirmPassword) {

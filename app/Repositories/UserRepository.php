@@ -2,7 +2,19 @@
 /**
  * UserRepository - Data Access Layer สำหรับผู้ใช้งาน
  * 
- * Repository นี้จัดการ CRUD operations สำหรับตาราง users
+ * ⭐ สำหรับคนมาใหม่:
+ * - Repository นี้จัดการ CRUD สำหรับตาราง users
+ * - รองรับ 3 roles: admin, staff, member
+ * - password ต้อง hash ก่อนส่งเข้า create()/updatePassword()
+ * 
+ * 📌 Methods สำคัญ:
+ * - findByEmail()     → ใช้ตอน login (รวม password hash)
+ * - findMemberById()  → ดึงเฉพาะ member (ไม่รวม password)
+ * - emailExists()     → ตรวจซ้ำก่อน register/update
+ * 
+ * ⚠️ ห้ามแก้:
+ * - findByEmail() return password hash - ใช้สำหรับ login เท่านั้น
+ * - create() รับ hashed password - ห้ามส่ง plaintext
  * 
  * @package App\Repositories
  */
@@ -58,7 +70,9 @@ class UserRepository
     }
 
     /**
-     * ดึงสมาชิกทั้งหมด
+     * ดึงสมาชิกทั้งหมด (role = 'member')
+     * 
+     * @return array รายการสมาชิก (ไม่รวม password)
      */
     public function findAllMembers(): array
     {
@@ -67,6 +81,9 @@ class UserRepository
 
     /**
      * ดึงผู้ใช้ตาม ID
+     * 
+     * @param int $id User ID
+     * @return array|null ข้อมูลผู้ใช้ (ไม่รวม password) หรือ null ถ้าไม่พบ
      */
     public function findById(int $id): ?array
     {
@@ -96,7 +113,10 @@ class UserRepository
     }
 
     /**
-     * ดึงสมาชิกตาม ID
+     * ดึงสมาชิกตาม ID (role = 'member' เท่านั้น)
+     * 
+     * @param int $id User ID
+     * @return array|null ข้อมูลสมาชิก หรือ null ถ้าไม่พบหรือไม่ใช่ member
      */
     public function findMemberById(int $id): ?array
     {
@@ -141,7 +161,12 @@ class UserRepository
     }
 
     /**
-     * อัปเดตผู้ใช้
+     * อัปเดตข้อมูลผู้ใช้ (ไม่รวม password)
+     * 
+     * @param int $id User ID
+     * @param array $data { name: string, email: string, phone?: string }
+     * @return bool true = สำเร็จ
+     * @sideeffect UPDATE users table
      */
     public function update(int $id, array $data): bool
     {
@@ -175,6 +200,11 @@ class UserRepository
 
     /**
      * ลบผู้ใช้
+     * 
+     * @param int $id User ID
+     * @return bool true = สำเร็จ
+     * @sideeffect DELETE from users table
+     * @throws PDOException ถ้ามี FK constraint (เช่น มี borrow records)
      */
     public function delete(int $id): bool
     {
@@ -210,7 +240,9 @@ class UserRepository
     // เหตุผล: ลด duplication, BorrowRepository เป็น owner ของ borrows table
 
     /**
-     * นับจำนวนสมาชิก
+     * นับจำนวนสมาชิก (role = 'member')
+     * 
+     * @return int จำนวนสมาชิก
      */
     public function countMembers(): int
     {

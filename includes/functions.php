@@ -412,6 +412,25 @@ function validateName(string $name, int $maxLen = 100): ?string
 }
 
 /**
+ * ตรวจสอบความยาวสูงสุดของข้อความ (Single Source of Truth)
+ * 
+ * @param string $value     ค่าที่ต้องการตรวจสอบ
+ * @param int    $max       ความยาวสูงสุดที่อนุญาต
+ * @param string $fieldName ชื่อฟิลด์สำหรับแสดงใน error message
+ * @return string|null      null = valid, string = error message
+ * 
+ * @example $error = validateMaxLength($name, 100, 'ชื่อ');
+ *          if ($error) $errors[] = $error;
+ */
+function validateMaxLength(string $value, int $max, string $fieldName): ?string
+{
+    if (mb_strlen($value) > $max) {
+        return "{$fieldName}ต้องไม่เกิน {$max} ตัวอักษร";
+    }
+    return null;
+}
+
+/**
  * ตรวจสอบความถูกต้องของรหัสผ่าน (Single Source of Truth)
  * 
  * @param string $password   รหัสผ่านที่ต้องการตรวจสอบ
