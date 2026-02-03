@@ -15,6 +15,11 @@ $email = '';
 
 // Process login
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // [SECURITY] CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
+    }
+    
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     
@@ -109,6 +114,7 @@ require_once __DIR__ . '/includes/header.php';
             <?php endif; ?>
             
             <form class="space-y-6" method="POST" novalidate>
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
                         อีเมล
@@ -166,12 +172,14 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
         
-        <!-- Demo Credentials -->
+        <?php if (defined('APP_DEBUG') && APP_DEBUG): ?>
+        <!-- Demo Credentials (แสดงเฉพาะ Debug Mode) -->
         <div class="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 text-center backdrop-blur-sm">
             <p class="text-xs text-blue-600 font-medium">
                 <span class="font-bold">Demo Admin:</span> admin@library.com / 123456
             </p>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 

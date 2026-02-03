@@ -17,6 +17,11 @@ $email = '';
 
 // Process form
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // [SECURITY] CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
+    }
+    
     $email = trim($_POST['email'] ?? '');
     
     // [SECURITY] Rate limiting ป้องกัน spam/enumeration
@@ -44,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $success = true;
             
-            if ($result['token']) {
+            if ($result['token'] && defined('APP_DEBUG') && APP_DEBUG) {
                 // Demo mode: แสดง link (production จะส่งทาง email)
                 $resetLink = APP_URL . '/reset_password.php?token=' . $result['token'];
             }
@@ -126,6 +131,7 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
                 
                 <form class="space-y-6" method="POST" novalidate>
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
                             อีเมล

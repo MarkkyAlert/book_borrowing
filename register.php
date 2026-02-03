@@ -17,6 +17,11 @@ $phone = '';
 
 // Process registration
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // [SECURITY] CSRF validation
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
+    }
+    
     // [SECURITY] Rate limiting ป้องกัน spam registration
     // ใช้ global key (ไม่ใช่ per-email) เพราะ attacker สามารถใช้ email ใหม่ทุกครั้ง
     $rateLimitKey = 'register';
@@ -117,6 +122,7 @@ require_once __DIR__ . '/includes/header.php';
             <?php endif; ?>
             
             <form class="space-y-5" method="POST" novalidate>
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <div>
                     <label for="name" class="block text-sm font-medium text-gray-700 mb-1">
                         ชื่อ-นามสกุล <span class="text-red-500">*</span>
