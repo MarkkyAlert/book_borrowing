@@ -13,11 +13,31 @@ $errors = [];
 $success = false;
 
 require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
+require_once __DIR__ . '/app/Repositories/ReservationRepository.php';
 require_once __DIR__ . '/app/Services/AuthService.php';
 $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
 $authService = new \App\Services\AuthService($pdo);
 
 $borrowHistory = $borrowRepo->findByUserId($_SESSION['user_id'], 10);
+
+// Get user's unpaid fines
+$unpaidFines = $pdo->prepare("
+    SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
+           bk.title as book_title
+    FROM borrows b
+    JOIN books bk ON b.book_id = bk.id
+    LEFT JOIN payments p ON b.id = p.borrow_id
+    WHERE b.user_id = ? AND b.fine_amount > 0 AND p.id IS NULL
+    ORDER BY b.return_date DESC
+");
+$unpaidFines->execute([$_SESSION['user_id']]);
+$unpaidFines = $unpaidFines->fetchAll();
+
+$totalUnpaidAmount = array_sum(array_column($unpaidFines, 'fine_amount'));
+
+// Get pending reservations count
+$pendingReservations = $reservationRepo->findByUser($_SESSION['user_id'], 'pending');
 
 // Process profile update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -222,6 +242,82 @@ require_once __DIR__ . '/includes/header.php';
                     </form>
                 </div>
             </div>
+            
+            <!-- Quick Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- Pending Reservations -->
+                <a href="<?= APP_URL ?>/my_reservations.php" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all group">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">รายการจองรอดำเนินการ</p>
+                            <p class="text-2xl font-bold text-primary-600"><?= count($pendingReservations) ?> <span class="text-sm font-normal text-gray-500">รายการ</span></p>
+                        </div>
+                        <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
+                            <i class="bi bi-bookmark-check text-xl text-primary-600"></i>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Unpaid Fines -->
+                <div class="bg-white rounded-2xl shadow-sm border <?= $totalUnpaidAmount > 0 ? 'border-red-200 bg-red-50/30' : 'border-gray-100' ?> p-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm <?= $totalUnpaidAmount > 0 ? 'text-red-600' : 'text-gray-500' ?>">ค่าปรับค้างชำระ</p>
+                            <p class="text-2xl font-bold <?= $totalUnpaidAmount > 0 ? 'text-red-600' : 'text-green-600' ?>">
+                                <?= number_format($totalUnpaidAmount, 2) ?> <span class="text-sm font-normal">บาท</span>
+                            </p>
+                        </div>
+                        <div class="w-12 h-12 <?= $totalUnpaidAmount > 0 ? 'bg-red-100' : 'bg-green-100' ?> rounded-xl flex items-center justify-center">
+                            <i class="bi bi-cash-coin text-xl <?= $totalUnpaidAmount > 0 ? 'text-red-600' : 'text-green-600' ?>"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <?php if (!empty($unpaidFines)): ?>
+            <!-- Unpaid Fines Detail -->
+            <div class="bg-white rounded-2xl shadow-sm border border-red-200 overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-red-100 bg-red-50">
+                    <h5 class="font-bold text-red-800 flex items-center">
+                        <i class="bi bi-exclamation-triangle mr-2 text-red-600"></i>รายการค่าปรับค้างชำระ
+                    </h5>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th class="px-6 py-4 font-medium">หนังสือ</th>
+                                <th class="px-6 py-4 font-medium">กำหนดคืน</th>
+                                <th class="px-6 py-4 font-medium">วันที่คืน</th>
+                                <th class="px-6 py-4 font-medium text-right">ค่าปรับ</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <?php foreach ($unpaidFines as $fine): ?>
+                                <tr class="hover:bg-gray-50/50 transition-colors">
+                                    <td class="px-6 py-4 font-medium text-gray-900"><?= e($fine['book_title']) ?></td>
+                                    <td class="px-6 py-4 text-gray-600"><?= formatDate($fine['due_date']) ?></td>
+                                    <td class="px-6 py-4 text-gray-600"><?= formatDate($fine['return_date']) ?></td>
+                                    <td class="px-6 py-4 text-right font-semibold text-red-600"><?= number_format($fine['fine_amount'], 2) ?> บาท</td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot class="bg-red-50">
+                            <tr>
+                                <td colspan="3" class="px-6 py-3 text-right font-bold text-gray-700">รวมทั้งหมด</td>
+                                <td class="px-6 py-3 text-right font-bold text-red-600"><?= number_format($totalUnpaidAmount, 2) ?> บาท</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="px-6 py-4 bg-red-50 border-t border-red-100">
+                    <p class="text-sm text-red-700">
+                        <i class="bi bi-info-circle mr-1"></i>
+                        กรุณาติดต่อเจ้าหน้าที่เพื่อชำระค่าปรับ
+                    </p>
+                </div>
+            </div>
+            <?php endif; ?>
             
             <!-- Borrow History -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

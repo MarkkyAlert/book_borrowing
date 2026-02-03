@@ -124,6 +124,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <a href="<?= APP_URL ?>/profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
                                     <i class="bi bi-person mr-2 text-gray-400"></i>โปรไฟล์
                                 </a>
+                                <a href="<?= APP_URL ?>/my_reservations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
+                                    <i class="bi bi-bookmark-check mr-2 text-gray-400"></i>รายการจองของฉัน
+                                </a>
                                 <div class="border-t border-gray-50 my-1"></div>
                                 <a href="<?= APP_URL ?>/logout.php" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                                     <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
@@ -167,6 +170,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                     <?php endif; ?>
                     <a href="<?= APP_URL ?>/profile.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                         <i class="bi bi-person mr-2"></i>โปรไฟล์
+                    </a>
+                    <a href="<?= APP_URL ?>/my_reservations.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
+                        <i class="bi bi-bookmark-check mr-2"></i>รายการจองของฉัน
                     </a>
                     <a href="<?= APP_URL ?>/logout.php" class="block px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50">
                         <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
