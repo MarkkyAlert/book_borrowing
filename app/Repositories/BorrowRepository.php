@@ -268,6 +268,54 @@ class BorrowRepository
         $stmt->execute([$userId, $limit]);
         return $stmt->fetchAll();
     }
+
+    /**
+     * ดึงประวัติการยืมของ user พร้อม pagination และ filter ตาม status
+     * 
+     * @param int $userId ID ของ user
+     * @param string|null $status สถานะ (borrowing/returned) หรือ null = ทั้งหมด
+     * @param int $page หน้าที่ต้องการ (1-indexed)
+     * @param int $perPage จำนวนต่อหน้า
+     * @return array ['data' => array, 'total' => int, 'page' => int, 'per_page' => int, 'total_pages' => int]
+     */
+    public function findByUserIdPaginated(int $userId, ?string $status = null, int $page = 1, int $perPage = 10): array
+    {
+        $where = "b.user_id = ?";
+        $params = [$userId];
+        
+        if ($status !== null) {
+            $where .= " AND b.status = ?";
+            $params[] = $status;
+        }
+        
+        // Count total
+        $countStmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows b WHERE $where");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+        
+        // Calculate offset
+        $offset = ($page - 1) * $perPage;
+        $params[] = $perPage;
+        $params[] = $offset;
+        
+        $stmt = $this->pdo->prepare("
+            SELECT b.*, bk.title as book_title, bk.author as book_author
+            FROM borrows b
+            JOIN books bk ON b.book_id = bk.id
+            WHERE $where
+            ORDER BY b.created_at DESC
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->execute($params);
+        
+        return [
+            'data' => $stmt->fetchAll(),
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => (int) ceil($total / $perPage)
+        ];
+    }
     
     /**
      * ดึงรายการยืมปัจจุบันของหนังสือ (ยังไม่คืน)
