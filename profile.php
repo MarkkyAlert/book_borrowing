@@ -21,18 +21,12 @@ $authService = new \App\Services\AuthService($pdo);
 
 $borrowHistory = $borrowRepo->findByUserId($_SESSION['user_id'], 10);
 
+// Get borrow statistics
+$borrowStats = $borrowRepo->getStatsByUser($_SESSION['user_id']);
+$activeBorrows = $borrowStats['active_borrows'] ?? 0;
+
 // Get user's unpaid fines
-$unpaidFines = $pdo->prepare("
-    SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
-           bk.title as book_title
-    FROM borrows b
-    JOIN books bk ON b.book_id = bk.id
-    LEFT JOIN payments p ON b.id = p.borrow_id
-    WHERE b.user_id = ? AND b.fine_amount > 0 AND p.id IS NULL
-    ORDER BY b.return_date DESC
-");
-$unpaidFines->execute([$_SESSION['user_id']]);
-$unpaidFines = $unpaidFines->fetchAll();
+$unpaidFines = $borrowRepo->getUnpaidFinesByUser($_SESSION['user_id']);
 
 $totalUnpaidAmount = array_sum(array_column($unpaidFines, 'fine_amount'));
 
@@ -244,7 +238,20 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             
             <!-- Quick Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <!-- Active Borrows -->
+                <a href="<?= APP_URL ?>/my_borrows.php" class="bg-white rounded-2xl shadow-sm border <?= $activeBorrows > 0 ? 'border-blue-200' : 'border-gray-100' ?> p-5 hover:shadow-md transition-all group">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">หนังสือที่กำลังยืม</p>
+                            <p class="text-2xl font-bold text-primary-600"><?= $activeBorrows ?> <span class="text-sm font-normal text-gray-500">เล่ม</span></p>
+                        </div>
+                        <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
+                            <i class="bi bi-book text-xl text-primary-600"></i>
+                        </div>
+                    </div>
+                </a>
+                
                 <!-- Pending Reservations -->
                 <a href="<?= APP_URL ?>/my_reservations.php" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all group">
                     <div class="flex items-center justify-between">

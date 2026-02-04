@@ -417,5 +417,23 @@ class BorrowRepository
             WHERE b.fine_amount > 0 AND p.id IS NULL
         ")->fetchColumn();
     }
+
+    /**
+     * ดึงรายการค่าปรับค้างชำระของ user
+     */
+    public function getUnpaidFinesByUser(int $userId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
+                   bk.title as book_title
+            FROM borrows b
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.user_id = ? AND b.fine_amount > 0 AND p.id IS NULL
+            ORDER BY b.return_date DESC
+        ");
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
+    }
 }
 

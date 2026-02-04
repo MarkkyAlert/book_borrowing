@@ -1,0 +1,245 @@
+<?php
+/**
+ * My Borrows - รายการยืมของฉัน
+ */
+
+require_once __DIR__ . '/bootstrap.php';
+
+requireLogin();
+
+$pdo = getDB();
+$userId = $_SESSION['user_id'];
+
+require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
+$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+
+// Get filter
+$statusFilter = $_GET['status'] ?? '';
+
+// Build filters for borrow query
+$filters = ['user_id' => $userId];
+
+if ($statusFilter === 'active') {
+    $filters['status'] = 'borrowing';
+} elseif ($statusFilter === 'returned') {
+    $filters['status'] = 'returned';
+} elseif ($statusFilter === 'overdue') {
+    $filters['overdue'] = true;
+}
+
+// Get user's borrows
+$borrows = $borrowRepo->findAll($filters);
+
+// Get statistics
+$stats = $borrowRepo->getStatsByUser($userId);
+
+// Count overdue
+$overdueCount = 0;
+foreach ($borrows as $borrow) {
+    if ($borrow['status'] === 'borrowing' && strtotime($borrow['due_date']) < strtotime('today')) {
+        $overdueCount++;
+    }
+}
+
+$pageTitle = 'รายการยืมของฉัน';
+require_once __DIR__ . '/includes/header.php';
+
+// Helper function to check if borrow is overdue
+function isOverdue($borrow): bool {
+    return $borrow['status'] === 'borrowing' && strtotime($borrow['due_date']) < strtotime('today');
+}
+
+// Helper function to check if due today
+function isDueToday($borrow): bool {
+    return $borrow['status'] === 'borrowing' && $borrow['due_date'] === date('Y-m-d');
+}
+
+// Helper function to get days remaining
+function getDaysRemaining($dueDate): int {
+    $today = strtotime('today');
+    $due = strtotime($dueDate);
+    return (int) (($due - $today) / (60 * 60 * 24));
+}
+?>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">
+            <i class="bi bi-book text-primary-600 mr-2"></i>
+            รายการยืมของฉัน
+        </h1>
+        <p class="mt-2 text-gray-600">ดูประวัติการยืมและติดตามหนังสือที่กำลังยืมอยู่</p>
+    </div>
+
+    <?php displayFlash(); ?>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">กำลังยืม</p>
+                    <p class="text-2xl font-bold text-primary-600"><?= $stats['active_borrows'] ?? 0 ?></p>
+                </div>
+                <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+                    <i class="bi bi-book text-xl text-primary-600"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm border border-red-200 p-5 <?= ($overdueCount > 0) ? 'bg-red-50/50' : '' ?>">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm <?= ($overdueCount > 0) ? 'text-red-600' : 'text-gray-500' ?>">ครบกำหนดคืนแล้ว</p>
+                    <p class="text-2xl font-bold <?= ($overdueCount > 0) ? 'text-red-600' : 'text-gray-600' ?>"><?= $overdueCount ?></p>
+                </div>
+                <div class="w-12 h-12 <?= ($overdueCount > 0) ? 'bg-red-100' : 'bg-gray-100' ?> rounded-xl flex items-center justify-center">
+                    <i class="bi bi-exclamation-triangle text-xl <?= ($overdueCount > 0) ? 'text-red-600' : 'text-gray-400' ?>"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">คืนแล้ว</p>
+                    <p class="text-2xl font-bold text-green-600"><?= $stats['returned'] ?? 0 ?></p>
+                </div>
+                <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                    <i class="bi bi-check-circle text-xl text-green-600"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">ยืมทั้งหมด</p>
+                    <p class="text-2xl font-bold text-gray-700"><?= $stats['total_borrows'] ?? 0 ?></p>
+                </div>
+                <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                    <i class="bi bi-collection text-xl text-gray-600"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="mb-6 border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8 overflow-x-auto">
+            <a href="?status=" 
+               class="<?= $statusFilter === '' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm">
+                ทั้งหมด
+            </a>
+            <a href="?status=active" 
+               class="<?= $statusFilter === 'active' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm">
+                กำลังยืม
+            </a>
+            <a href="?status=overdue" 
+               class="<?= $statusFilter === 'overdue' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm">
+                ครบกำหนดคืนแล้ว
+            </a>
+            <a href="?status=returned" 
+               class="<?= $statusFilter === 'returned' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm">
+                คืนแล้ว
+            </a>
+        </nav>
+    </div>
+
+    <!-- Borrows List -->
+    <?php if (empty($borrows)): ?>
+        <div class="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div class="w-20 h-20 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <i class="bi bi-book text-4xl text-gray-400"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">ไม่พบรายการยืม</h3>
+            <p class="text-gray-500 mb-6"><?= $statusFilter ? 'ไม่มีรายการในหมวดหมู่นี้' : 'คุณยังไม่มีประวัติการยืมหนังสือ' ?></p>
+            <a href="<?= APP_URL ?>" class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
+                <i class="bi bi-search mr-2"></i>
+                ค้นหาหนังสือ
+            </a>
+        </div>
+    <?php else: ?>
+        <div class="space-y-4">
+            <?php foreach ($borrows as $borrow): ?>
+                <?php
+                    $isOverdue = isOverdue($borrow);
+                    $isDueToday = isDueToday($borrow);
+                    $daysRemaining = getDaysRemaining($borrow['due_date']);
+                    
+                    if ($borrow['status'] === 'returned') {
+                        $statusClass = 'bg-green-100 text-green-800';
+                        $statusLabel = 'คืนแล้ว';
+                    } elseif ($isOverdue) {
+                        $statusClass = 'bg-red-100 text-red-800';
+                        $statusLabel = 'ครบกำหนดคืนแล้ว';
+                    } elseif ($isDueToday) {
+                        $statusClass = 'bg-amber-100 text-amber-800';
+                        $statusLabel = 'ครบกำหนดวันนี้';
+                    } else {
+                        $statusClass = 'bg-blue-100 text-blue-800';
+                        $statusLabel = 'กำลังยืม';
+                    }
+                ?>
+                <div class="bg-white rounded-xl shadow-sm border <?= $isOverdue ? 'border-red-200' : 'border-gray-100' ?> p-5 hover:shadow-md transition-shadow">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div class="flex-1">
+                            <div class="flex items-start gap-3">
+                                <div class="w-12 h-12 <?= $isOverdue ? 'bg-red-100' : 'bg-primary-100' ?> rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <i class="bi bi-book text-xl <?= $isOverdue ? 'text-red-600' : 'text-primary-600' ?>"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">
+                                        <a href="book.php?id=<?= $borrow['book_id'] ?>" class="hover:text-primary-600 transition-colors">
+                                            <?= e($borrow['book_title']) ?>
+                                        </a>
+                                    </h3>
+                                    <p class="text-sm text-gray-500"><?= e($borrow['book_author']) ?></p>
+                                    <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                                        <span>
+                                            <i class="bi bi-calendar3 mr-1"></i>
+                                            ยืมเมื่อ: <?= date('d/m/Y', strtotime($borrow['borrow_date'])) ?>
+                                        </span>
+                                        <?php if ($borrow['status'] === 'borrowing'): ?>
+                                            <span class="<?= $isOverdue ? 'text-red-600 font-medium' : ($isDueToday ? 'text-amber-600 font-medium' : '') ?>">
+                                                <i class="bi bi-clock mr-1"></i>
+                                                กำหนดคืน: <?= date('d/m/Y', strtotime($borrow['due_date'])) ?>
+                                                <?php if ($isOverdue): ?>
+                                                    <span class="text-red-500">(เลยกำหนด <?= abs($daysRemaining) ?> วัน)</span>
+                                                <?php elseif ($isDueToday): ?>
+                                                    <span class="text-amber-600">(วันนี้!)</span>
+                                                <?php else: ?>
+                                                    <span class="text-gray-400">(เหลือ <?= $daysRemaining ?> วัน)</span>
+                                                <?php endif; ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-green-600">
+                                                <i class="bi bi-check-circle mr-1"></i>
+                                                คืนเมื่อ: <?= date('d/m/Y', strtotime($borrow['return_date'])) ?>
+                                            </span>
+                                            <?php if ($borrow['fine_amount'] > 0): ?>
+                                                <span class="text-red-600 font-medium">
+                                                    <i class="bi bi-cash-coin mr-1"></i>
+                                                    ค่าปรับ: <?= number_format($borrow['fine_amount'], 2) ?> บาท
+                                                </span>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium <?= $statusClass ?>">
+                                <?= $statusLabel ?>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -124,6 +124,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <a href="<?= APP_URL ?>/profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
                                     <i class="bi bi-person mr-2 text-gray-400"></i>โปรไฟล์
                                 </a>
+                                <a href="<?= APP_URL ?>/my_borrows.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
+                                    <i class="bi bi-book mr-2 text-gray-400"></i>รายการยืมของฉัน
+                                </a>
                                 <a href="<?= APP_URL ?>/my_reservations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
                                     <i class="bi bi-bookmark-check mr-2 text-gray-400"></i>รายการจองของฉัน
                                 </a>
@@ -170,6 +173,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                     <?php endif; ?>
                     <a href="<?= APP_URL ?>/profile.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                         <i class="bi bi-person mr-2"></i>โปรไฟล์
+                    </a>
+                    <a href="<?= APP_URL ?>/my_borrows.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
+                        <i class="bi bi-book mr-2"></i>รายการยืมของฉัน
                     </a>
                     <a href="<?= APP_URL ?>/my_reservations.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                         <i class="bi bi-bookmark-check mr-2"></i>รายการจองของฉัน
