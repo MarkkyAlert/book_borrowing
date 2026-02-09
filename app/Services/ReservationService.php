@@ -199,8 +199,13 @@ class ReservationService
                 throw new Exception('ไม่พบรายการจองหรือไม่อยู่ในสถานะรอรับ');
             }
             
-            // [VALIDATE] ตรวจโควต้าผู้ยืม
-            $currentBorrows = $this->borrowRepo->countActiveBorrows($reservation['user_id']);
+            // [VALIDATE] ตรวจว่ายืมเล่มนี้อยู่แล้วหรือไม่ (ป้องกัน duplicate borrow)
+            if ($this->borrowRepo->isAlreadyBorrowing($reservation['user_id'], $reservation['book_id'])) {
+                throw new Exception('ผู้จองกำลังยืมหนังสือเล่มนี้อยู่แล้ว');
+            }
+            
+            // [VALIDATE] ตรวจโควต้าผู้ยืม (ใช้ FOR UPDATE ป้องกัน race condition)
+            $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
             if ($currentBorrows >= MAX_BORROW_BOOKS) {
                 throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
             }

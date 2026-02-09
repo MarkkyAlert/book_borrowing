@@ -1,0 +1,2 @@
+# [SECURITY] ป้องกันเข้าถึงไฟล์ includes โดยตรง
+Require all denied

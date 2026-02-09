@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (!empty($errors)) {
-            setFlash('error', implode('<br>', $errors), true);
+            setFlash('error', implode(' | ', $errors));
         } else {
             updateSetting('org_name', $orgName);
             updateSetting('card_color_primary', $colorPrimary);

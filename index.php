@@ -114,10 +114,9 @@ require_once __DIR__ . '/includes/header.php';
 </section>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20" id="search-section">
-    <?php displayFlash(); ?>
     
     <!-- Search & Filter Card -->
-    <div class="bg-white rounded-2xl shadow-xl -mt-16 relative z-20 border border-gray-100 overflow-hidden mb-12">
+    <div class="bg-white rounded-2xl shadow-xl -mt-16 relative z-20 border border-gray-100 overflow-hidden mb-6">
         <div class="p-1 bg-gradient-to-r from-primary-400 via-blue-500 to-purple-500"></div>
         <div class="p-6 md:p-8">
             <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center">
@@ -180,6 +179,8 @@ require_once __DIR__ . '/includes/header.php';
             </form>
         </div>
     </div>
+
+    <?php displayFlash(); ?>
     
     <!-- Results Header -->
     <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">

@@ -290,9 +290,14 @@ class ReservationRepository
 
     /**
      * ดึงการจองของ user
+     * 
+     * @note auto-expire reservations ที่หมดอายุก่อน query (lazy expiration)
      */
     public function findByUser(int $userId, ?string $status = null): array
     {
+        // [LAZY EXPIRE] Mark expired reservations ก่อน query
+        $this->markExpiredReservations();
+        
         $sql = "
             SELECT r.*, b.title as book_title, b.author as book_author
             FROM reservations r
@@ -330,6 +335,32 @@ class ReservationRepository
         ");
         $stmt->execute([$limit]);
         return $stmt->fetchAll();
+    }
+
+    /**
+     * นับจำนวน pending reservations ของหนังสือ
+     */
+    public function countPendingByBook(int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations 
+            WHERE book_id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$bookId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * นับจำนวน pending reservations ของ user
+     */
+    public function countPendingByUser(int $userId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations 
+            WHERE user_id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId]);
+        return (int) $stmt->fetchColumn();
     }
 
     /**

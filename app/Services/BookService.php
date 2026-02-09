@@ -23,9 +23,11 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Repositories/BookRepository.php';
 require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\BorrowRepository;
+use App\Repositories\ReservationRepository;
 use PDO;
 use Exception;
 
@@ -34,12 +36,14 @@ class BookService
     private PDO $pdo;
     private BookRepository $bookRepo;
     private BorrowRepository $borrowRepo;
+    private ReservationRepository $reservationRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->bookRepo = new BookRepository($pdo);
         $this->borrowRepo = new BorrowRepository($pdo);
+        $this->reservationRepo = new ReservationRepository($pdo);
     }
 
     /**
@@ -159,6 +163,13 @@ class BookService
         // Calculate new available based on quantity change
         $oldQuantity = $book['quantity'];
         $newQuantity = $data['quantity'] ?? $oldQuantity;
+        
+        // [FIX] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
+        $currentlyOut = $oldQuantity - $book['available']; // จำนวนที่ออกอยู่
+        if ($newQuantity < $currentlyOut) {
+            throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
+        }
+        
         $quantityDiff = $newQuantity - $oldQuantity;
         $newAvailable = max(0, $book['available'] + $quantityDiff);
 
@@ -199,6 +210,11 @@ class BookService
             // Check if has borrow history
             if ($this->hasBorrowHistory($id)) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
+            }
+
+            // Check if has pending reservations
+            if ($this->reservationRepo->countPendingByBook($id) > 0) {
+                throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีการจองที่รอดำเนินการอยู่');
             }
 
             // Delete book

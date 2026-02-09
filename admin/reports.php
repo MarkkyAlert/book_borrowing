@@ -52,36 +52,12 @@ if ($startDate === $today && $endDate === $today) {
     $activeRange = 'year';
 }
 
-// Prepare Data based on Report Type
-$data = [];
-$headers = [];
-$filename = "report_" . date('Y-m-d');
-
-if ($reportType === 'books') {
-    $data = $reportRepo->getTopBooksReport(50, $startDate, $endDate);
-    $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม (ครั้ง)', 'กำลังถูกยืม (เล่ม)'];
-    $filename = "top_books_" . date('Y-m-d');
-    
-} elseif ($reportType === 'members') {
-    $data = $reportRepo->getTopMembersReport(50, false, $startDate, $endDate);
-    $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม (เล่ม)', 'กำลังยืมอยู่ (เล่ม)'];
-    $filename = "top_members_" . date('Y-m-d');
-
-} elseif ($reportType === 'revenue') {
-    $data = $reportRepo->getDailyRevenueReport($startDate, $endDate);
-    $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
-    $filename = "daily_revenue_" . date('Y-m-d');
-
-} elseif ($reportType === 'overdue') {
-    $data = $reportRepo->getOverdueReport();
-    $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
-    $filename = "overdue_books_" . date('Y-m-d');
-
-} elseif ($reportType === 'unpaid') {
-    $data = $reportRepo->getUnpaidFinesReport($startDate, $endDate);
-    $headers = ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ค่าปรับ (บาท)'];
-    $filename = "unpaid_fines_" . date('Y-m-d');
-}
+// Prepare Data via Helper (Single Source of Truth - shared with export_pdf.php)
+require_once __DIR__ . '/../includes/report_helper.php';
+$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, false);
+$data = $reportConfig['data'];
+$headers = $reportConfig['headers'];
+$filename = $reportConfig['filename'];
 
 // Handle Export
 if ($isExport) {

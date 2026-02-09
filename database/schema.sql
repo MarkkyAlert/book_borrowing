@@ -145,4 +145,15 @@ CREATE TABLE IF NOT EXISTS `settings` (
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- ตาราง: rate_limits (จำกัดจำนวนครั้งต่อ IP)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `rate_limits` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `key_name` VARCHAR(255) NOT NULL COMMENT 'action + IP เช่น login_127.0.0.1',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_key_name` (`key_name`),
+    INDEX `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

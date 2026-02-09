@@ -237,10 +237,13 @@ if (!$user) {
                     <span>หน้าเว็บไซต์</span>
                 </a>
                 
-                <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-300 hover:text-red-100 hover:bg-red-900/30 border-l-4 border-transparent transition-colors" href="<?= APP_URL ?>/logout.php">
-                    <i class="bi bi-box-arrow-right text-lg"></i>
-                    <span>ออกจากระบบ</span>
-                </a>
+                <form method="POST" action="<?= APP_URL ?>/logout.php">
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <button type="submit" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-300 hover:text-red-100 hover:bg-red-900/30 border-l-4 border-transparent transition-colors w-full text-left">
+                        <i class="bi bi-box-arrow-right text-lg"></i>
+                        <span>ออกจากระบบ</span>
+                    </button>
+                </form>
             </nav>
         </div>
         
@@ -292,7 +295,10 @@ if (!$user) {
                     <?php endif; ?>
                     <hr class="border-primary-700 my-2">
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>">หน้าเว็บไซต์</a>
-                    <a class="block px-4 py-2 text-red-300 hover:bg-red-900/50 rounded" href="<?= APP_URL ?>/logout.php">ออกจากระบบ</a>
+                    <form method="POST" action="<?= APP_URL ?>/logout.php" class="block">
+                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                        <button type="submit" class="w-full text-left px-4 py-2 text-red-300 hover:bg-red-900/50 rounded">ออกจากระบบ</button>
+                    </form>
                  </nav>
              </div>
         </div>

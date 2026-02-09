@@ -1,0 +1,2 @@
+# [SECURITY] ป้องกันเข้าถึงไฟล์ app/ โดยตรง
+Require all denied

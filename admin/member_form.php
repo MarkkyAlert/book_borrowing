@@ -9,11 +9,9 @@ require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
 
 use App\Services\MemberService;
-use App\Repositories\UserRepository;
 
 $pdo = getDB();
 $memberService = new MemberService($pdo);
-$userRepo = new UserRepository($pdo);
 
 $errors = [];
 $member = [
@@ -52,33 +50,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $member['phone'] = trim($_POST['phone'] ?? '');
     $password = $_POST['password'] ?? '';
     
-    $isEdit = !empty($_POST['id']);
     $member['id'] = (int) ($_POST['id'] ?? 0);
+    $isEdit = $member['id'] > 0;
     
-    // Validation (ใช้ helper functions เป็น single source of truth)
-    if (empty($member['name'])) {
-        $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
-    } elseif ($err = validateMaxLength($member['name'], 100, 'ชื่อ')) {
-        $errors[] = $err;
-    }
-    
-    if (empty($member['email'])) {
-        $errors[] = 'กรุณากรอกอีเมล';
-    } elseif (!isValidEmail($member['email'])) {
-        $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
-    }
-    
-    // Check Email duplicate via Service
-    if (!empty($member['email']) && empty($errors)) {
-        if ($memberService->emailExists($member['email'], $member['id'] ?: null)) {
-            $errors[] = 'อีเมลนี้มีในระบบแล้ว';
-        }
-    }
-    
-    // Password validation (ใช้ helper function)
-    if ($err = validatePassword($password, $isEdit)) { // allowEmpty=true ถ้าเป็น edit mode
-        $errors[] = $err;
-    }
+    // Validation via shared helper (Single Source of Truth)
+    // Email duplicate ตรวจที่ Service ฝ่ายเดียว — ไม่ต้องตรวจซ้ำที่นี่
+    $errors = array_merge($errors, validateMemberData([
+        'name' => $member['name'], 'email' => $member['email'],
+        'phone' => $member['phone'], 'password' => $password
+    ], $isEdit));
     
     if (empty($errors)) {
         try {
@@ -90,9 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'phone' => $member['phone']
                 ]);
                 
-                // Update password only if provided
+                // Update password only if provided (via Service - validates + hashes)
                 if (!empty($password)) {
-                    $userRepo->updatePassword($member['id'], password_hash($password, PASSWORD_DEFAULT));
+                    $memberService->updatePassword($member['id'], $password);
                 }
                 
                 setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');

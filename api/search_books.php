@@ -12,6 +12,12 @@
 
 require_once __DIR__ . '/../bootstrap.php';
 
+// [SECURITY] Allow only GET method
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    exit;
+}
+
 use App\Repositories\BookRepository;
 
 // [SECURITY] Rate limiting ป้องกัน API abuse

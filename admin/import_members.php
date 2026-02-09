@@ -63,16 +63,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
                         
                         // [REFACTOR] ใช้ MemberService เป็น single source of truth
-                        $result = $memberService->importMember([
-                            'name' => $name,
-                            'email' => $email,
-                            'phone' => $phone
-                        ]);
-                        
-                        if ($result['action'] === 'created') {
-                            $createdCount++;
-                        } else {
-                            $updatedCount++;
+                        try {
+                            $result = $memberService->importMember([
+                                'name' => $name,
+                                'email' => $email,
+                                'phone' => $phone
+                            ]);
+                            
+                            if ($result['action'] === 'created') {
+                                $createdCount++;
+                            } else {
+                                $updatedCount++;
+                            }
+                        } catch (Exception $e) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: " . $e->getMessage();
+                            continue;
                         }
                     }
                     

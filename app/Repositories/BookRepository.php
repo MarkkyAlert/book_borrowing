@@ -222,6 +222,28 @@ class BookRepository
     }
 
     /**
+     * ตรวจสอบว่า ISBN ซ้ำหรือไม่
+     * 
+     * @param string $isbn ISBN ที่ต้องการตรวจ
+     * @param int|null $excludeId ID หนังสือที่ต้องการยกเว้น (สำหรับ edit mode)
+     * @return bool true = ISBN ซ้ำ
+     */
+    public function isbnExists(string $isbn, ?int $excludeId = null): bool
+    {
+        $sql = "SELECT id FROM books WHERE isbn = ?";
+        $params = [$isbn];
+        
+        if ($excludeId) {
+            $sql .= " AND id != ?";
+            $params[] = $excludeId;
+        }
+        
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetch() !== false;
+    }
+
+    /**
      * ลบหนังสือ
      */
     public function delete(int $id): bool
@@ -267,10 +289,18 @@ class BookRepository
 
     /**
      * เพิ่ม available + 1 (คืนหนังสือ)
+     * 
+     * @return bool true = สำเร็จ, false = available เท่ากับ quantity แล้ว
+     * @security ใช้ conditional update ป้องกัน available เกิน quantity
      */
     public function incrementAvailable(int $id): bool
     {
-        return $this->updateAvailable($id, 1);
+        $stmt = $this->pdo->prepare("
+            UPDATE books SET available = available + 1 
+            WHERE id = ? AND available < quantity
+        ");
+        $stmt->execute([$id]);
+        return $stmt->rowCount() > 0;
     }
 
     /**

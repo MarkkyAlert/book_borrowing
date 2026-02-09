@@ -26,6 +26,13 @@ $members = $userRepo->findAllMembers();
 // Handle AJAX Scan Requests
 if (isset($_POST['action']) && $_POST['action'] === 'scan') {
     header('Content-Type: application/json');
+    
+    // [SECURITY] CSRF check - defense-in-depth แม้จะเป็น read-only
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        echo json_encode(['success' => false, 'message' => 'Invalid token']);
+        exit;
+    }
+    
     $type = $_POST['type'] ?? '';
     $id = trim($_POST['id'] ?? '');
 
@@ -61,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('borrow_form.php');
     }
     
+    // Sanitize input (validation ทำใน BorrowService - Single Source of Truth)
     $userId = (int) ($_POST['user_id'] ?? 0);
     $bookIds = $_POST['book_ids'] ?? [];
     $borrowDays = (int) ($_POST['borrow_days'] ?? DEFAULT_BORROW_DAYS);
@@ -70,28 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $bookIds = array_filter(array_map('intval', $bookIds));
     
-    // Validation
-    if ($userId <= 0) {
-        $errors[] = 'กรุณาเลือกผู้ยืม';
-    }
-    
-    if (empty($bookIds)) {
-        $errors[] = 'กรุณาเลือกหนังสืออย่างน้อย 1 เล่ม';
-    }
-    
-    if ($borrowDays < 1 || $borrowDays > 30) {
-        $errors[] = 'จำนวนวันยืมต้องอยู่ระหว่าง 1-30 วัน';
-    }
-    
-    // Validate user exists and is member using repository
-    if (empty($errors)) {
-        $user = $userRepo->findMemberById($userId);
-        if (!$user) {
-            $errors[] = 'ไม่พบสมาชิกที่เลือก';
-        }
-    }
-    // Use BorrowService for transaction logic
-    if (empty($errors)) {
+    // Use BorrowService for validation + transaction logic
+    {
         // [IDEMPOTENCY] ป้องกัน double-submit (กดปุ่มซ้ำ / refresh)
         sort($bookIds); // sort เพื่อให้ key เหมือนกันไม่ว่าจะเลือกลำดับไหน
         $idempotencyKey = 'borrow_' . $userId . '_' . md5(json_encode($bookIds));

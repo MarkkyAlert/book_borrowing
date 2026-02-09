@@ -13,53 +13,22 @@ use App\Repositories\ReportRepository;
 $reportRepo = new ReportRepository(getDB());
 $reportType = $_GET['report'] ?? 'books';
 
-// Date range filter
+// Date range filter (validate format like reports.php)
 $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-d');
-$dateRangeText = formatDate($startDate) . ' - ' . formatDate($endDate);
-
-// Prepare Data
-$data = [];
-$headers = [];
-$reportTitle = '';
-$filename = "report_" . date('Y-m-d');
-
-if ($reportType === 'books') {
-    $data = $reportRepo->getTopBooksReport(50, $startDate, $endDate);
-    $headers = ['ชื่อหนังสือ', 'หมวดหมู่', 'จำนวนการยืม', 'กำลังถูกยืม'];
-    $reportTitle = 'รายงานหนังสือยอดนิยม (' . $dateRangeText . ')';
-    $filename = "top_books_" . date('Y-m-d');
-    
-} elseif ($reportType === 'members') {
-    $data = $reportRepo->getTopMembersReport(50, true, $startDate, $endDate);
-    $headers = ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม', 'กำลังยืมอยู่'];
-    $reportTitle = 'รายงานสมาชิกที่ใช้บริการบ่อย (' . $dateRangeText . ')';
-    $filename = "top_members_" . date('Y-m-d');
-
-} elseif ($reportType === 'revenue') {
-    $data = $reportRepo->getDailyRevenueReport($startDate, $endDate);
-    $headers = ['วันที่', 'จำนวนรายการ', 'ยอดรวม (บาท)'];
-    $reportTitle = 'รายงานสรุปรายได้ค่าปรับ (' . $dateRangeText . ')';
-    $filename = "daily_revenue_" . date('Y-m-d');
-
-} elseif ($reportType === 'overdue') {
-    $data = $reportRepo->getOverdueReport(true);
-    $headers = ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'];
-    $reportTitle = 'รายงานหนังสือค้างส่ง';
-    $filename = "overdue_" . date('Y-m-d');
-
-} elseif ($reportType === 'borrows') {
-    $data = $reportRepo->getBorrowsReport($startDate, $endDate);
-    $headers = ['ผู้ยืม', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'สถานะ', 'ค่าปรับ'];
-    $reportTitle = 'รายงานการยืม-คืน (' . $dateRangeText . ')';
-    $filename = "borrows_" . date('Y-m-d');
-
-} elseif ($reportType === 'unpaid') {
-    $data = $reportRepo->getUnpaidFinesReport($startDate, $endDate);
-    $headers = ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ค่าปรับ (บาท)'];
-    $reportTitle = 'รายงานสมาชิกค้างชำระ (' . $dateRangeText . ')';
-    $filename = "unpaid_fines_" . date('Y-m-d');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !strtotime($startDate)) {
+    $startDate = date('Y-m-01');
 }
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) || !strtotime($endDate)) {
+    $endDate = date('Y-m-d');
+}
+// Prepare Data via Helper (Single Source of Truth - shared with reports.php)
+require_once __DIR__ . '/../includes/report_helper.php';
+$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, true);
+$data = $reportConfig['data'];
+$headers = $reportConfig['headers'];
+$reportTitle = $reportConfig['title'];
+$filename = $reportConfig['filename'];
 
 $orgName = getSetting('org_name', 'ระบบห้องสมุด');
 ?>

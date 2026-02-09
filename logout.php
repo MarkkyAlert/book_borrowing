@@ -5,6 +5,11 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
+// [SECURITY] POST only + CSRF — ป้องกัน logout via image/link injection
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !validateCSRFToken($_POST['csrf_token'] ?? '')) {
+    redirect(APP_URL . '/index.php');
+}
+
 // Clear all session data
 $_SESSION = [];
 

@@ -69,6 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             continue;
                         }
                         
+                        // 0. Check ISBN duplicate
+                        if (!empty($isbn) && $bookRepo->isbnExists($isbn)) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: ISBN $isbn ซ้ำกับหนังสือในระบบ";
+                            continue;
+                        }
+                        
                         // 1. Check if Book Exists (Merge Strategy) using repository
                         $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
                         

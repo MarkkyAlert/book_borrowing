@@ -8,10 +8,12 @@ requireStaff();
 
 use App\Repositories\BookRepository;
 use App\Repositories\CategoryRepository;
+use App\Services\BookService;
 
 $pdo = getDB();
 $bookRepo = new BookRepository($pdo);
 $categoryRepo = new CategoryRepository($pdo);
+$bookService = new BookService($pdo);
 
 $errors = [];
 $book = [
@@ -114,13 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $targetPath = $uploadDir . $newFilename;
             
             if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-                // Delete old image if exists
-                if (!empty($book['cover_image'])) {
-                    $oldPath = $uploadDir . $book['cover_image'];
-                    if (file_exists($oldPath)) {
-                        unlink($oldPath);
-                    }
-                }
+                $oldCoverImage = $book['cover_image'] ?? null;
                 $coverImage = $newFilename;
             } else {
                 $errors[] = 'ไม่สามารถอัปโหลดรูปภาพได้';
@@ -139,14 +135,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'quantity' => $book['quantity']
         ];
         
-        if ($isEdit) {
-            $bookRepo->update($book['id'], $bookData);
-            setFlash('success', 'อัปเดตหนังสือสำเร็จ');
-        } else {
-            $bookRepo->create($bookData);
-            setFlash('success', 'เพิ่มหนังสือสำเร็จ');
+        try {
+            if ($isEdit) {
+                $bookService->updateBook($book['id'], $bookData);
+                setFlash('success', 'อัปเดตหนังสือสำเร็จ');
+            } else {
+                $bookService->createBook($bookData);
+                setFlash('success', 'เพิ่มหนังสือสำเร็จ');
+            }
+            // [CLEANUP] ลบรูปปกเก่าหลัง DB save สำเร็จ — ป้องกัน orphan ถ้า DB ล้มเหลว
+            if (!empty($oldCoverImage) && $oldCoverImage !== $coverImage) {
+                $oldPath = (__DIR__ . '/../uploads/covers/') . $oldCoverImage;
+                if (file_exists($oldPath)) {
+                    @unlink($oldPath);
+                }
+            }
+            redirect('books.php');
+        } catch (Exception $e) {
+            $errors[] = $e->getMessage();
         }
-        redirect('books.php');
     }
 }
 

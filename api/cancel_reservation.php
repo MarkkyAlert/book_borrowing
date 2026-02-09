@@ -35,53 +35,17 @@ if ($reservationId <= 0) {
     redirect(APP_URL . '/my_reservations.php');
 }
 
-// ========== 5. Process Cancellation ==========
-$pdo = getDB();
-
-require_once __DIR__ . '/../app/Repositories/ReservationRepository.php';
-require_once __DIR__ . '/../app/Repositories/BookRepository.php';
-
-$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
-$bookRepo = new \App\Repositories\BookRepository($pdo);
-
+// ========== 5. Process Cancellation (via Service - Single Source of Truth) ==========
 try {
-    $pdo->beginTransaction();
+    $pdo = getDB();
+    $reservationService = new \App\Services\ReservationService($pdo);
     
-    // 5.1 ดึงข้อมูลการจอง + lock
-    $reservation = $reservationRepo->findPendingForUpdate($reservationId);
-    
-    if (!$reservation) {
-        $pdo->rollBack();
-        setFlash('error', 'ไม่พบรายการจอง หรือไม่อยู่ในสถานะรอดำเนินการ');
-        redirect(APP_URL . '/my_reservations.php');
-    }
-    
-    // 5.2 [AUTHORIZATION] ตรวจสอบว่าเป็นเจ้าของการจอง
-    if ($reservation['user_id'] !== $_SESSION['user_id']) {
-        $pdo->rollBack();
-        setFlash('error', 'คุณไม่มีสิทธิ์ยกเลิกการจองนี้');
-        redirect(APP_URL . '/my_reservations.php');
-    }
-    
-    // 5.3 อัปเดตสถานะเป็น cancelled
-    $updated = $reservationRepo->updateStatus($reservationId, 'cancelled');
-    
-    if (!$updated) {
-        $pdo->rollBack();
-        setFlash('error', 'ไม่สามารถยกเลิกการจองได้');
-        redirect(APP_URL . '/my_reservations.php');
-    }
-    
-    // 5.4 คืน stock หนังสือ
-    $bookRepo->incrementAvailable($reservation['book_id']);
-    
-    $pdo->commit();
+    // Service handles: lock, ownership check (userId), status update, stock return
+    $reservationService->cancelReservation($reservationId, $_SESSION['user_id']);
     
     setFlash('success', 'ยกเลิกการจองเรียบร้อยแล้ว');
-    
 } catch (\Exception $e) {
-    $pdo->rollBack();
-    setFlash('error', 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+    setFlash('error', $e->getMessage());
 }
 
 redirect(APP_URL . '/my_reservations.php');

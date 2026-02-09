@@ -107,7 +107,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                         
                         <!-- Profile Dropdown -->
                         <div class="relative group ml-3">
-                            <button class="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-primary-600 focus:outline-none transition-colors">
+                            <button type="button" class="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-primary-600 focus:outline-none transition-colors">
                                 <span class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center border border-primary-200">
                                     <i class="bi bi-person-fill"></i>
                                 </span>
@@ -115,8 +115,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <i class="bi bi-chevron-down text-xs text-gray-400 group-hover:text-primary-500 transition-colors"></i>
                             </button>
                             
-                            <!-- Dropdown Menu -->
-                            <div class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-1 border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transform group-hover:translate-y-0 translate-y-2 transition-all duration-200 z-50">
+                            <!-- Dropdown Menu — outer div has pt-2 as hover bridge (replaces mt-2 gap) -->
+                            <div class="absolute right-0 pt-2 w-48 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                              <div class="bg-white rounded-xl shadow-lg py-1 border border-gray-100 transform group-hover:translate-y-0 translate-y-2 transition-transform duration-200">
                                 <div class="px-4 py-3 border-b border-gray-50">
                                     <p class="text-sm text-gray-500">สวัสดี,</p>
                                     <p class="text-sm font-medium text-gray-900 truncate"><?= e($user['name'] ?? '') ?></p>
@@ -131,9 +132,10 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                     <i class="bi bi-bookmark-check mr-2 text-gray-400"></i>รายการจองของฉัน
                                 </a>
                                 <div class="border-t border-gray-50 my-1"></div>
-                                <a href="<?= APP_URL ?>/logout.php" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                <button type="button" onclick="document.getElementById('logout-form').submit()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                                     <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
-                                </a>
+                                </button>
+                              </div>
                             </div>
                         </div>
                     <?php else: ?>
@@ -180,9 +182,9 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                     <a href="<?= APP_URL ?>/my_reservations.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                         <i class="bi bi-bookmark-check mr-2"></i>รายการจองของฉัน
                     </a>
-                    <a href="<?= APP_URL ?>/logout.php" class="block px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50">
+                    <button type="button" onclick="document.getElementById('logout-form').submit()" class="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50">
                         <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
-                    </a>
+                    </button>
                 <?php else: ?>
                     <a href="<?= APP_URL ?>/login.php" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
                         เข้าสู่ระบบ
@@ -194,6 +196,12 @@ $user = isLoggedIn() ? getCurrentUser() : null;
             </div>
         </div>
     </nav>
+    
+    <?php if (isLoggedIn()): ?>
+    <form id="logout-form" method="POST" action="<?= APP_URL ?>/logout.php" class="hidden">
+        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+    </form>
+    <?php endif; ?>
     
     <!-- Main Content -->
     <main class="flex-grow">

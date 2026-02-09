@@ -39,27 +39,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation (ใช้ helper functions เป็น single source of truth)
-    if (empty($name)) {
-        $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
-    } elseif ($err = validateMaxLength($name, 100, 'ชื่อ')) {
-        $errors[] = $err;
-    }
+    // Validation via shared helper (Single Source of Truth)
+    $errors = array_merge($errors, validateMemberData([
+        'name' => $name, 'email' => $email,
+        'phone' => $phone, 'password' => $password
+    ]));
     
-    if (empty($email)) {
-        $errors[] = 'กรุณากรอกอีเมล';
-    } elseif (!isValidEmail($email)) {
-        $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
-    }
-    
-    if (!empty($phone) && !isValidPhone($phone)) {
-        $errors[] = 'เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก';
-    }
-    
-    if ($err = validatePassword($password)) {
-        $errors[] = $err;
-    }
-    
+    // Page-specific: confirm password match
     if ($password !== $confirmPassword) {
         $errors[] = 'รหัสผ่านไม่ตรงกัน';
     }

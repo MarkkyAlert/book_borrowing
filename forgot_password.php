@@ -50,8 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
             
             if ($result['token'] && defined('APP_DEBUG') && APP_DEBUG) {
-                // Demo mode: แสดง link (production จะส่งทาง email)
-                $resetLink = APP_URL . '/reset_password.php?token=' . $result['token'];
+                // Demo mode: แสดง link เฉพาะ localhost เท่านั้น (production จะส่งทาง email)
+                $isLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
+                if ($isLocal) {
+                    $resetLink = APP_URL . '/reset_password.php?token=' . $result['token'];
+                }
             }
         }
     }

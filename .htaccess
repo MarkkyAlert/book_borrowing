@@ -1,0 +1,12 @@
+# [SECURITY] ป้องกันเข้าถึงไฟล์สำคัญโดยตรง
+<FilesMatch "\.(env|example|md|json|lock|log|yml|yaml|ini|bak|sql)$">
+    Require all denied
+</FilesMatch>
+
+# ป้องกัน directory listing
+Options -Indexes
+
+# ป้องกันเข้าถึง .installed lock file
+<Files ".installed">
+    Require all denied
+</Files>

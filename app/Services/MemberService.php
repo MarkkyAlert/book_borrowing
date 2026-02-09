@@ -23,9 +23,11 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Repositories/UserRepository.php';
 require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 
 use App\Repositories\UserRepository;
 use App\Repositories\BorrowRepository;
+use App\Repositories\ReservationRepository;
 use PDO;
 use Exception;
 
@@ -34,12 +36,14 @@ class MemberService
     private PDO $pdo;
     private UserRepository $userRepo;
     private BorrowRepository $borrowRepo;
+    private ReservationRepository $reservationRepo;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->userRepo = new UserRepository($pdo);
         $this->borrowRepo = new BorrowRepository($pdo);
+        $this->reservationRepo = new ReservationRepository($pdo);
     }
 
     /**
@@ -73,17 +77,10 @@ class MemberService
      */
     public function createMember(array $data): array
     {
-        // Validate
-        if (empty($data['name'])) {
-            throw new Exception('กรุณากรอกชื่อ');
-        }
-
-        if (empty($data['email'])) {
-            throw new Exception('กรุณากรอกอีเมล');
-        }
-
-        if (!isValidEmail($data['email'])) {
-            throw new Exception('รูปแบบอีเมลไม่ถูกต้อง');
+        // Validate via shared helper (Single Source of Truth)
+        $errors = validateMemberData($data);
+        if (!empty($errors)) {
+            throw new Exception($errors[0]);
         }
 
         // Check duplicate email
@@ -93,13 +90,11 @@ class MemberService
 
         // Use provided password or generate random
         $password = !empty($data['password']) ? $data['password'] : $this->generateRandomPassword();
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
         $memberId = $this->userRepo->create([
             'name' => trim($data['name']),
             'email' => trim($data['email']),
             'phone' => trim($data['phone'] ?? ''),
-            'password' => $hashedPassword,
+            'password' => hashPassword($password),
             'role' => 'member'
         ]);
 
@@ -155,7 +150,27 @@ class MemberService
             throw new Exception('ไม่สามารถลบได้ สมาชิกมีประวัติการยืม');
         }
 
+        // [FIX] Check pending reservations — CASCADE DELETE จะลบ reservation แต่ไม่คืน stock
+        if ($this->reservationRepo->countPendingByUser($id) > 0) {
+            throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
+        }
+
         return $this->userRepo->deleteMember($id);
+    }
+
+    /**
+     * อัปเดตรหัสผ่านสมาชิก (Single Source of Truth สำหรับ admin reset password)
+     * 
+     * @param int $id ID สมาชิก
+     * @param string $plainPassword รหัสผ่านใหม่ (plaintext)
+     * @throws Exception ถ้า password ไม่ผ่าน validation
+     */
+    public function updatePassword(int $id, string $plainPassword): void
+    {
+        if ($err = validatePassword($plainPassword)) {
+            throw new Exception($err);
+        }
+        $this->userRepo->updatePassword($id, hashPassword($plainPassword));
     }
 
     /**
@@ -205,6 +220,12 @@ class MemberService
         $name = trim($data['name']);
         $phone = trim($data['phone'] ?? '');
         
+        // Validate via shared helper (Single Source of Truth) — ไม่ต้องส่ง password เพราะ import ใช้ default
+        $errors = validateMemberData(['name' => $name, 'email' => $email, 'phone' => $phone]);
+        if (!empty($errors)) {
+            throw new Exception($errors[0]);
+        }
+        
         // Check if exists
         $existing = $this->userRepo->findByEmail($email);
         
@@ -212,16 +233,16 @@ class MemberService
             // UPDATE: Name & Phone only (keep existing password)
             $this->userRepo->update($existing['id'], [
                 'name' => $name,
+                'email' => $email,
                 'phone' => $phone
             ]);
             return ['action' => 'updated', 'id' => $existing['id']];
         } else {
             // INSERT: New member with default password
-            $hashedPassword = password_hash($defaultPassword, PASSWORD_DEFAULT);
             $memberId = $this->userRepo->create([
                 'name' => $name,
                 'email' => $email,
-                'password' => $hashedPassword,
+                'password' => hashPassword($defaultPassword),
                 'phone' => $phone,
                 'role' => 'member'
             ]);

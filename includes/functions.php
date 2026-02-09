@@ -113,13 +113,13 @@ function displayFlash(): void
             default => 'bi-info-circle-fill'
         };
 
-        echo '<div class="' . $colorClass . ' border-l-4 p-4 mb-6 rounded-r-lg shadow-sm flex items-start animate-fade-in-down" role="alert">';
-        echo '<div class="flex-shrink-0 mr-3"><i class="bi ' . $icon . '"></i></div>';
+        echo '<div class="' . $colorClass . ' border-l-4 p-3 sm:p-4 mb-4 sm:mb-6 rounded-r-lg shadow-sm flex items-start gap-2 sm:gap-3 relative z-30 overflow-hidden" role="alert">';
+        echo '<div class="flex-shrink-0 mt-0.5"><i class="bi ' . $icon . '"></i></div>';
         
         $content = $flash['isHtml'] ? $flash['message'] : e($flash['message']);
         
-        echo '<div class="flex-grow">' . $content . '</div>';
-        echo '<button type="button" class="ml-auto -mx-1.5 -my-1.5 rounded-lg p-1.5 inline-flex h-8 w-8 hover:bg-white/25 focus:ring-2 focus:ring-offset-2 focus:ring-offset-' . str_replace(['bg-', '-50'], ['text-', '-500'], $colorClass) . '" onclick="this.parentElement.remove()">';
+        echo '<div class="flex-grow min-w-0 text-sm sm:text-base break-words">' . $content . '</div>';
+        echo '<button type="button" class="flex-shrink-0 rounded-lg p-1 inline-flex items-center justify-center h-6 w-6 sm:h-8 sm:w-8 hover:bg-white/25" onclick="this.parentElement.remove()">';
         echo '<span class="sr-only">Close</span>';
         echo '<i class="bi bi-x text-lg"></i>';
         echo '</button>';
@@ -452,6 +452,63 @@ function validatePassword(string $password, bool $allowEmpty = false): ?string
 }
 
 /**
+ * ตรวจสอบข้อมูลสมาชิก (Single Source of Truth)
+ * 
+ * รวม validation rules สำหรับ name, email, phone, password ไว้ที่เดียว
+ * ใช้ร่วมกันทั้ง register.php, member_form.php, MemberService, AuthService
+ * 
+ * @param array $data       { name, email, phone?, password? }
+ * @param bool  $isEdit     true = edit mode (password ว่างได้)
+ * @return array             error messages (empty = valid)
+ * 
+ * @example $errors = validateMemberData($data);
+ *          if (!empty($errors)) { ... }
+ */
+function validateMemberData(array $data, bool $isEdit = false): array
+{
+    $errors = [];
+
+    // Name
+    if (empty(trim($data['name'] ?? ''))) {
+        $errors[] = 'กรุณากรอกชื่อ-นามสกุล';
+    } elseif ($err = validateMaxLength($data['name'], 100, 'ชื่อ')) {
+        $errors[] = $err;
+    }
+
+    // Email
+    if (empty(trim($data['email'] ?? ''))) {
+        $errors[] = 'กรุณากรอกอีเมล';
+    } elseif (!isValidEmail($data['email'])) {
+        $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
+    }
+
+    // Phone (optional)
+    if (!empty($data['phone']) && !isValidPhone($data['phone'])) {
+        $errors[] = 'เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก';
+    }
+
+    // Password (skip if not provided in data)
+    if (array_key_exists('password', $data)) {
+        if ($err = validatePassword($data['password'], $isEdit)) {
+            $errors[] = $err;
+        }
+    }
+
+    return $errors;
+}
+
+/**
+ * Hash password ด้วย algorithm กลาง (Single Source of Truth)
+ * 
+ * @param string $plainPassword รหัสผ่าน plaintext
+ * @return string hashed password
+ */
+function hashPassword(string $plainPassword): string
+{
+    return password_hash($plainPassword, PASSWORD_DEFAULT);
+}
+
+/**
  * สร้าง CSRF token สำหรับป้องกันการโจมตี Cross-Site Request Forgery
  * 
  * @return string token 64 ตัวอักษร (hex)
@@ -466,6 +523,8 @@ function validatePassword(string $password, bool $allowEmpty = false): ?string
  */
 function generateCSRFToken(): string
 {
+    // Per-session token — ใช้ร่วมกันทุก form ในหน้าเดียวกัน
+    // SameSite=Lax cookie ป้องกัน cross-origin POST อยู่แล้ว
     if (!isset($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
@@ -500,7 +559,7 @@ function startSession(): void
     if (session_status() === PHP_SESSION_NONE) {
         // [SECURITY] ตั้งค่า session cookie ให้ปลอดภัย
         session_set_cookie_params([
-            'lifetime' => defined('SESSION_LIFETIME') ? SESSION_LIFETIME : 3600,
+            'lifetime' => 0, // Session cookie — ปิด browser = หมดอายุ
             'path' => '/',
             'domain' => '',
             'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
@@ -509,6 +568,16 @@ function startSession(): void
         ]);
         session_start();
     }
+    
+    // [SECURITY] Inactivity timeout — ป้องกัน session ค้างบน shared computer
+    $timeout = defined('SESSION_LIFETIME') ? SESSION_LIFETIME : 3600;
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > $timeout)) {
+        session_unset();
+        session_destroy();
+        session_start(); // Start fresh session
+        return;
+    }
+    $_SESSION['last_activity'] = time();
 }
 
 /**
@@ -528,46 +597,63 @@ function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinut
     $maxAttempts = $maxAttempts ?? RATE_LIMIT_MAX_ATTEMPTS;
     $windowMinutes = $windowMinutes ?? RATE_LIMIT_WINDOW_MINUTES;
     
-    $attemptKey = $key . '_attempts';
-    $timeKey = $key . '_time';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $fullKey = $key . '_' . $ip;
     
-    if (!isset($_SESSION[$attemptKey])) {
-        $_SESSION[$attemptKey] = 0;
-        $_SESSION[$timeKey] = time();
+    try {
+        $pdo = getDB();
+        
+        // Cleanup expired entries
+        $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE key_name = ? AND created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)");
+        $stmt->execute([$fullKey, $windowMinutes]);
+        
+        // Count recent attempts
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM rate_limits WHERE key_name = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)");
+        $stmt->execute([$fullKey, $windowMinutes]);
+        
+        return (int) $stmt->fetchColumn() < $maxAttempts;
+    } catch (\Exception $e) {
+        // Fallback: allow request if DB fails (avoid locking out everyone)
+        return true;
     }
-    
-    // Reset counter หลังหมดเวลา window
-    if (time() - $_SESSION[$timeKey] > $windowMinutes * 60) {
-        $_SESSION[$attemptKey] = 0;
-        $_SESSION[$timeKey] = time();
-    }
-    
-    return $_SESSION[$attemptKey] < $maxAttempts;
 }
 
 /**
- * เพิ่มจำนวน attempt สำหรับ rate limit
+ * เพิ่มจำนวน attempt สำหรับ rate limit (DB-based, keyed by IP)
  * 
  * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
  */
 function incrementRateLimit(string $key): void
 {
-    $attemptKey = $key . '_attempts';
-    if (!isset($_SESSION[$attemptKey])) {
-        $_SESSION[$attemptKey] = 0;
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $fullKey = $key . '_' . $ip;
+    
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare("INSERT INTO rate_limits (key_name) VALUES (?)");
+        $stmt->execute([$fullKey]);
+    } catch (\Exception $e) {
+        // Silently fail — rate limit is best-effort
     }
-    $_SESSION[$attemptKey]++;
 }
 
 /**
- * Reset rate limit counter (เรียกหลัง success)
+ * Reset rate limit counter (เรียกหลัง success, DB-based)
  * 
  * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
  */
 function resetRateLimit(string $key): void
 {
-    $attemptKey = $key . '_attempts';
-    $_SESSION[$attemptKey] = 0;
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $fullKey = $key . '_' . $ip;
+    
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE key_name = ?");
+        $stmt->execute([$fullKey]);
+    } catch (\Exception $e) {
+        // Silently fail
+    }
 }
 
 /**

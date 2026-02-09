@@ -24,6 +24,7 @@
 namespace App\Services;
 
 require_once __DIR__ . '/../Repositories/UserRepository.php';
+require_once __DIR__ . '/MemberService.php';
 
 use App\Repositories\UserRepository;
 use PDO;
@@ -86,28 +87,19 @@ class AuthService
      */
     public function register(array $data): array
     {
-        // Validate required fields
-        if (empty($data['name']) || empty($data['email']) || empty($data['password'])) {
-            return ['success' => false, 'error' => 'ข้อมูลไม่ครบถ้วน'];
-        }
-        
-        // Check email duplicate
-        if ($this->userRepo->emailExists($data['email'])) {
-            return ['success' => false, 'error' => 'อีเมลนี้ถูกใช้งานแล้ว'];
-        }
-        
         try {
-            $userId = $this->userRepo->create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'phone' => $data['phone'] ?? null,
-                'password' => password_hash($data['password'], PASSWORD_DEFAULT),
-                'role' => 'member' // Hardcode - ห้าม user เลือกเอง
+            // Delegate ไปที่ MemberService (Single Source of Truth สำหรับสร้าง member)
+            $memberService = new MemberService($this->pdo);
+            $result = $memberService->createMember([
+                'name' => $data['name'] ?? '',
+                'email' => $data['email'] ?? '',
+                'phone' => $data['phone'] ?? '',
+                'password' => $data['password'] ?? ''
             ]);
             
-            return ['success' => true, 'user_id' => $userId];
-        } catch (\PDOException $e) {
-            return ['success' => false, 'error' => 'เกิดข้อผิดพลาด กรุณาลองใหม่'];
+            return ['success' => true, 'user_id' => $result['id']];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
         }
     }
     
@@ -146,10 +138,12 @@ class AuthService
      */
     public function changePassword(int $userId, string $currentPassword, string $newPassword): array
     {
-        $user = $this->userRepo->findByEmail(
-            $this->userRepo->findById($userId)['email'] ?? ''
-        );
+        $currentUser = $this->userRepo->findById($userId);
+        if (!$currentUser) {
+            return ['success' => false, 'error' => 'ไม่พบผู้ใช้'];
+        }
         
+        $user = $this->userRepo->findByEmail($currentUser['email']);
         if (!$user) {
             return ['success' => false, 'error' => 'ไม่พบผู้ใช้'];
         }
@@ -162,8 +156,7 @@ class AuthService
             return ['success' => false, 'error' => 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน'];
         }
         
-        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-        $this->userRepo->updatePassword($userId, $hashedPassword);
+        $this->userRepo->updatePassword($userId, hashPassword($newPassword));
         
         return ['success' => true];
     }
@@ -233,8 +226,7 @@ class AuthService
             $this->pdo->beginTransaction();
             
             // Update password
-            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-            $this->userRepo->updatePassword($resetRequest['user_id'], $hashedPassword);
+            $this->userRepo->updatePassword($resetRequest['user_id'], hashPassword($newPassword));
             
             // Mark token as used
             $resetRepo->markUsed($resetRequest['id']);

@@ -7,11 +7,9 @@ require_once __DIR__ . '/../bootstrap.php';
 requireStaff();
 
 use App\Services\MemberService;
-use App\Repositories\BorrowRepository;
 
 $pdo = getDB();
 $memberService = new MemberService($pdo);
-$borrowRepo = new BorrowRepository($pdo);
 
 // Get parameters
 $search = trim($_GET['search'] ?? '');
@@ -160,78 +158,47 @@ require_once __DIR__ . '/header.php';
     </div>
 </div>
 
-<!-- Borrow History Modals -->
-<?php foreach ($members as $member): ?>
-    <?php
-    // Use repository instead of raw SQL
-    $history = $borrowRepo->findByUserId($member['id'], 10);
-    ?>
-    
-    <div id="historyModal<?= $member['id'] ?>" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0 modal-backdrop"></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-4xl opacity-0 translate-y-4 modal-panel">
-                <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 sm:px-6 flex justify-between items-center">
-                    <h3 class="text-lg font-bold text-gray-900 flex items-center">
-                        <i class="bi bi-clock-history mr-2 text-primary-600"></i>
-                        ประวัติการยืม - <?= e($member['name']) ?>
-                    </h3>
-                    <button type="button" class="text-gray-400 hover:text-gray-500 focus:outline-none" onclick="closeHistoryModal(<?= $member['id'] ?>)">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
+<!-- Single Borrow History Modal (AJAX loaded - Fix N+1 query) -->
+<div id="historyModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0 modal-backdrop"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-4xl opacity-0 translate-y-4 modal-panel">
+            <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 sm:px-6 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                    <i class="bi bi-clock-history mr-2 text-primary-600"></i>
+                    ประวัติการยืม - <span id="modalMemberName"></span>
+                </h3>
+                <button type="button" class="text-gray-400 hover:text-gray-500 focus:outline-none" onclick="closeHistoryModal()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="p-0" id="modalContent">
+                <div class="text-center py-12 text-gray-400">
+                    <i class="bi bi-arrow-repeat text-4xl mb-2 inline-block text-gray-300 animate-spin"></i>
+                    <p>กำลังโหลด...</p>
                 </div>
-                
-                <div class="p-0">
-                    <?php if (empty($history)): ?>
-                        <div class="text-center py-12 text-gray-400">
-                            <i class="bi bi-journal-x text-4xl mb-2 inline-block text-gray-300"></i>
-                            <p>ยังไม่มีประวัติการยืม</p>
-                        </div>
-                    <?php else: ?>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm text-left">
-                                <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                                    <tr>
-                                        <th class="px-6 py-3">หนังสือ</th>
-                                        <th class="px-6 py-3">วันที่ยืม</th>
-                                        <th class="px-6 py-3">กำหนดคืน</th>
-                                        <th class="px-6 py-3">วันที่คืน</th>
-                                        <th class="px-6 py-3">สถานะ</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <?php foreach ($history as $item): ?>
-                                        <tr class="hover:bg-gray-50/50">
-                                            <td class="px-6 py-3 font-medium text-gray-900 line-clamp-1 max-w-[200px]" title="<?= e($item['book_title']) ?>"><?= e($item['book_title']) ?></td>
-                                            <td class="px-6 py-3 text-gray-500"><?= formatDate($item['borrow_date']) ?></td>
-                                            <td class="px-6 py-3 text-gray-500"><?= formatDate($item['due_date']) ?></td>
-                                            <td class="px-6 py-3 text-gray-500"><?= formatDate($item['return_date']) ?></td>
-                                            <td class="px-6 py-3"><?= getBorrowStatusLabel($item['status'], $item['due_date']) ?></td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end">
-                    <button type="button" class="inline-flex justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50" onclick="closeHistoryModal(<?= $member['id'] ?>)">
-                        ปิด
-                    </button>
-                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end">
+                <button type="button" class="inline-flex justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50" onclick="closeHistoryModal()">
+                    ปิด
+                </button>
             </div>
         </div>
     </div>
-<?php endforeach; ?>
+</div>
 
 <?php require_once __DIR__ . '/footer.php'; ?>
 
 <script>
+const modal = document.getElementById('historyModal');
+const backdrop = modal.querySelector('.modal-backdrop');
+const panel = modal.querySelector('.modal-panel');
+
 function openHistoryModal(id) {
-    const modal = document.getElementById('historyModal' + id);
-    const backdrop = modal.querySelector('.modal-backdrop');
-    const panel = modal.querySelector('.modal-panel');
+    const memberRow = document.querySelector(`[onclick="openHistoryModal(${id})"]`);
+    const memberName = memberRow ? memberRow.closest('tr').querySelector('.font-medium.text-gray-900')?.textContent?.trim() : '';
+    document.getElementById('modalMemberName').textContent = memberName || 'สมาชิก';
+    document.getElementById('modalContent').innerHTML = '<div class="text-center py-12 text-gray-400"><i class="bi bi-arrow-repeat text-4xl mb-2 inline-block text-gray-300 animate-spin"></i><p>กำลังโหลด...</p></div>';
     
     modal.classList.remove('hidden');
     setTimeout(() => {
@@ -239,19 +206,51 @@ function openHistoryModal(id) {
         panel.classList.remove('opacity-0', 'translate-y-4');
         panel.classList.add('opacity-100', 'translate-y-0');
     }, 10);
+    
+    fetch('../api/member_history.php?id=' + id)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) {
+                document.getElementById('modalContent').innerHTML = '<div class="text-center py-12 text-gray-400"><i class="bi bi-journal-x text-4xl mb-2 inline-block text-gray-300"></i><p>ยังไม่มีประวัติการยืม</p></div>';
+                return;
+            }
+            let html = '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100"><tr><th class="px-6 py-3">หนังสือ</th><th class="px-6 py-3">วันที่ยืม</th><th class="px-6 py-3">กำหนดคืน</th><th class="px-6 py-3">วันที่คืน</th><th class="px-6 py-3">สถานะ</th></tr></thead><tbody class="divide-y divide-gray-100">';
+            data.forEach(item => {
+                let statusClass, statusText;
+                if (item.status === 'returned') {
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusText = '<i class="bi bi-check-circle-fill mr-1"></i>คืนแล้ว';
+                } else if (item.due_date && new Date(item.due_date) < new Date(new Date().toDateString())) {
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusText = '<i class="bi bi-exclamation-circle-fill mr-1"></i>เกินกำหนด';
+                } else {
+                    statusClass = 'bg-blue-100 text-blue-800';
+                    statusText = '<i class="bi bi-clock-fill mr-1"></i>กำลังยืม';
+                }
+                html += `<tr class="hover:bg-gray-50/50">
+                    <td class="px-6 py-3 font-medium text-gray-900 line-clamp-1 max-w-[200px]">${item.book_title}</td>
+                    <td class="px-6 py-3 text-gray-500">${item.borrow_date || '-'}</td>
+                    <td class="px-6 py-3 text-gray-500">${item.due_date || '-'}</td>
+                    <td class="px-6 py-3 text-gray-500">${item.return_date || '-'}</td>
+                    <td class="px-6 py-3"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">${statusText}</span></td>
+                </tr>`;
+            });
+            html += '</tbody></table></div>';
+            document.getElementById('modalContent').innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('modalContent').innerHTML = '<div class="text-center py-12 text-red-400"><p>เกิดข้อผิดพลาด กรุณาลองใหม่</p></div>';
+        });
 }
 
-function closeHistoryModal(id) {
-    const modal = document.getElementById('historyModal' + id);
-    const backdrop = modal.querySelector('.modal-backdrop');
-    const panel = modal.querySelector('.modal-panel');
-    
+function closeHistoryModal() {
     backdrop.classList.add('opacity-0');
     panel.classList.remove('opacity-100', 'translate-y-0');
     panel.classList.add('opacity-0', 'translate-y-4');
-    
-    setTimeout(() => {
-        modal.classList.add('hidden');
-    }, 300);
+    setTimeout(() => { modal.classList.add('hidden'); }, 300);
 }
+
+modal.addEventListener('click', function(e) {
+    if (e.target === backdrop || e.target === modal) closeHistoryModal();
+});
 </script>

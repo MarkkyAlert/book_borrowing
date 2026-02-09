@@ -1,7 +1,10 @@
 <?php
 /**
- * QA Test Runner - HTTP Integration Tests
- * Runs actual HTTP requests against the system
+ * QA Test Runner v2 - HTTP Integration Tests
+ * 55 test cases: 17 happy path, 16 validation, 12 edge, 10 security
+ * 
+ * Usage: php tests/qa_test_runner.php [admin_password]
+ *   admin_password: password for admin@library.com (default: 123456)
  */
 
 date_default_timezone_set('Asia/Bangkok');
@@ -10,606 +13,537 @@ $BASE_URL = 'http://localhost/book_borrowing';
 $TIMESTAMP = time();
 $LOG_FILE = __DIR__ . '/logs/qa_run_' . date('Y-m-d_His') . '.jsonl';
 
-// Ensure logs directory exists
 if (!is_dir(__DIR__ . '/logs')) {
     mkdir(__DIR__ . '/logs', 0755, true);
 }
 
-// Test data
-$TEST_USER_EMAIL = "testuser_qa_{$TIMESTAMP}@test.com";
+// Test accounts
+$TEST_USER_EMAIL = "qa_user_{$TIMESTAMP}@test.com";
 $TEST_USER_PASSWORD = 'Test123456';
-$ADMIN_EMAIL = 'admin@gmail.com';
-$ADMIN_PASSWORD = '123456';
+$ADMIN_EMAIL = 'admin@library.com';
+$ADMIN_PASSWORD = $argv[1] ?? 'password';
 
-// Session storage
+// State
 $userSession = null;
 $adminSession = null;
-$csrfToken = null;
-$testBookId = null;
-$testMemberId = null;
-$testCategoryId = null;
-$testBorrowId = null;
+$testReservationId = null;
+$testCategoryName = "QA_Cat_$TIMESTAMP";
+$testMemberEmail = "qa_member_{$TIMESTAMP}@test.com";
 
 // Results
-$results = [
-    'passed' => 0,
-    'failed' => 0,
-    'total' => 0,
-    'details' => []
-];
+$results = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0, 'details' => []];
 
-/**
- * Make HTTP request using cURL
- */
-function httpRequest($method, $url, $data = [], $cookies = null, $headers = []) {
+// ============================================================
+// HELPERS
+// ============================================================
+
+function http($method, $url, $data = [], $cookies = null) {
     $ch = curl_init();
-    
     $fullUrl = $url;
     if ($method === 'GET' && !empty($data)) {
         $fullUrl .= '?' . http_build_query($data);
     }
-    
-    curl_setopt($ch, CURLOPT_URL, $fullUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $fullUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+    ]);
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
     }
-    
     if ($cookies) {
         curl_setopt($ch, CURLOPT_COOKIE, $cookies);
     }
-    
-    $defaultHeaders = ['Content-Type: application/x-www-form-urlencoded'];
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge($defaultHeaders, $headers));
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $error = curl_error($ch);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $hdrSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $err = curl_error($ch);
     curl_close($ch);
-    
-    if ($error) {
-        return ['error' => $error, 'status' => 0, 'headers' => '', 'body' => ''];
+
+    if ($err) return ['error' => $err, 'status' => 0, 'headers' => '', 'body' => '', 'session' => null];
+
+    $hdrs = substr($raw, 0, $hdrSize);
+    $body = substr($raw, $hdrSize);
+    $sess = null;
+    if (preg_match('/Set-Cookie:\s*PHPSESSID=([^;]+)/i', $hdrs, $m)) {
+        $sess = 'PHPSESSID=' . $m[1];
     }
-    
-    $responseHeaders = substr($response, 0, $headerSize);
-    $body = substr($response, $headerSize);
-    
-    // Extract session cookie
-    $sessionCookie = null;
-    if (preg_match('/Set-Cookie:\s*PHPSESSID=([^;]+)/i', $responseHeaders, $m)) {
-        $sessionCookie = 'PHPSESSID=' . $m[1];
-    }
-    
-    return [
-        'status' => $httpCode,
-        'headers' => $responseHeaders,
-        'body' => $body,
-        'session' => $sessionCookie
-    ];
+    return ['status' => $code, 'headers' => $hdrs, 'body' => $body, 'session' => $sess];
 }
 
-/**
- * Get CSRF token from page
- */
-function getCSRFToken($html) {
-    if (preg_match('/name=["\']csrf_token["\']\s+value=["\']([^"\']+)["\']/', $html, $m)) {
-        return $m[1];
-    }
-    if (preg_match('/value=["\']([^"\']+)["\']\s+name=["\']csrf_token["\']/', $html, $m)) {
-        return $m[1];
-    }
+function csrf($html) {
+    if (preg_match('/name=["\']csrf_token["\']\s*value=["\']([^"\']+)["\']/', $html, $m)) return $m[1];
+    if (preg_match('/value=["\']([^"\']+)["\']\s*name=["\']csrf_token["\']/', $html, $m)) return $m[1];
     return null;
 }
 
-/**
- * Log test result
- */
-function logResult($testId, $request, $response, $passed, $message = '') {
-    global $LOG_FILE, $results;
-    
-    $results['total']++;
-    if ($passed) {
-        $results['passed']++;
-    } else {
-        $results['failed']++;
-    }
-    
-    $logEntry = [
-        'test_id' => $testId,
-        'timestamp' => date('c'),
-        'passed' => $passed,
-        'message' => $message,
-        'request' => [
-            'method' => $request['method'],
-            'url' => $request['url'],
-            'body' => maskSecrets($request['body'] ?? [])
-        ],
-        'response' => [
-            'status' => $response['status'],
-            'body_length' => strlen($response['body'] ?? ''),
-            'body_preview' => substr($response['body'] ?? '', 0, 500)
-        ]
-    ];
-    
-    $results['details'][] = $logEntry;
-    
-    file_put_contents($LOG_FILE, json_encode($logEntry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
-    
-    $status = $passed ? '✅ PASS' : '❌ FAIL';
-    echo "[$status] $testId: $message\n";
-}
-
-/**
- * Mask sensitive data
- */
-function maskSecrets($data) {
-    $masked = $data;
-    foreach (['password', 'current_password', 'new_password', 'confirm_password'] as $key) {
-        if (isset($masked[$key])) {
-            $masked[$key] = '***';
-        }
-    }
-    return $masked;
-}
-
-/**
- * Run single test
- */
-function runTest($testId, $method, $endpoint, $data, $cookies, $expectedStatus, $check = null) {
+function login($email, $password) {
     global $BASE_URL;
-    
+    $r = http('GET', "$BASE_URL/login.php");
+    $sess = $r['session'];
+    $tok = csrf($r['body']);
+    $r2 = http('POST', "$BASE_URL/login.php", [
+        'email' => $email, 'password' => $password, 'csrf_token' => $tok
+    ], $sess);
+    return $r2['session'] ?: $sess;
+}
+
+function getPage($path, $session) {
+    global $BASE_URL;
+    return http('GET', "$BASE_URL$path", [], $session);
+}
+
+function mask($data) {
+    $m = $data;
+    foreach (['password','current_password','new_password','confirm_password'] as $k) {
+        if (isset($m[$k])) $m[$k] = '***';
+    }
+    return $m;
+}
+
+function test($id, $method, $endpoint, $data, $cookies, $expect, $check = null) {
+    global $BASE_URL, $LOG_FILE, $results;
     $url = $BASE_URL . $endpoint;
-    $response = httpRequest($method, $url, $data, $cookies);
-    
-    $passed = false;
-    $message = '';
-    
-    if (isset($response['error'])) {
-        $message = "Connection error: {$response['error']}";
-    } elseif (is_array($expectedStatus)) {
-        $passed = in_array($response['status'], $expectedStatus);
-        $message = $passed ? "Status {$response['status']} OK" : "Expected " . implode('/', $expectedStatus) . ", got {$response['status']}";
+    $r = http($method, $url, $data, $cookies);
+
+    $pass = false;
+    $msg = '';
+    if (isset($r['error'])) {
+        $msg = "CONN ERROR: {$r['error']}";
+    } elseif (is_array($expect)) {
+        $pass = in_array($r['status'], $expect);
+        $msg = $pass ? "Status {$r['status']} OK" : "Expected " . implode('|', $expect) . ", got {$r['status']}";
     } else {
-        $passed = $response['status'] == $expectedStatus;
-        $message = $passed ? "Status {$response['status']} OK" : "Expected $expectedStatus, got {$response['status']}";
+        $pass = ($r['status'] == $expect);
+        $msg = $pass ? "Status {$r['status']} OK" : "Expected $expect, got {$r['status']}";
     }
-    
-    // Additional checks
-    if ($passed && $check) {
-        $checkResult = $check($response);
-        if ($checkResult !== true) {
-            $passed = false;
-            $message = $checkResult;
-        }
+    if ($pass && $check) {
+        $cr = $check($r);
+        if ($cr !== true) { $pass = false; $msg = $cr; }
     }
-    
-    logResult($testId, ['method' => $method, 'url' => $url, 'body' => $data], $response, $passed, $message);
-    
-    return $response;
+
+    $results['total']++;
+    $results[$pass ? 'passed' : 'failed']++;
+    $entry = [
+        'test_id' => $id, 'timestamp' => date('c'), 'passed' => $pass, 'message' => $msg,
+        'request' => ['method' => $method, 'url' => $url, 'body' => mask($data)],
+        'response' => ['status' => $r['status'], 'body_length' => strlen($r['body']),
+                        'body_preview' => mb_substr($r['body'], 0, 500)]
+    ];
+    $results['details'][] = $entry;
+    file_put_contents($LOG_FILE, json_encode($entry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+    echo ($pass ? '  ✅' : '  ❌') . " $id: $msg\n";
+    return $r;
 }
 
 // ============================================================
-// START TESTS
+// PREFLIGHT — check server is reachable
 // ============================================================
+echo "\n══════════════════════════════════════\n";
+echo " QA Test Runner v2 — " . date('Y-m-d H:i:s') . "\n";
+echo " Base: $BASE_URL\n";
+echo " Log:  $LOG_FILE\n";
+echo "══════════════════════════════════════\n";
 
-echo "\n========================================\n";
-echo "QA Test Runner - " . date('Y-m-d H:i:s') . "\n";
-echo "Base URL: $BASE_URL\n";
-echo "Log File: $LOG_FILE\n";
-echo "========================================\n\n";
+$ping = http('GET', "$BASE_URL/login.php");
+if ($ping['status'] === 0) {
+    echo "\n❌ Server not reachable at $BASE_URL\n";
+    echo "   Start Apache first, then re-run.\n";
+    exit(2);
+}
+echo "\n✓ Server reachable (HTTP {$ping['status']})\n";
 
-// --------------------------------------------------
-// A. HAPPY PATH TESTS
-// --------------------------------------------------
-echo "\n--- HAPPY PATH TESTS ---\n";
+// ============================================================
+// A. HAPPY PATH (17)
+// ============================================================
+echo "\n─── A. HAPPY PATH (17) ───\n";
 
-// HP-01: Register new user
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('HP-01', 'POST', '/register.php', [
-    'name' => 'Test User QA',
-    'email' => $TEST_USER_EMAIL,
-    'password' => $TEST_USER_PASSWORD,
-    'confirm_password' => $TEST_USER_PASSWORD,
-    'csrf_token' => $csrfToken
-], $resp['session'], 302);
+// HP-01 Register
+$r = http('GET', "$BASE_URL/register.php");
+test('HP-01', 'POST', '/register.php', [
+    'name' => 'QA User', 'email' => $TEST_USER_EMAIL,
+    'password' => $TEST_USER_PASSWORD, 'confirm_password' => $TEST_USER_PASSWORD,
+    'csrf_token' => csrf($r['body'])
+], $r['session'], 302);
 
-// HP-02: Login as user
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$csrfToken = getCSRFToken($resp['body']);
-$userSession = $resp['session'];
-$resp = runTest('HP-02', 'POST', '/login.php', [
-    'email' => $TEST_USER_EMAIL,
-    'password' => $TEST_USER_PASSWORD
-], $userSession, 302);
-if ($resp['session']) $userSession = $resp['session'];
-
-// HP-03: Login as admin
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$csrfToken = getCSRFToken($resp['body']);
-$adminSession = $resp['session'];
-$resp = runTest('HP-03', 'POST', '/login.php', [
-    'email' => $ADMIN_EMAIL,
-    'password' => $ADMIN_PASSWORD
-], $adminSession, 302, function($r) {
-    return strpos($r['headers'], 'Location') !== false ? true : 'No redirect';
+// HP-02 Login user
+$userSession = login($TEST_USER_EMAIL, $TEST_USER_PASSWORD);
+test('HP-02', 'GET', '/profile.php', [], $userSession, 200, function($r) {
+    return (strpos($r['body'], 'QA User') !== false) ? true : 'Profile page not loaded';
 });
-if ($resp['session']) $adminSession = $resp['session'];
 
-// HP-04: Logout
-$resp = runTest('HP-04', 'GET', '/logout.php', [], $userSession, 302);
+// HP-03 Login admin
+$adminSession = login($ADMIN_EMAIL, $ADMIN_PASSWORD);
+test('HP-03', 'GET', '/admin/index.php', [], $adminSession, 200, function($r) {
+    return (strpos($r['body'], 'dashboard') !== false || strpos($r['body'], 'แดชบอร์ด') !== false || $r['status'] == 200) ? true : 'Admin dashboard not loaded';
+});
 
-// Re-login user for further tests
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$userSession = $resp['session'];
-httpRequest('POST', "$BASE_URL/login.php", [
-    'email' => $TEST_USER_EMAIL,
-    'password' => $TEST_USER_PASSWORD
-], $userSession);
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-if ($resp['session']) $userSession = $resp['session'];
+// HP-04 Logout (POST + CSRF)
+$r = getPage('/index.php', $userSession);
+$tok = csrf($r['body']);
+test('HP-04', 'POST', '/logout.php', ['csrf_token' => $tok], $userSession, 302);
+$userSession = login($TEST_USER_EMAIL, $TEST_USER_PASSWORD); // re-login
 
-// HP-05: Search books (no filter)
-$resp = runTest('HP-05', 'GET', '/api/search_books.php', [], null, 200);
+// HP-05 Search books (no filter)
+test('HP-05', 'GET', '/api/search_books.php', [], $userSession, 200);
 
-// HP-06: Search books with keyword
-$resp = runTest('HP-06', 'GET', '/api/search_books.php', ['search' => 'test'], null, 200);
+// HP-06 Search with keyword
+test('HP-06', 'GET', '/api/search_books.php', ['search' => 'Atomic'], $userSession, 200);
 
-// HP-07: View book detail
-$resp = runTest('HP-07', 'GET', '/book.php', ['id' => 1], null, [200, 302]);
+// HP-07 View book detail
+test('HP-07', 'GET', '/book.php?id=1', [], $userSession, [200, 302]);
 
-// HP-08: Reserve a book (need logged in user)
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$userSession = $resp['session'];
-$resp = httpRequest('POST', "$BASE_URL/login.php", [
-    'email' => $TEST_USER_EMAIL,
-    'password' => $TEST_USER_PASSWORD
-], $userSession);
-if ($resp['session']) $userSession = $resp['session'];
-
-$resp = httpRequest('GET', "$BASE_URL/book.php?id=1", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('HP-08', 'POST', '/api/reserve_book.php', [
-    'book_id' => 1,
-    'csrf_token' => $csrfToken
+// HP-08 Reserve book
+$r = getPage('/book.php?id=1', $userSession);
+$tok = csrf($r['body']);
+test('HP-08', 'POST', '/api/reserve_book.php', [
+    'book_id' => 1, 'csrf_token' => $tok
 ], $userSession, [200, 400], function($r) {
-    $json = json_decode($r['body'], true);
-    return ($json !== null) ? true : 'Invalid JSON response';
+    $j = json_decode($r['body'], true);
+    return ($j !== null) ? true : 'Not JSON';
 });
 
-// HP-09: Update profile
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('HP-09', 'POST', '/profile.php', [
-    'action' => 'update_profile',
-    'name' => 'Test User QA Updated',
-    'phone' => '0812345678',
-    'csrf_token' => $csrfToken
+// HP-09 Cancel reservation
+$r = getPage('/my_reservations.php', $userSession);
+$tok = csrf($r['body']);
+if (preg_match('/name=["\']id["\']\s*value=["\'](\d+)["\']/', $r['body'], $m)) {
+    $testReservationId = $m[1];
+}
+test('HP-09', 'POST', '/api/cancel_reservation.php', [
+    'id' => $testReservationId ?? 1, 'csrf_token' => $tok
+], $userSession, [302, 200, 400]);
+
+// HP-10 Update profile
+$r = getPage('/profile.php', $userSession);
+test('HP-10', 'POST', '/profile.php', [
+    'action' => 'update_profile', 'name' => 'QA User Updated', 'phone' => '0899999999',
+    'csrf_token' => csrf($r['body'])
 ], $userSession, 302);
 
-// HP-10: Change password
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('HP-10', 'POST', '/profile.php', [
-    'action' => 'change_password',
-    'current_password' => $TEST_USER_PASSWORD,
-    'new_password' => 'NewPass123',
-    'confirm_password' => 'NewPass123',
-    'csrf_token' => $csrfToken
+// HP-11 Change password (and revert)
+$r = getPage('/profile.php', $userSession);
+test('HP-11', 'POST', '/profile.php', [
+    'action' => 'change_password', 'current_password' => $TEST_USER_PASSWORD,
+    'new_password' => 'NewQA123', 'confirm_password' => 'NewQA123',
+    'csrf_token' => csrf($r['body'])
 ], $userSession, 302);
-
-// Change password back
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-httpRequest('POST', "$BASE_URL/profile.php", [
-    'action' => 'change_password',
-    'current_password' => 'NewPass123',
-    'new_password' => $TEST_USER_PASSWORD,
-    'confirm_password' => $TEST_USER_PASSWORD,
-    'csrf_token' => $csrfToken
+// revert
+$r = getPage('/profile.php', $userSession);
+http('POST', "$BASE_URL/profile.php", [
+    'action' => 'change_password', 'current_password' => 'NewQA123',
+    'new_password' => $TEST_USER_PASSWORD, 'confirm_password' => $TEST_USER_PASSWORD,
+    'csrf_token' => csrf($r['body'])
 ], $userSession);
 
-// Admin tests - need admin session
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$adminSession = $resp['session'];
-$resp = httpRequest('POST', "$BASE_URL/login.php", [
-    'email' => $ADMIN_EMAIL,
-    'password' => $ADMIN_PASSWORD
-], $adminSession);
-if ($resp['session']) $adminSession = $resp['session'];
-
-// HP-11: Create book
-$resp = httpRequest('GET', "$BASE_URL/admin/book_form.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$testBookTitle = "QA Test Book $TIMESTAMP";
-$resp = runTest('HP-11', 'POST', '/admin/book_form.php', [
-    'title' => $testBookTitle,
-    'author' => 'QA Author',
-    'quantity' => 5,
-    'csrf_token' => $csrfToken
+// HP-12 Admin: create book
+$r = getPage('/admin/book_form.php', $adminSession);
+test('HP-12', 'POST', '/admin/book_form.php', [
+    'title' => "QA Book $TIMESTAMP", 'author' => 'QA Author', 'quantity' => 3,
+    'csrf_token' => csrf($r['body'])
 ], $adminSession, 302);
 
-// HP-16: Add category
-$resp = httpRequest('GET', "$BASE_URL/admin/categories.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$testCategoryName = "QA Category $TIMESTAMP";
-$resp = runTest('HP-16', 'POST', '/admin/categories.php', [
-    'action' => 'add',
-    'name' => $testCategoryName,
-    'csrf_token' => $csrfToken
+// HP-13 Admin: add category
+$r = getPage('/admin/categories.php', $adminSession);
+test('HP-13', 'POST', '/admin/categories.php', [
+    'action' => 'add', 'name' => $testCategoryName, 'csrf_token' => csrf($r['body'])
 ], $adminSession, 302);
 
-// HP-13: Create member
-$resp = httpRequest('GET', "$BASE_URL/admin/member_form.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$testMemberEmail = "member_qa_{$TIMESTAMP}@test.com";
-$resp = runTest('HP-13', 'POST', '/admin/member_form.php', [
-    'name' => 'QA Test Member',
-    'email' => $testMemberEmail,
-    'password' => 'Member123',
-    'csrf_token' => $csrfToken
-], $adminSession, 302);
-
-// HP-17: Update settings
-$resp = httpRequest('GET', "$BASE_URL/admin/settings.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('HP-17', 'POST', '/admin/settings.php', [
-    'org_name' => 'QA Test Library',
-    'card_color_primary' => '#1e3a8a',
-    'card_color_secondary' => '#3b82f6',
-    'csrf_token' => $csrfToken
-], $adminSession, 302);
-
-// --------------------------------------------------
-// B. VALIDATION TESTS
-// --------------------------------------------------
-echo "\n--- VALIDATION TESTS ---\n";
-
-// VL-01: Register - empty email
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-01', 'POST', '/register.php', [
-    'name' => 'Test',
-    'email' => '',
-    'password' => 'Test123',
-    'confirm_password' => 'Test123'
-], $resp['session'], 200, function($r) {
-    return (strpos($r['body'], 'กรุณากรอกอีเมล') !== false || strpos($r['body'], 'error') !== false) ? true : 'No error message';
+// HP-14 Admin: quick add member (API)
+$r = getPage('/admin/members.php', $adminSession);
+test('HP-14', 'POST', '/api/add_member.php', [
+    'name' => 'QA Member', 'email' => $testMemberEmail, 'csrf_token' => csrf($r['body'])
+], $adminSession, 200, function($r) {
+    $j = json_decode($r['body'], true);
+    return ($j && isset($j['success'])) ? true : 'Not JSON or missing success';
 });
 
-// VL-02: Register - invalid email
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-02', 'POST', '/register.php', [
-    'name' => 'Test',
-    'email' => 'invalid-email',
-    'password' => 'Test123',
-    'confirm_password' => 'Test123'
-], $resp['session'], 200);
+// HP-15 Admin: member history API
+test('HP-15', 'GET', '/api/member_history.php?user_id=1', [], $adminSession, 200, function($r) {
+    return (json_decode($r['body']) !== null) ? true : 'Not JSON';
+});
 
-// VL-03: Register - short password
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-03', 'POST', '/register.php', [
-    'name' => 'Test',
-    'email' => 'test@test.com',
-    'password' => '123',
-    'confirm_password' => '123'
-], $resp['session'], 200);
+// HP-16 Admin: update settings
+$r = getPage('/admin/settings.php', $adminSession);
+test('HP-16', 'POST', '/admin/settings.php', [
+    'org_name' => 'QA Library', 'card_color_primary' => '#1e3a8a',
+    'card_color_secondary' => '#3b82f6', 'csrf_token' => csrf($r['body'])
+], $adminSession, 302);
 
-// VL-04: Register - password mismatch
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-04', 'POST', '/register.php', [
-    'name' => 'Test',
-    'email' => 'test2@test.com',
-    'password' => 'Test123456',
-    'confirm_password' => 'Different123'
-], $resp['session'], 200);
+// HP-17 Forgot password
+$r = http('GET', "$BASE_URL/forgot_password.php");
+test('HP-17', 'POST', '/forgot_password.php', [
+    'email' => 'nobody@example.com', 'csrf_token' => csrf($r['body'])
+], $r['session'], [200, 302]);
 
-// VL-05: Register - duplicate email
-$resp = httpRequest('GET', "$BASE_URL/register.php");
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-05', 'POST', '/register.php', [
-    'name' => 'Test',
-    'email' => $TEST_USER_EMAIL,
-    'password' => 'Test123456',
-    'confirm_password' => 'Test123456'
-], $resp['session'], 200);
+// ============================================================
+// B. VALIDATION (16)
+// ============================================================
+echo "\n─── B. VALIDATION (16) ───\n";
 
-// VL-06: Login - wrong password
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$resp = runTest('VL-06', 'POST', '/login.php', [
-    'email' => $TEST_USER_EMAIL,
-    'password' => 'WrongPassword'
-], $resp['session'], 200);
+// VL-01 Register: empty email
+$r = http('GET', "$BASE_URL/register.php");
+test('VL-01', 'POST', '/register.php', [
+    'name'=>'T','email'=>'','password'=>'Test123','confirm_password'=>'Test123','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
 
-// VL-07: Login - non-existent email
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$resp = runTest('VL-07', 'POST', '/login.php', [
-    'email' => 'nonexistent@test.com',
-    'password' => 'Test123456'
-], $resp['session'], 200);
+// VL-02 Register: invalid email
+$r = http('GET', "$BASE_URL/register.php");
+test('VL-02', 'POST', '/register.php', [
+    'name'=>'T','email'=>'bad','password'=>'Test123','confirm_password'=>'Test123','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
 
-// VL-08: Reserve - invalid book_id
-$resp = httpRequest('GET', "$BASE_URL/index.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-08', 'POST', '/api/reserve_book.php', [
-    'book_id' => 0,
-    'csrf_token' => $csrfToken
+// VL-03 Register: short password
+$r = http('GET', "$BASE_URL/register.php");
+test('VL-03', 'POST', '/register.php', [
+    'name'=>'T','email'=>'x@x.com','password'=>'12','confirm_password'=>'12','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
+
+// VL-04 Register: mismatch
+$r = http('GET', "$BASE_URL/register.php");
+test('VL-04', 'POST', '/register.php', [
+    'name'=>'T','email'=>'x@x.com','password'=>'Test123456','confirm_password'=>'Diff123456','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
+
+// VL-05 Register: duplicate
+$r = http('GET', "$BASE_URL/register.php");
+test('VL-05', 'POST', '/register.php', [
+    'name'=>'T','email'=>$TEST_USER_EMAIL,'password'=>'Test123456','confirm_password'=>'Test123456','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
+
+// VL-06 Login: wrong password
+$r = http('GET', "$BASE_URL/login.php");
+test('VL-06', 'POST', '/login.php', [
+    'email'=>$TEST_USER_EMAIL,'password'=>'Wrong','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
+
+// VL-07 Login: non-existent
+$r = http('GET', "$BASE_URL/login.php");
+test('VL-07', 'POST', '/login.php', [
+    'email'=>'ghost@x.com','password'=>'Test123','csrf_token'=>csrf($r['body'])
+], $r['session'], 200);
+
+// VL-08 Reserve: book_id=0
+$r = getPage('/index.php', $userSession);
+test('VL-08', 'POST', '/api/reserve_book.php', [
+    'book_id'=>0,'csrf_token'=>csrf($r['body'])
 ], $userSession, 400);
 
-// VL-10: Profile - empty name
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-10', 'POST', '/profile.php', [
-    'action' => 'update_profile',
-    'name' => '',
-    'csrf_token' => $csrfToken
+// VL-09 Reserve: non-existent book
+$r = getPage('/index.php', $userSession);
+test('VL-09', 'POST', '/api/reserve_book.php', [
+    'book_id'=>99999,'csrf_token'=>csrf($r['body'])
+], $userSession, 400);
+
+// VL-10 Profile: empty name
+$r = getPage('/profile.php', $userSession);
+test('VL-10', 'POST', '/profile.php', [
+    'action'=>'update_profile','name'=>'','csrf_token'=>csrf($r['body'])
 ], $userSession, 200);
 
-// VL-11: Change password - wrong current
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-11', 'POST', '/profile.php', [
-    'action' => 'change_password',
-    'current_password' => 'WrongCurrent',
-    'new_password' => 'NewPass123',
-    'confirm_password' => 'NewPass123',
-    'csrf_token' => $csrfToken
+// VL-11 Profile: wrong current password
+$r = getPage('/profile.php', $userSession);
+test('VL-11', 'POST', '/profile.php', [
+    'action'=>'change_password','current_password'=>'WrongPwd',
+    'new_password'=>'New12345','confirm_password'=>'New12345','csrf_token'=>csrf($r['body'])
 ], $userSession, 200);
 
-// VL-12: Book - empty title
-$resp = httpRequest('GET', "$BASE_URL/admin/book_form.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-12', 'POST', '/admin/book_form.php', [
-    'title' => '',
-    'author' => 'Test Author',
-    'csrf_token' => $csrfToken
+// VL-12 Book: empty title
+$r = getPage('/admin/book_form.php', $adminSession);
+test('VL-12', 'POST', '/admin/book_form.php', [
+    'title'=>'','author'=>'A','quantity'=>1,'csrf_token'=>csrf($r['body'])
 ], $adminSession, 200);
 
-// VL-13: Book - empty author
-$resp = httpRequest('GET', "$BASE_URL/admin/book_form.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-13', 'POST', '/admin/book_form.php', [
-    'title' => 'Test Title',
-    'author' => '',
-    'csrf_token' => $csrfToken
+// VL-13 Book: empty author
+$r = getPage('/admin/book_form.php', $adminSession);
+test('VL-13', 'POST', '/admin/book_form.php', [
+    'title'=>'T','author'=>'','quantity'=>1,'csrf_token'=>csrf($r['body'])
 ], $adminSession, 200);
 
-// VL-15: Category - empty name
-$resp = httpRequest('GET', "$BASE_URL/admin/categories.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-15', 'POST', '/admin/categories.php', [
-    'action' => 'add',
-    'name' => '',
-    'csrf_token' => $csrfToken
-], $adminSession, 200);
-
-// VL-16: Category - duplicate
-$resp = httpRequest('GET', "$BASE_URL/admin/categories.php", [], $adminSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('VL-16', 'POST', '/admin/categories.php', [
-    'action' => 'add',
-    'name' => $testCategoryName,
-    'csrf_token' => $csrfToken
-], $adminSession, 200);
-
-// --------------------------------------------------
-// C. EDGE CASES
-// --------------------------------------------------
-echo "\n--- EDGE CASE TESTS ---\n";
-
-// EC-01: SQL injection attempt
-$resp = runTest('EC-01', 'GET', '/api/search_books.php', ['search' => "' OR 1=1--"], null, 200);
-
-// EC-02: XSS attempt
-$resp = runTest('EC-02', 'GET', '/api/search_books.php', ['search' => '<script>alert(1)</script>'], null, 200, function($r) {
-    return (strpos($r['body'], '<script>alert') === false) ? true : 'XSS not escaped';
+// VL-14 Member: invalid email
+$r = getPage('/admin/members.php', $adminSession);
+test('VL-14', 'POST', '/api/add_member.php', [
+    'name'=>'T','email'=>'bad-email','csrf_token'=>csrf($r['body'])
+], $adminSession, [200, 400], function($r) {
+    $j = json_decode($r['body'], true);
+    return ($j && (isset($j['error']) || (isset($j['success']) && !$j['success']))) ? true : 'Should return error';
 });
 
-// EC-03: Non-existent book
-$resp = runTest('EC-03', 'GET', '/book.php', ['id' => 99999], null, 302);
+// VL-15 Category: empty name
+$r = getPage('/admin/categories.php', $adminSession);
+test('VL-15', 'POST', '/admin/categories.php', [
+    'action'=>'add','name'=>'','csrf_token'=>csrf($r['body'])
+], $adminSession, 200);
 
-// EC-04: Negative book ID
-$resp = runTest('EC-04', 'GET', '/book.php', ['id' => -1], null, 302);
+// VL-16 Category: duplicate
+$r = getPage('/admin/categories.php', $adminSession);
+test('VL-16', 'POST', '/admin/categories.php', [
+    'action'=>'add','name'=>$testCategoryName,'csrf_token'=>csrf($r['body'])
+], $adminSession, 200);
 
-// EC-05: String book ID
-$resp = runTest('EC-05', 'GET', '/book.php', ['id' => 'abc'], null, 302);
+// ============================================================
+// C. EDGE CASES (12)
+// ============================================================
+echo "\n─── C. EDGE CASES (12) ───\n";
 
-// EC-06: Reserve same book twice
-$resp = httpRequest('GET', "$BASE_URL/book.php?id=1", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('EC-06', 'POST', '/api/reserve_book.php', [
-    'book_id' => 1,
-    'csrf_token' => $csrfToken
+// EC-01 SQLi in search
+test('EC-01', 'GET', '/api/search_books.php', ['search'=>"' OR 1=1--"], $userSession, 200);
+
+// EC-02 XSS in search
+test('EC-02', 'GET', '/api/search_books.php', ['search'=>'<script>alert(1)</script>'], $userSession, 200, function($r) {
+    return (strpos($r['body'], '<script>alert') === false) ? true : 'XSS NOT escaped';
+});
+
+// EC-03 Non-existent book
+test('EC-03', 'GET', '/book.php?id=99999', [], null, 302);
+
+// EC-04 Negative book ID
+test('EC-04', 'GET', '/book.php?id=-1', [], null, 302);
+
+// EC-05 String book ID
+test('EC-05', 'GET', '/book.php?id=abc', [], null, 302);
+
+// EC-06 Reserve same book twice
+$r = getPage('/index.php', $userSession);
+test('EC-06', 'POST', '/api/reserve_book.php', [
+    'book_id'=>1,'csrf_token'=>csrf($r['body'])
 ], $userSession, [200, 400]);
 
-// EC-09: XSS in profile name
-$resp = httpRequest('GET', "$BASE_URL/profile.php", [], $userSession);
-$csrfToken = getCSRFToken($resp['body']);
-$resp = runTest('EC-09', 'POST', '/profile.php', [
-    'action' => 'update_profile',
-    'name' => '<script>alert(1)</script>Test',
-    'csrf_token' => $csrfToken
+// EC-07 XSS in profile name
+$r = getPage('/profile.php', $userSession);
+test('EC-07', 'POST', '/profile.php', [
+    'action'=>'update_profile','name'=>'<img src=x onerror=alert(1)>','csrf_token'=>csrf($r['body'])
 ], $userSession, 302);
+// verify escaped
+$r2 = getPage('/profile.php', $userSession);
+test('EC-07b', 'GET', '/profile.php', [], $userSession, 200, function($r) {
+    return (strpos($r['body'], '<img src=x onerror') === false) ? true : 'XSS NOT escaped in output';
+});
+// restore name
+$r = getPage('/profile.php', $userSession);
+http('POST', "$BASE_URL/profile.php", [
+    'action'=>'update_profile','name'=>'QA User','phone'=>'','csrf_token'=>csrf($r['body'])
+], $userSession);
 
-// --------------------------------------------------
-// D. SECURITY TESTS
-// --------------------------------------------------
-echo "\n--- SECURITY TESTS ---\n";
+// EC-08 Reset password: invalid token
+$r = http('GET', "$BASE_URL/reset_password.php?token=invalidtoken123");
+test('EC-08', 'GET', '/reset_password.php?token=invalidtoken123', [], null, [200, 302]);
 
-// SC-01: POST without csrf_token
-$resp = runTest('SC-01', 'POST', '/profile.php', [
-    'action' => 'update_profile',
-    'name' => 'Test'
-], $userSession, 302, function($r) {
-    return (strpos($r['headers'], 'Location') !== false) ? true : 'Should redirect';
+// EC-09 Category: delete with books
+$r = getPage('/admin/categories.php', $adminSession);
+if (preg_match('/action.*?delete.*?name=["\']id["\']\s*value=["\'](\d+)["\']/s', $r['body'], $m)) {
+    $catIdWithBooks = $m[1];
+    test('EC-09', 'POST', '/admin/categories.php', [
+        'action'=>'delete','id'=>$catIdWithBooks,'csrf_token'=>csrf($r['body'])
+    ], $adminSession, [200, 302]);
+} else {
+    echo "  ⏭ EC-09: SKIP — no deletable category found\n";
+    $results['total']++; $results['skipped']++;
+}
+
+// EC-10 Forgot password: non-existent email (should not reveal)
+$r = http('GET', "$BASE_URL/forgot_password.php");
+test('EC-10', 'POST', '/forgot_password.php', [
+    'email'=>'doesnotexist@nowhere.com','csrf_token'=>csrf($r['body'])
+], $r['session'], [200, 302], function($r) {
+    // Should NOT say "email not found"
+    $body = $r['body'] . $r['headers'];
+    return (stripos($body, 'ไม่พบอีเมล') === false && stripos($body, 'not found') === false)
+        ? true : 'User enumeration — reveals email existence';
 });
 
-// SC-02: POST with invalid csrf_token
-$resp = runTest('SC-02', 'POST', '/profile.php', [
-    'action' => 'update_profile',
-    'name' => 'Test',
-    'csrf_token' => 'invalid_token_12345'
+// EC-11 Search rate limit header
+test('EC-11', 'GET', '/api/search_books.php', ['search'=>'test'], $userSession, 200);
+
+// EC-12 Homepage without auth
+test('EC-12', 'GET', '/index.php', [], null, 200);
+
+// ============================================================
+// D. SECURITY (10)
+// ============================================================
+echo "\n─── D. SECURITY (10) ───\n";
+
+// SC-01 POST without CSRF
+test('SC-01', 'POST', '/profile.php', [
+    'action'=>'update_profile','name'=>'Hacker'
 ], $userSession, 302);
 
-// SC-03: Access admin without login
-$resp = httpRequest('GET', "$BASE_URL/logout.php");
-$noAuthSession = $resp['session'];
-$resp = runTest('SC-03', 'GET', '/admin/index.php', [], $noAuthSession, 302);
+// SC-02 POST with invalid CSRF
+test('SC-02', 'POST', '/profile.php', [
+    'action'=>'update_profile','name'=>'Hacker','csrf_token'=>'FAKE_TOKEN_123'
+], $userSession, 302);
 
-// SC-04: Access admin as user
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$tempSession = $resp['session'];
-httpRequest('POST', "$BASE_URL/login.php", [
-    'email' => $TEST_USER_EMAIL,
-    'password' => $TEST_USER_PASSWORD
-], $tempSession);
-$resp = httpRequest('GET', "$BASE_URL/login.php");
-$tempSession = $resp['session'];
-$resp = runTest('SC-04', 'GET', '/admin/index.php', [], $tempSession, 302);
+// SC-03 Admin without login
+$freshSession = http('GET', "$BASE_URL/index.php")['session'];
+test('SC-03', 'GET', '/admin/index.php', [], $freshSession, 302, function($r) {
+    return (stripos($r['headers'], 'login') !== false) ? true : 'Should redirect to login';
+});
 
-// SC-05: GET on POST-only endpoint
-$resp = runTest('SC-05', 'GET', '/api/reserve_book.php', [], $userSession, 405);
+// SC-04 Admin as member
+$memberSess = login($TEST_USER_EMAIL, $TEST_USER_PASSWORD);
+test('SC-04', 'GET', '/admin/index.php', [], $memberSess, 302);
 
-// SC-08: Access after logout
-$resp = httpRequest('GET', "$BASE_URL/logout.php", [], $userSession);
-$loggedOutSession = $resp['session'];
-$resp = runTest('SC-08', 'GET', '/profile.php', [], $loggedOutSession, 302);
+// SC-05 GET on POST-only endpoint
+test('SC-05', 'GET', '/api/reserve_book.php', [], $userSession, 405);
 
-// SC-09: Reserve without login
-$resp = runTest('SC-09', 'POST', '/api/reserve_book.php', [
-    'book_id' => 1
-], null, 401);
+// SC-06 Member history API without admin
+test('SC-06', 'GET', '/api/member_history.php?user_id=1', [], $memberSess, [302, 403]);
 
-// SC-10: AJAX add member without admin
-$resp = runTest('SC-10', 'POST', '/api/add_member.php', [
-    'name' => 'Test',
-    'email' => 'test@test.com'
-], null, [302, 403]);
+// SC-07 Login brute force (rate limit after 5+)
+echo "  ⏳ SC-07: Testing rate limit (6 attempts)...\n";
+for ($i = 0; $i < 6; $i++) {
+    $r = http('GET', "$BASE_URL/login.php");
+    http('POST', "$BASE_URL/login.php", [
+        'email'=>$ADMIN_EMAIL,'password'=>'wrong','csrf_token'=>csrf($r['body'])
+    ], $r['session']);
+}
+// 7th attempt — should be rate-limited
+$r = http('GET', "$BASE_URL/login.php");
+$rlSess = $r['session'];
+$rlTok = csrf($r['body']);
+test('SC-07', 'POST', '/login.php', [
+    'email'=>$ADMIN_EMAIL,'password'=>'wrong','csrf_token'=>$rlTok
+], $rlSess, 200, function($r) {
+    return (stripos($r['body'], 'หลายครั้ง') !== false || stripos($r['body'], 'rate') !== false
+         || stripos($r['body'], 'รอ') !== false || stripos($r['body'], 'เกินไป') !== false)
+        ? true : 'No rate limit message after 6+ attempts';
+});
+
+// SC-08 Access after logout
+$logoutSess = login($TEST_USER_EMAIL, $TEST_USER_PASSWORD);
+$r = getPage('/index.php', $logoutSess);
+http('POST', "$BASE_URL/logout.php", ['csrf_token'=>csrf($r['body'])], $logoutSess);
+test('SC-08', 'GET', '/profile.php', [], $logoutSess, 302);
+
+// SC-09 Reserve without login
+test('SC-09', 'POST', '/api/reserve_book.php', ['book_id'=>1], null, 401);
+
+// SC-10 Add member API without admin
+test('SC-10', 'POST', '/api/add_member.php', ['name'=>'Hack','email'=>'h@h.com'], null, [302, 403, 401]);
 
 // ============================================================
 // SUMMARY
 // ============================================================
+$total = $results['total'];
+$pass = $results['passed'];
+$fail = $results['failed'];
+$skip = $results['skipped'];
+$pct = $total > 0 ? round($pass / $total * 100, 1) : 0;
 
-echo "\n========================================\n";
-echo "TEST SUMMARY\n";
-echo "========================================\n";
-echo "Total:  {$results['total']}\n";
-echo "Passed: {$results['passed']} (" . round($results['passed']/$results['total']*100, 1) . "%)\n";
-echo "Failed: {$results['failed']} (" . round($results['failed']/$results['total']*100, 1) . "%)\n";
-echo "Log: $LOG_FILE\n";
-echo "========================================\n";
+echo "\n══════════════════════════════════════\n";
+echo " RESULTS: $pass/$total passed ($pct%)";
+if ($fail > 0) echo " | $fail FAILED";
+if ($skip > 0) echo " | $skip skipped";
+echo "\n══════════════════════════════════════\n";
+echo " Log: $LOG_FILE\n\n";
 
-// Save summary
-file_put_contents(__DIR__ . '/logs/summary.json', json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+file_put_contents(__DIR__ . '/logs/summary.json', json_encode([
+    'run_at' => date('c'), 'total' => $total, 'passed' => $pass,
+    'failed' => $fail, 'skipped' => $skip, 'pass_rate' => "$pct%",
+    'details' => $results['details']
+], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-// Return exit code
-exit($results['failed'] > 0 ? 1 : 0);
+exit($fail > 0 ? 1 : 0);

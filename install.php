@@ -15,7 +15,7 @@ $lockFile = __DIR__ . '/.installed';
 $isInstalled = file_exists($lockFile);
 
 // ถ้าติดตั้งแล้ว แสดงข้อความเตือน
-if ($isInstalled && !isset($_GET['force'])) {
+if ($isInstalled) {
     ?>
     <!DOCTYPE html>
     <html lang="th">
@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `email` VARCHAR(100) NOT NULL UNIQUE,
                 `password` VARCHAR(255) NOT NULL,
                 `phone` VARCHAR(20) DEFAULT NULL,
-                `role` ENUM('member', 'admin') NOT NULL DEFAULT 'member',
+                `role` ENUM('member', 'admin', 'staff') NOT NULL DEFAULT 'member',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_email` (`email`),
@@ -123,7 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_available` (`available`),
                 INDEX `idx_category` (`category_id`),
-                FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+                FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+                CONSTRAINT `chk_books_available_non_negative` CHECK (`available` >= 0),
+                CONSTRAINT `chk_books_quantity_gte_available` CHECK (`quantity` >= `available`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
         $messages[] = "✅ สร้างตาราง `books` สำเร็จ";
@@ -152,9 +154,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `borrows` สำเร็จ";
 
-        // Insert default admin
-        $adminEmail = 'admin@library.com';
-        $adminPassword = password_hash('123456', PASSWORD_DEFAULT);
+        // Create rate_limits table (for DB-based rate limiting)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `rate_limits` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `key_name` VARCHAR(255) NOT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_key_name` (`key_name`),
+                INDEX `idx_created_at` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `rate_limits` สำเร็จ";
+
+        // Create reservations table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `reservations` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL COMMENT 'ผู้จอง',
+                `book_id` INT NOT NULL COMMENT 'หนังสือที่จอง',
+                `borrow_id` INT DEFAULT NULL COMMENT 'รายการยืมที่สร้างจากการจอง (เฉพาะ fulfilled)',
+                `status` ENUM('pending', 'fulfilled', 'expired', 'cancelled') NOT NULL DEFAULT 'pending',
+                `expires_at` DATETIME NOT NULL COMMENT 'วันหมดอายุการจอง',
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_status` (`status`),
+                INDEX `idx_user` (`user_id`),
+                INDEX `idx_book` (`book_id`),
+                FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (`borrow_id`) REFERENCES `borrows`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `reservations` สำเร็จ";
+
+        // Create payments table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `payments` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `borrow_id` INT NOT NULL COMMENT 'รายการยืมที่ชำระ',
+                `amount` DECIMAL(10,2) NOT NULL COMMENT 'จำนวนเงิน',
+                `recorded_by` INT DEFAULT NULL COMMENT 'ผู้บันทึก',
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE INDEX `unique_borrow_payment` (`borrow_id`),
+                INDEX `idx_borrow` (`borrow_id`),
+                FOREIGN KEY (`borrow_id`) REFERENCES `borrows`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (`recorded_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `payments` สำเร็จ";
+
+        // Create password_resets table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `password_resets` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `email` VARCHAR(100) NOT NULL,
+                `token` VARCHAR(64) NOT NULL UNIQUE,
+                `expires_at` DATETIME NOT NULL,
+                `used` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_email` (`email`),
+                INDEX `idx_token` (`token`),
+                INDEX `idx_expires` (`expires_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `password_resets` สำเร็จ";
+
+        // Create settings table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `settings` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `setting_key` VARCHAR(50) NOT NULL UNIQUE,
+                `setting_value` TEXT DEFAULT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `settings` สำเร็จ";
+
+        // Insert default admin (ใช้ password จาก form หรือสร้าง random)
+        $adminEmail = trim($_POST['admin_email'] ?? 'admin@library.com');
+        $adminPlainPassword = $_POST['admin_password'] ?? '';
+        
+        if (empty($adminPlainPassword) || strlen($adminPlainPassword) < MIN_PASSWORD_LENGTH) {
+            // สร้าง random password ที่ปลอดภัย
+            $adminPlainPassword = bin2hex(random_bytes(6)); // 12 chars
+        }
+        
+        $adminPassword = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
         
         $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$adminEmail]);
@@ -205,8 +290,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $success = true;
         $messages[] = "";
         $messages[] = "🎉 ติดตั้งระบบเรียบร้อยแล้ว!";
-        $messages[] = "📧 Email: admin@library.com";
-        $messages[] = "🔑 Password: 123456";
+        $messages[] = "📧 Email: " . $adminEmail;
+        $messages[] = "🔑 Password: " . $adminPlainPassword;
         $messages[] = "";
         $messages[] = "⚠️ กรุณาลบไฟล์ install.php เพื่อความปลอดภัย";
 
@@ -266,6 +351,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     
                     <form method="POST">
+                        <div class="text-start mb-3">
+                            <label class="form-label fw-bold">อีเมล Admin</label>
+                            <input type="email" name="admin_email" class="form-control" value="admin@library.com" required>
+                        </div>
+                        <div class="text-start mb-4">
+                            <label class="form-label fw-bold">รหัสผ่าน Admin (ขั้นต่ำ <?= MIN_PASSWORD_LENGTH ?> ตัวอักษร)</label>
+                            <input type="text" name="admin_password" class="form-control" placeholder="เว้นว่าง = สร้าง random password" minlength="<?= MIN_PASSWORD_LENGTH ?>">
+                            <div class="form-text">ถ้าเว้นว่าง ระบบจะสร้างรหัสผ่านให้อัตโนมัติ</div>
+                        </div>
                         <button type="submit" class="btn btn-primary btn-lg px-5">
                             <i class="bi bi-play-circle me-2"></i>เริ่มติดตั้ง
                         </button>

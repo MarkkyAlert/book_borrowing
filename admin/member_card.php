@@ -15,7 +15,8 @@ $userRepo = new UserRepository(getDB());
 $member = $userRepo->findMemberById($id);
 
 if (!$member) {
-    die("ไม่พบสมาชิก");
+    http_response_code(404);
+    exit('<h3 style="font-family:sans-serif;text-align:center;margin-top:40px;">ไม่พบสมาชิก</h3><script>setTimeout(()=>window.close(),2000)</script>');
 }
 
 // Get Settings
@@ -38,8 +39,8 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
     
     <style>
         :root {
-            --primary: <?= $colorPrimary ?>;
-            --secondary: <?= $colorSecondary ?>;
+            --primary: <?= e($colorPrimary) ?>;
+            --secondary: <?= e($colorSecondary) ?>;
         }
 
         body {
