@@ -158,6 +158,10 @@ class AuthService
             return ['success' => false, 'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง'];
         }
         
+        if (password_verify($newPassword, $user['password'])) {
+            return ['success' => false, 'error' => 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน'];
+        }
+        
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
         $this->userRepo->updatePassword($userId, $hashedPassword);
         
