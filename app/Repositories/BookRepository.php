@@ -38,7 +38,9 @@ class BookRepository
      * @param array $filters {
      *     search?: string,        // ค้นหาใน title, author, isbn
      *     category_id?: int,      // กรองตามหมวดหมู่
-     *     available_only?: bool   // true = เฉพาะที่มี stock
+     *     available_only?: bool,  // true = เฉพาะที่มี stock
+     *     status?: string,        // 'available', 'out_of_stock', 'low_stock', 'borrowed'
+     *     sort?: string           // 'newest' (default), 'oldest', 'az'
      * }
      * @return array รายการหนังสือ (รวม category_name)
      */
@@ -64,14 +66,32 @@ class BookRepository
             $where[] = "b.available > 0";
         }
 
+        // Status filter
+        if (!empty($filters['status'])) {
+            match ($filters['status']) {
+                'available'    => $where[] = "b.available > 0",
+                'out_of_stock' => $where[] = "b.available = 0",
+                'low_stock'    => $where[] = "b.available > 0 AND b.available <= 2",
+                'borrowed'     => $where[] = "b.available < b.quantity",
+                default        => null,
+            };
+        }
+
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // Sort
+        $orderBy = match ($filters['sort'] ?? 'newest') {
+            'oldest' => 'b.created_at ASC',
+            'az'     => 'b.title ASC',
+            default  => 'b.created_at DESC',
+        };
 
         $stmt = $this->pdo->prepare("
             SELECT b.*, c.name as category_name 
             FROM books b
             LEFT JOIN categories c ON b.category_id = c.id
             {$whereSQL}
-            ORDER BY b.created_at DESC
+            ORDER BY {$orderBy}
         ");
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -112,7 +132,9 @@ class BookRepository
     }
 
     /**
-     * ดึงหนังสือที่ยังว่างอยู่
+     * ดึงหนังสือที่ยังว่างอยู่ (available > 0) เรียงตามชื่อ
+     * 
+     * @return array[] รายการหนังสือที่มี stock
      */
     public function findAvailable(): array
     {
@@ -122,7 +144,9 @@ class BookRepository
     }
 
     /**
-     * ดึงหนังสือทั้งหมดสำหรับพิมพ์ barcode labels
+     * ดึงหนังสือทั้งหมดสำหรับพิมพ์ barcode labels (id, title, isbn)
+     * 
+     * @return array[] แต่ละ element: { id: int, title: string, isbn: string|null }
      */
     public function findAllForLabels(): array
     {
@@ -132,7 +156,11 @@ class BookRepository
     }
 
     /**
-     * ค้นหาหนังสือตามชื่อและผู้แต่ง (สำหรับ import)
+     * ค้นหาหนังสือตามชื่อและผู้แต่ง (exact match, สำหรับ CSV import merge)
+     * 
+     * @param string $title  ชื่อหนังสือ
+     * @param string $author ผู้แต่ง
+     * @return array|null { id: int } หรือ null ถ้าไม่พบ
      */
     public function findByTitleAndAuthor(string $title, string $author): ?array
     {
@@ -142,7 +170,13 @@ class BookRepository
     }
 
     /**
-     * เพิ่มจำนวน quantity และ available (สำหรับ import)
+     * เพิ่มจำนวน quantity และ available พร้อมกัน (สำหรับ CSV import merge)
+     * 
+     * @param int $id       ID หนังสือ
+     * @param int $quantity จำนวนที่เพิ่ม (ต้อง > 0)
+     * @return bool true = สำเร็จ
+     * 
+     * @sideeffect UPDATE books SET quantity + ?, available + ? WHERE id = ?
      */
     public function addQuantity(int $id, int $quantity): bool
     {
@@ -245,6 +279,13 @@ class BookRepository
 
     /**
      * ลบหนังสือ
+     * 
+     * @param int $id ID หนังสือ
+     * @return bool true = สำเร็จ
+     * 
+     * @sideeffect DELETE FROM books
+     * @throws \PDOException ถ้ามี FK constraint (borrows/reservations)
+     * @note ควรเรียกผ่าน BookService::deleteBook() ที่ตรวจเงื่อนไขก่อน
      */
     public function delete(int $id): bool
     {
@@ -320,7 +361,9 @@ class BookRepository
     }
 
     /**
-     * นับจำนวนหนังสือ
+     * นับจำนวนรายการหนังสือทั้งหมด (COUNT rows, ไม่ใช่ SUM quantity)
+     * 
+     * @return int จำนวนรายการ
      */
     public function count(): int
     {

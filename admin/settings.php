@@ -1,13 +1,25 @@
 <?php
 /**
- * Admin: System Settings
+ * Admin: System Settings - ตั้งค่าระบบ
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้จัดการค่า settings ที่เก็บใน DB (ตาราง settings)
+ * - ปัจจุบันมี: ชื่อหน่วยงาน (org_name), สีบัตรสมาชิก (card_color_*)
+ * - สิทธิ์: admin เท่านั้น (staff แก้ไม่ได้)
+ * - ค่าเหล่านี้ต่างจาก .env config — .env คือค่าระบบ, settings คือค่าที่ admin ปรับได้
+ * 
+ * 📂 Flow:
+ * 1. POST → validate + บันทึกผ่าน SettingsRepository::set() (upsert)
+ * 2. GET → โหลดค่าจาก SettingsRepository แสดงใน form
  */
 
 require_once __DIR__ . '/../bootstrap.php';
+// [AUTH] Admin only — staff ไม่ควรเปลี่ยนการตั้งค่าระบบ (เช่น ชื่อหน่วยงาน, สีบัตร)
 requireAdmin();
 
 // Handle Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // [SECURITY] CSRF — ป้องกันถูกหลอกให้เปลี่ยนค่าระบบโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
     } else {

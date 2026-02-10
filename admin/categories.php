@@ -1,6 +1,20 @@
 <?php
 /**
  * Categories Management - จัดการหมวดหมู่
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้ทำ CRUD หมวดหมู่ทั้งหมดในไฟล์เดียว (ไม่แยก form)
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. POST action=add    → สร้างหมวดหมู่ใหม่ (ตรวจชื่อซ้ำ)
+ * 2. POST action=edit   → อัปเดตชื่อหมวดหมู่ (ตรวจชื่อซ้ำ ยกเว้นตัวเอง)
+ * 3. POST action=delete → ลบหมวดหมู่ (ต้องไม่มีหนังสืออยู่)
+ * 4. GET ?edit=ID        → โหลดข้อมูลเดิมเข้า form สำหรับแก้ไข
+ * 5. GET → แสดงรายการหมวดหมู่ + จำนวนหนังสือ
+ * 
+ * ⚠️ ระวัง:
+ * - ลบหมวดหมู่ที่มีหนังสือไม่ได้ (hasBooks check)
  */
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -78,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int) ($_POST['id'] ?? 0);
         
         try {
-            // Check if has books via repository
+            // [DATA INTEGRITY] ป้องกัน orphan books — ต้องย้าย/ลบหนังสือออกก่อนลบหมวดหมู่
             if ($categoryRepo->hasBooks($id)) {
                 throw new Exception('ไม่สามารถลบได้ หมวดหมู่นี้มีหนังสือ');
             }

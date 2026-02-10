@@ -1,10 +1,14 @@
 <?php
 /**
- * HomeService - Business Logic สำหรับหน้าแรก
+ * HomeService - Business Logic สำหรับหน้าแรก (public, ไม่ต้อง login)
  * 
- * Service นี้จัดการ:
- * - ดึงรายการหนังสือพร้อม filters
- * - ดึงสถิติสำหรับ Dashboard
+ * ⭐ สำหรับคนมาใหม่:
+ * - Service นี้เป็น read-only — ดึงข้อมูลหนังสือ/หมวดหมู่สำหรับหน้า public
+ * - ไม่มี write operation ใดๆ
+ * - ใช้ BookRepository + CategoryRepository
+ * 
+ * 📍 Entrypoint:
+ * - index.php → getBooks() (รายการหนังสือ + filter + categories)
  * 
  * @package App\Services
  */

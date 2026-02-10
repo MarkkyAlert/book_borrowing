@@ -22,7 +22,14 @@ class ReportRepository
     // NOTE: getMemberStats() removed - use UserRepository::countMembers() + countNewThisMonth()
 
     /**
-     * สถิติการยืม
+     * สถิติการยืมภาพรวม (สำหรับ admin dashboard)
+     * 
+     * @return array {
+     *     active: int,      // จำนวนที่กำลังยืมอยู่
+     *     overdue: int,     // จำนวนที่เกินกำหนด
+     *     today: int,       // จำนวนที่ยืมวันนี้
+     *     this_month: int   // จำนวนที่ยืมเดือนนี้
+     * }
      */
     public function getBorrowStats(): array
     {
@@ -42,7 +49,13 @@ class ReportRepository
     }
 
     /**
-     * สถิติค่าปรับ
+     * สถิติค่าปรับภาพรวม (สำหรับ admin dashboard)
+     * 
+     * @return array {
+     *     total: float,      // ค่าปรับทั้งหมดตลอดกาล
+     *     unpaid: float,     // ค่าปรับค้างชำระ (ยังไม่มี payment record)
+     *     this_month: float  // ค่าปรับที่เกิดเดือนนี้ (ตาม return_date)
+     * }
      */
     public function getFineStats(): array
     {
@@ -62,7 +75,15 @@ class ReportRepository
     }
 
     /**
-     * รายงานการยืมรายเดือน
+     * รายงานการยืมรายเดือน (สำหรับ chart)
+     * 
+     * @param int $months จำนวนเดือนย้อนหลัง (default: 6)
+     * @return array[] แต่ละ element: {
+     *     month: string,         // 'YYYY-MM'
+     *     month_name: string,    // 'Jan', 'Feb', ...
+     *     total_borrows: int,    // จำนวนยืมทั้งหมดในเดือน
+     *     returned: int          // จำนวนที่คืนแล้ว
+     * }
      */
     public function getMonthlyReport(int $months = 6): array
     {
@@ -82,7 +103,10 @@ class ReportRepository
     }
 
     /**
-     * รายงานหมวดหมู่ยอดนิยม
+     * รายงานหมวดหมู่ยอดนิยม (สำหรับ pie chart)
+     * 
+     * @param int $limit จำนวนหมวดหมู่สูงสุด (default: 6)
+     * @return array[] แต่ละ element: { name: string, borrow_count: int }
      */
     public function getCategoryDistribution(int $limit = 6): array
     {
@@ -100,7 +124,9 @@ class ReportRepository
     }
 
     /**
-     * รายงานหมวดหมู่ทั้งหมดพร้อมสถิติ
+     * รายงานหมวดหมู่ทั้งหมดพร้อมสถิติ (สำหรับตารางสรุป)
+     * 
+     * @return array[] แต่ละ element: { name: string, book_count: int, borrow_count: int }
      */
     public function getAllCategoriesWithStats(): array
     {
@@ -117,7 +143,10 @@ class ReportRepository
     }
 
     /**
-     * หนังสือยอดนิยม
+     * หนังสือยอดนิยม (เรียงตามจำนวนครั้งที่ถูกยืม)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 10)
+     * @return array[] แต่ละ element: { id: int, title: string, author: string, borrow_count: int }
      */
     public function getPopularBooks(int $limit = 10): array
     {
@@ -134,7 +163,10 @@ class ReportRepository
     }
 
     /**
-     * สมาชิกที่ยืมมากที่สุด
+     * สมาชิกที่ยืมมากที่สุด (เรียงตามจำนวนครั้ง)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 10)
+     * @return array[] แต่ละ element: { id: int, name: string, email: string, borrow_count: int }
      */
     public function getTopBorrowers(int $limit = 10): array
     {
@@ -152,7 +184,15 @@ class ReportRepository
     }
 
     /**
-     * รายงานรายวัน
+     * รายงานรายวัน (สรุปกิจกรรมของวันที่ระบุ)
+     * 
+     * @param string|null $date วันที่ (Y-m-d) หรือ null = วันนี้
+     * @return array {
+     *     date: string,         // วันที่ที่ query
+     *     borrows: int,        // จำนวนยืมในวันนั้น
+     *     returns: int,        // จำนวนคืนในวันนั้น
+     *     new_members: int     // สมาชิกใหม่ในวันนั้น
+     * }
      */
     public function getDailyReport(?string $date = null): array
     {
@@ -245,7 +285,15 @@ class ReportRepository
     }
 
     /**
-     * รายงานรายได้รายวัน
+     * รายงานรายได้รายวัน (ยอดค่าปรับที่รับชำระ)
+     * 
+     * @param string $startDate วันเริ่มต้น (Y-m-d)
+     * @param string $endDate   วันสิ้นสุด (Y-m-d)
+     * @return array[] แต่ละ element: {
+     *     payment_day: string,       // วันที่ (Y-m-d)
+     *     transaction_count: int,    // จำนวน transactions
+     *     total_amount: float        // ยอดรวม (บาท)
+     * }
      */
     public function getDailyRevenueReport(string $startDate, string $endDate): array
     {
@@ -261,9 +309,17 @@ class ReportRepository
     }
 
     /**
-     * รายงานหนังสือเกินกำหนด
+     * รายงานหนังสือเกินกำหนด (รายการที่ status=borrowing และเลยกำหนดคืน)
      * 
-     * @param bool $formatDate true = format วันที่เป็น d/m/Y (สำหรับ PDF)
+     * @param bool $formatDate true = format วันที่เป็น d/m/Y (สำหรับ PDF export)
+     * @return array[] แต่ละ element: {
+     *     name: string,          // ชื่อผู้ยืม
+     *     phone: string,        // เบอร์โทร
+     *     title: string,        // ชื่อหนังสือ
+     *     borrow_date: string,  // วันยืม
+     *     due_date: string,     // วันกำหนดคืน
+     *     days_overdue: int     // จำนวนวันที่เกิน
+     * }
      */
     public function getOverdueReport(bool $formatDate = false): array
     {
@@ -286,7 +342,18 @@ class ReportRepository
     }
 
     /**
-     * รายงานการยืมตามช่วงวันที่ (สำหรับ export_pdf)
+     * รายงานการยืมตามช่วงวันที่ (สำหรับ PDF export)
+     * 
+     * @param string $dateFrom วันเริ่มต้น (Y-m-d)
+     * @param string $dateTo   วันสิ้นสุด (Y-m-d)
+     * @return array[] แต่ละ element: {
+     *     name: string,           // ชื่อผู้ยืม
+     *     title: string,         // ชื่อหนังสือ
+     *     borrow_date: string,   // วันยืม (dd/mm/yyyy)
+     *     due_date: string,      // กำหนดคืน (dd/mm/yyyy)
+     *     status_text: string,   // 'คืนแล้ว' | 'กำลังยืม'
+     *     fine: float            // ค่าปรับ (0 ถ้าไม่มี)
+     * }
      */
     public function getBorrowsReport(string $dateFrom, string $dateTo): array
     {
@@ -307,7 +374,19 @@ class ReportRepository
     }
 
     /**
-     * รายงานสมาชิกค้างชำระค่าปรับ
+     * รายงานสมาชิกค้างชำระค่าปรับ (สำหรับ PDF export และหน้ารายงาน)
+     * 
+     * @param string|null $startDate วันเริ่มต้น (Y-m-d) หรือ null = ไม่จำกัด
+     * @param string|null $endDate   วันสิ้นสุด (Y-m-d) หรือ null = ไม่จำกัด
+     * @return array[] แต่ละ element: {
+     *     user_name: string,     // ชื่อสมาชิก
+     *     user_phone: string,   // เบอร์โทร
+     *     book_title: string,   // ชื่อหนังสือ
+     *     return_date: string,  // วันคืน (dd/mm/yyyy)
+     *     fine_amount: float    // ค่าปรับค้างชำระ (บาท)
+     * }
+     * 
+     * @note กรองเฉพาะ returned + fine > 0 + ไม่มี payment record
      */
     public function getUnpaidFinesReport(?string $startDate = null, ?string $endDate = null): array
     {

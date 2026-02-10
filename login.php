@@ -1,6 +1,21 @@
 <?php
 /**
  * Login Page - เข้าสู่ระบบ
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้า public (ไม่ต้อง login) — ถ้า login แล้วจะ redirect ไป index.php
+ * - ใช้ AuthService::login() ตรวจ email/password
+ * 
+ * 📂 Flow:
+ * 1. POST → CSRF check → rate limit check → AuthService::login()
+ * 2. สำเร็จ → regenerate session ID → เก็บ user_id/role ใน $_SESSION → redirect ตาม role
+ *    - admin/staff → admin/index.php
+ *    - member     → index.php
+ * 3. ล้มเหลว → increment rate limit → แสดง error (ไม่บอกว่า email ผิดหรือ password ผิด)
+ * 
+ * ⚠️ ระวัง:
+ * - rate limit นับแยกตาม email (md5) — ป้องกัน brute force
+ * - session_regenerate_id() ป้องกัน session fixation — ห้ามลบ
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -39,7 +54,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!checkRateLimit($rateLimitKey)) {
             $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
         } else {
-            require_once __DIR__ . '/app/Services/AuthService.php';
             $authService = new \App\Services\AuthService(getDB());
             $user = $authService->login($email, $password);
             
@@ -173,10 +187,10 @@ require_once __DIR__ . '/includes/header.php';
         </div>
         
         <?php if (defined('APP_DEBUG') && APP_DEBUG): ?>
-        <!-- Demo Credentials (แสดงเฉพาะ Debug Mode) -->
+        <!-- แสดง Demo Credentials เฉพาะ Debug Mode -->
         <div class="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 text-center backdrop-blur-sm">
             <p class="text-xs text-blue-600 font-medium">
-                <span class="font-bold">Demo Admin:</span> admin@library.com / 123456
+                <span class="font-bold">Demo Admin:</span> <?= e(getenv('ADMIN_EMAIL') ?: 'admin@library.com') ?> / <?= e(getenv('ADMIN_DEFAULT_PASSWORD') ?: '123456') ?>
             </p>
         </div>
         <?php endif; ?>

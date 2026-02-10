@@ -1,7 +1,7 @@
 <?php
 /**
  * Database Installation Script
- * เข้าถึง: http://localhost/book/install.php
+ * เข้าถึง: {APP_URL}/install.php
  * 
  * ⚠️ ควรลบไฟล์นี้หลังติดตั้งเสร็จ
  */

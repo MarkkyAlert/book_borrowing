@@ -58,51 +58,8 @@ class BookService
      */
     public function getBooks(array $filters = []): array
     {
-        // แปลง filters สำหรับ repository
-        $repoFilters = [];
-
-        if (!empty($filters['search'])) {
-            $repoFilters['search'] = $filters['search'];
-        }
-
-        if (!empty($filters['category_id'])) {
-            $repoFilters['category_id'] = $filters['category_id'];
-        }
-
-        // Status filter - ใช้ repository findAll แล้วกรอง
-        // หรือสร้าง method ใหม่ใน repo ถ้าต้องการ performance ดีกว่า
-        $books = $this->bookRepo->findAll($repoFilters);
-
-        if (!empty($filters['status'])) {
-            $status = $filters['status'];
-            $books = array_filter($books, function ($book) use ($status) {
-                if ($status === 'available') {
-                    return $book['available'] > 0;
-                } elseif ($status === 'borrowed') {
-                    return $book['available'] < $book['quantity'];
-                } elseif ($status === 'out_of_stock') {
-                    return $book['available'] === 0;
-                } elseif ($status === 'low_stock') {
-                    return $book['available'] > 0 && $book['available'] <= 2;
-                }
-                return true;
-            });
-        }
-
-        // Sort
-        $sort = $filters['sort'] ?? 'newest';
-        usort($books, function ($a, $b) use ($sort) {
-            switch ($sort) {
-                case 'oldest':
-                    return strtotime($a['created_at']) - strtotime($b['created_at']);
-                case 'az':
-                    return strcmp($a['title'], $b['title']);
-                default: // newest
-                    return strtotime($b['created_at']) - strtotime($a['created_at']);
-            }
-        });
-
-        return array_values($books);
+        // Repository จัดการ search, category_id, status, sort ใน SQL ทั้งหมด
+        return $this->bookRepo->findAll($filters);
     }
 
     /**
@@ -117,7 +74,9 @@ class BookService
     }
 
     /**
-     * ดึงหนังสือที่ยังว่างอยู่
+     * ดึงหนังสือที่ยังว่างอยู่ (available > 0)
+     * 
+     * @return array[] รายการหนังสือที่มี stock เรียงตามชื่อ
      */
     public function getAvailableBooks(): array
     {
@@ -164,8 +123,8 @@ class BookService
         $oldQuantity = $book['quantity'];
         $newQuantity = $data['quantity'] ?? $oldQuantity;
         
-        // [FIX] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
-        $currentlyOut = $oldQuantity - $book['available']; // จำนวนที่ออกอยู่
+        // [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ — ไม่งั้น available จะติดลบ
+        $currentlyOut = $oldQuantity - $book['available'];
         if ($newQuantity < $currentlyOut) {
             throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
         }
@@ -186,9 +145,18 @@ class BookService
     }
 
     /**
-     * ลบหนังสือ
+     * ลบหนังสือพร้อมตรวจเงื่อนไข 3 ข้อ และลบไฟล์รูปปก
      * 
-     * @throws Exception ถ้าหนังสือกำลังถูกยืมหรือมีประวัติการยืม
+     * @param int $id ID หนังสือ
+     * @return bool true = สำเร็จ
+     * 
+     * @throws Exception ถ้า:
+     *     - หนังสือกำลังถูกยืม (isBeingBorrowed)
+     *     - มีประวัติการยืม (hasBorrowHistory)
+     *     - มีการจองที่รอดำเนินการ (countPendingByBook > 0)
+     * 
+     * @sideeffect DELETE จาก books table + ลบไฟล์ uploads/covers/
+     * @security ใช้ transaction + row lock (FOR UPDATE) ป้องกัน race condition
      */
     public function deleteBook(int $id): bool
     {
@@ -202,17 +170,16 @@ class BookService
                 throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
             }
 
-            // Check if being borrowed
+            // [DATA INTEGRITY] ตรวจ 3 เงื่อนไขก่อนลบ — CASCADE DELETE จะทำลายข้อมูลที่เกี่ยวข้อง
             if ($this->isBeingBorrowed($id)) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้กำลังถูกยืมอยู่');
             }
 
-            // Check if has borrow history
             if ($this->hasBorrowHistory($id)) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
             }
 
-            // Check if has pending reservations
+            // pending reservation ถูกหัก stock ไปแล้ว — ลบจะทำให้ stock ไม่ถูกคืน
             if ($this->reservationRepo->countPendingByBook($id) > 0) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีการจองที่รอดำเนินการอยู่');
             }
@@ -222,7 +189,7 @@ class BookService
 
             $this->pdo->commit();
 
-            // Delete cover image file if exists
+            // [CLEANUP] ลบรูปหลัง DB commit สำเร็จ — ป้องกัน orphan file ถ้า DB ล้มเหลว
             if (!empty($book['cover_image'])) {
                 $this->deleteCoverImage($book['cover_image']);
             }
@@ -236,7 +203,10 @@ class BookService
     }
 
     /**
-     * ตรวจสอบว่าหนังสือกำลังถูกยืมอยู่หรือไม่
+     * ตรวจสอบว่าหนังสือกำลังถูกยืมอยู่หรือไม่ (status='borrowing')
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return bool true = มีคนยืมอยู่
      */
     public function isBeingBorrowed(int $bookId): bool
     {
@@ -244,7 +214,10 @@ class BookService
     }
 
     /**
-     * ตรวจสอบว่าหนังสือมีประวัติการยืมหรือไม่
+     * ตรวจสอบว่าหนังสือมีประวัติการยืมหรือไม่ (ทุก status รวมคืนแล้ว)
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return bool true = มีประวัติ (ไม่ควรลบ)
      */
     public function hasBorrowHistory(int $bookId): bool
     {
@@ -253,6 +226,9 @@ class BookService
 
     /**
      * ค้นหาหนังสือโดย ID หรือ ISBN (สำหรับ barcode scan)
+     * 
+     * @param string $identifier ID หรือ ISBN
+     * @return array|null { id, title, author, available } หรือ null
      */
     public function findByIdOrIsbn(string $identifier): ?array
     {
@@ -260,7 +236,9 @@ class BookService
     }
 
     /**
-     * ดึงสถิติหนังสือ
+     * ดึงสถิติหนังสือภาพรวม (สำหรับ dashboard)
+     * 
+     * @return array { total: int, available: int, borrowed: int, titles: int }
      */
     public function getStatistics(): array
     {
@@ -268,7 +246,10 @@ class BookService
     }
 
     /**
-     * ลบไฟล์รูปปก
+     * ลบไฟล์รูปปกจาก disk (เรียกหลัง DB commit สำเร็จเท่านั้น)
+     * 
+     * @param string $filename ชื่อไฟล์ (ไม่รวม path)
+     * @sideeffect ลบไฟล์จาก uploads/covers/
      */
     private function deleteCoverImage(string $filename): void
     {

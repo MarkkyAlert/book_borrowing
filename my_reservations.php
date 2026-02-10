@@ -1,17 +1,27 @@
 <?php
 /**
  * My Reservations - รายการจองของฉัน
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการจองเฉพาะของ user ที่ login (session user_id)
+ * - สิทธิ์: ต้อง login (ทุก role)
+ * - ปุ่ม "ยกเลิก" เรียก api/cancel_reservation.php (POST form)
+ * 
+ * 📂 Flow:
+ * GET → ReservationRepository::findByUser(user_id + filters) → แสดงรายการจอง
  */
 
 require_once __DIR__ . '/bootstrap.php';
 
+// [AUTH] ต้อง login — ดูได้เฉพาะรายการจองของตัวเอง
 requireLogin();
 
 $pdo = getDB();
+// [AUTH] ใช้ user_id จาก session — ป้องกันดูข้อมูลคนอื่น
 $userId = $_SESSION['user_id'];
 
-require_once __DIR__ . '/app/Repositories/ReservationRepository.php';
-$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
+use App\Repositories\ReservationRepository;
+$reservationRepo = new ReservationRepository($pdo);
 
 // Get filter
 $statusFilter = $_GET['status'] ?? '';

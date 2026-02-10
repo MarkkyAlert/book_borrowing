@@ -1,4 +1,13 @@
 <?php
+/**
+ * Public Header Template - layout wrapper สำหรับหน้า public (root/*.php)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ทุกหน้า root (index, book, login, register, profile, my_*) require ไฟล์นี้
+ * - ประกอบด้วย: <head>, top navbar (เปลี่ยนตาม login status), เปิด <main>
+ * - ปิด </main> อยู่ที่ includes/footer.php
+ * - ต้องตั้ง $pageTitle ก่อน require เพื่อแสดงชื่อหน้าใน title bar
+ */
 require_once __DIR__ . '/functions.php';
 
 $currentPage = basename($_SERVER['PHP_SELF']);

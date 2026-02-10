@@ -2,7 +2,19 @@
 /**
  * PasswordResetRepository - Data Access Layer สำหรับ Password Reset
  * 
- * Repository นี้จัดการ CRUD operations สำหรับตาราง password_resets
+ * ⭐ สำหรับคนมาใหม่:
+ * - Repository นี้จัดการ CRUD สำหรับตาราง password_resets
+ * - Token lifecycle: สร้าง → validate → ใช้ (mark used) → ลบเมื่อหมดอายุ
+ * - Token มีอายุ 1 ชม. ใช้ได้ครั้งเดียว (one-time-use)
+ * 
+ * 📍 Entrypoints:
+ * - forgot_password.php → AuthService → create() (สร้าง token)
+ * - reset_password.php  → AuthService → findValidToken(), markUsed()
+ * - cron/cleanup_tokens.php → deleteExpired() (ลบ token หมดอายุ)
+ * 
+ * ⚠️ ห้ามแก้:
+ * - markUsed() ต้องถูกเรียกหลัง reset สำเร็จเสมอ (one-time-use)
+ * - deleteByEmail() ลบ token เก่าก่อนสร้างใหม่ (ป้องกัน token สะสม)
  * 
  * @package App\Repositories
  */

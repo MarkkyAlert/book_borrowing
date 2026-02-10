@@ -1,6 +1,17 @@
 <?php
 /**
- * Reset Password - รีเซ็ตรหัสผ่าน
+ * Reset Password - รีเซ็ตรหัสผ่าน (ใช้ token จาก forgot_password)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้า public — ต้องมี ?token=XXX ที่ valid ถึงจะแสดง form
+ * - Token ต้อง: ตรงกับ DB, ยังไม่เคยใช้ (used=0), ยังไม่หมดอายุ
+ * 
+ * 📂 Flow:
+ * 1. GET ?token=XXX → AuthService::validateResetToken() → ถ้า valid แสดง form
+ * 2. POST → AuthService::resetPassword(token, newPassword) → เปลี่ยน password + mark token used
+ * 3. สำเร็จ → redirect ไป login.php
+ * 
+ * 🔗 มาจาก: forgot_password.php (สร้าง token)
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -17,8 +28,8 @@ $token = $_GET['token'] ?? '';
 
 $pdo = getDB();
 
-require_once __DIR__ . '/app/Services/AuthService.php';
-$authService = new \App\Services\AuthService($pdo);
+use App\Services\AuthService;
+$authService = new AuthService($pdo);
 
 // Validate token
 if (!empty($token)) {

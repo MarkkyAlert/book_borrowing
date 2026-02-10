@@ -2,7 +2,14 @@
 /**
  * DashboardService - Business Logic สำหรับ Admin Dashboard
  * 
- * Service นี้รวม queries สำหรับแสดงผล Dashboard ทั้งหมด
+ * ⭐ สำหรับคนมาใหม่:
+ * - Service นี้เป็น read-only aggregator — รวมสถิติจากหลาย Repository
+ * - ไม่มี write operation ใดๆ (ไม่ INSERT/UPDATE/DELETE)
+ * - ทุก method เป็น "ดึงข้อมูล" สำหรับแสดงผลบน dashboard
+ * 
+ * 📍 Entrypoint:
+ * - admin/index.php → getCardStats(), getRecentBorrows(), getOverdueList(),
+ *                      getMonthlyStats(), getCategoryStats(), getTopBorrowers(), etc.
  * 
  * @package App\Services
  */

@@ -77,15 +77,13 @@ class ReservationService
      */
     public function createReservation(int $userId, int $bookId, int $expireDays = 2): array
     {
+        // คืน stock จาก reservation ที่หมดอายุก่อน — ป้องกันหนังสือดูเหมือน "หมด" ทั้งที่ว่างแล้ว
+        $this->reservationRepo->markExpiredReservations();
+
         $this->pdo->beginTransaction();
 
         try {
-            // ตรวจซ้ำก่อน - ป้องกันจอง 2 ครั้ง
-            if ($this->reservationRepo->hasPending($userId, $bookId)) {
-                throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
-            }
-
-            // Lock หนังสือ - ป้องกัน race condition
+            // Lock หนังสือก่อน — ป้องกัน race condition (2 คนจองเล่มสุดท้ายพร้อมกัน)
             $book = $this->bookRepo->findByIdForUpdate($bookId);
 
             if (!$book) {
@@ -94,6 +92,11 @@ class ReservationService
 
             if ($book['available'] <= 0) {
                 throw new Exception('หนังสือหมด ไม่สามารถจองได้');
+            }
+
+            // ตรวจซ้ำภายใต้ lock — ป้องกัน duplicate reservation จาก concurrent requests
+            if ($this->reservationRepo->hasPending($userId, $bookId)) {
+                throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
             }
 
             // สร้าง reservation

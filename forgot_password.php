@@ -1,6 +1,17 @@
 <?php
 /**
- * Forgot Password - ลืมรหัสผ่าน
+ * Forgot Password - ลืมรหัสผ่าน (ขอ reset link)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้า public — สร้าง reset token แล้วแสดง link (ระบบนี้ไม่ส่ง email จริง)
+ * - Token มีอายุ 1 ชม. ใช้ได้ครั้งเดียว (one-time-use)
+ * 
+ * 📂 Flow:
+ * 1. POST → CSRF check → rate limit → AuthService::requestPasswordReset(email)
+ * 2. สำเร็จ → แสดง reset link ให้ copy (เพราะไม่มี mail server)
+ * 3. ล้มเหลว → แสดง "สำเร็จ" เหมือนกัน (ป้องกัน user enumeration)
+ * 
+ * 🔗 ต่อไป: reset_password.php?token=XXX
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -39,7 +50,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        require_once __DIR__ . '/app/Services/AuthService.php';
         $authService = new \App\Services\AuthService(getDB());
         
         $result = $authService->requestPasswordReset($email);

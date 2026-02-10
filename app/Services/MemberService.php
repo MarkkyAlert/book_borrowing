@@ -11,6 +11,7 @@
  * - admin/members.php      → getMembers()
  * - admin/member_form.php  → createMember(), updateMember()
  * - api/add_member.php     → createMember() (quick add)
+ * - register.php           → createMember() (ผ่าน AuthService::register())
  * 
  * ⚠️ ห้ามแก้:
  * - emailExists() ใช้เป็น single source of truth สำหรับ duplicate check
@@ -61,7 +62,10 @@ class MemberService
     }
 
     /**
-     * ดึงข้อมูลสมาชิกตาม ID
+     * ดึงข้อมูลสมาชิกตาม ID (เฉพาะ role='member')
+     * 
+     * @param int $id ID สมาชิก
+     * @return array|null ข้อมูลสมาชิก (ไม่รวม password) หรือ null ถ้าไม่พบ/ไม่ใช่ member
      */
     public function getMemberById(int $id): ?array
     {
@@ -145,12 +149,12 @@ class MemberService
      */
     public function deleteMember(int $id): bool
     {
-        // Check if has borrow history
+        // [DATA INTEGRITY] ป้องกันลบข้อมูล — CASCADE DELETE จะลบ borrows ทำให้สถิติเสียหาย
         if ($this->borrowRepo->countByUser($id) > 0) {
             throw new Exception('ไม่สามารถลบได้ สมาชิกมีประวัติการยืม');
         }
 
-        // [FIX] Check pending reservations — CASCADE DELETE จะลบ reservation แต่ไม่คืน stock
+        // [DATA INTEGRITY] CASCADE DELETE จะลบ reservation แต่ไม่คืน stock — ต้องยกเลิกก่อน
         if ($this->reservationRepo->countPendingByUser($id) > 0) {
             throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
         }
@@ -174,7 +178,11 @@ class MemberService
     }
 
     /**
-     * ตรวจสอบว่า email ซ้ำหรือไม่
+     * ตรวจสอบว่า email ซ้ำหรือไม่ (Single Source of Truth สำหรับ duplicate check)
+     * 
+     * @param string   $email     อีเมลที่ต้องการตรวจ
+     * @param int|null $excludeId ID ที่ยกเว้น (สำหรับ edit mode)
+     * @return bool true = มีอยู่แล้ว (ห้ามใช้)
      */
     public function emailExists(string $email, ?int $excludeId = null): bool
     {
@@ -182,7 +190,11 @@ class MemberService
     }
 
     /**
-     * ดึงประวัติการยืมของสมาชิก
+     * ดึงประวัติการยืมของสมาชิก (สำหรับ admin member detail page)
+     * 
+     * @param int $memberId ID สมาชิก
+     * @param int $limit    จำนวนรายการสูงสุด (default: 20)
+     * @return array[] รายการยืม + book_title, book_author
      */
     public function getBorrowHistory(int $memberId, int $limit = 20): array
     {
@@ -190,7 +202,10 @@ class MemberService
     }
 
     /**
-     * ดึงสถิติสมาชิก
+     * ดึงสถิติสมาชิก (total_borrows, active_borrows, returned, total_fines)
+     * 
+     * @param int $memberId ID สมาชิก
+     * @return array { total_borrows: int, active_borrows: int, returned: int, total_fines: float }
      */
     public function getMemberStatistics(int $memberId): array
     {
@@ -198,7 +213,9 @@ class MemberService
     }
 
     /**
-     * นับจำนวนสมาชิกทั้งหมด
+     * นับจำนวนสมาชิกทั้งหมด (role='member')
+     * 
+     * @return int
      */
     public function countMembers(): int
     {
@@ -251,7 +268,12 @@ class MemberService
     }
 
     /**
-     * สร้างรหัสผ่านแบบสุ่ม
+     * สร้างรหัสผ่านแบบสุ่ม (a-z, 0-9)
+     * 
+     * @param int $length ความยาว (default: 8)
+     * @return string plaintext password
+     * 
+     * @note ใช้ str_shuffle — ไม่ cryptographically secure แต่เพียงพอสำหรับ temporary password
      */
     private function generateRandomPassword(int $length = 8): string
     {

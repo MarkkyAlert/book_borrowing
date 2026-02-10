@@ -24,11 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // [AUTHORIZATION] Staff ขึ้นไปสามารถเพิ่มสมาชิกได้
-if (!isAdmin() && !isStaff()) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
-    exit;
-}
+requireStaffApi();
 
 // [SECURITY] CSRF check
 if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {

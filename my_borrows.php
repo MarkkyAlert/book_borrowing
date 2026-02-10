@@ -1,17 +1,26 @@
 <?php
 /**
- * My Borrows - รายการยืมของฉัน
+ * My Borrows - ประวัติการยืมของฉัน
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการยืมเฉพาะของ user ที่ login (session user_id)
+ * - สิทธิ์: ต้อง login (ทุก role)
+ * 
+ * 📂 Flow:
+ * GET → BorrowRepository::findAll(user_id + filters) → แสดงรายการ (filter: status, search)
  */
 
 require_once __DIR__ . '/bootstrap.php';
 
+// [AUTH] ต้อง login — ดูได้เฉพาะรายการยืมของตัวเอง
 requireLogin();
 
 $pdo = getDB();
+// [AUTH] ใช้ user_id จาก session — ป้องกันดูข้อมูลคนอื่น
 $userId = $_SESSION['user_id'];
 
-require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
-$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+use App\Repositories\BorrowRepository;
+$borrowRepo = new BorrowRepository($pdo);
 
 // Get filter
 $statusFilter = $_GET['status'] ?? '';

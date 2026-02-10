@@ -2,6 +2,16 @@
 /**
  * ReportService - Business Logic สำหรับรายงานและสถิติ
  * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - Service นี้เป็น read-only aggregator สำหรับรายงาน
+ * - คล้าย DashboardService แต่เน้นรายงานเชิงลึก (reports page)
+ * - ข้อมูล report จริงอยู่ที่ ReportRepository — Service นี้เป็นตัวกลาง
+ * 
+ * 📍 Entrypoints:
+ * - admin/reports.php     → ผ่าน ReportRepository โดยตรง (ไม่ผ่าน Service นี้)
+ * - admin/export_pdf.php  → ผ่าน report_helper.php
+ * - admin/index.php       → ผ่าน DashboardService (ไม่ผ่าน Service นี้)
+ * 
  * @package App\Services
  */
 

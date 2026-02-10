@@ -1,2 +1,4 @@
-# [SECURITY] ป้องกันเข้าถึงไฟล์ includes โดยตรง
-Require all denied
+# [SECURITY] ป้องกันเข้าถึงไฟล์ PHP includes โดยตรง แต่อนุญาต static assets (.js, .css)
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>

@@ -1,6 +1,19 @@
 <?php
 /**
- * Admin: Reservations Management
+ * Admin: Reservations Management - จัดการการจอง
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการจองทั้งหมด + ปุ่ม "อนุมัติ" / "ยกเลิก"
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. POST action=fulfill → ReservationService::fulfillReservation() → สร้าง borrow + เปลี่ยน status เป็น fulfilled
+ * 2. POST action=cancel  → ReservationService::cancelReservation() → คืน stock + เปลี่ยน status เป็น cancelled
+ * 3. GET → แสดงรายการจอง (filter: search, status)
+ * 
+ * ⚠️ ระวัง:
+ * - fulfill/cancel ใช้ transaction + row lock — ห้ามเรียก DB โดยตรง
+ * - Idempotency key ป้องกัน double-submit (approve ซ้ำ = error)
  */
 
 require_once __DIR__ . '/../bootstrap.php';

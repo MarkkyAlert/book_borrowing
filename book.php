@@ -1,6 +1,13 @@
 <?php
 /**
- * Book Detail Page - รายละเอียดหนังสือ
+ * Book Detail Page - รายละเอียดหนังสือ (public, ไม่ต้อง login)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - แสดงรายละเอียดหนังสือ + ปุ่มจอง (ถ้า login แล้ว)
+ * - ปุ่มจองเรียก api/reserve_book.php ผ่าน AJAX (modal.js)
+ * 
+ * 📂 Flow:
+ * GET ?id=X → BookService::getBookById() → แสดงรายละเอียด + ประวัติยืมล่าสุด
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -13,10 +20,10 @@ if ($bookId <= 0) {
     redirect(APP_URL . '/index.php');
 }
 
-require_once __DIR__ . '/app/Services/BookService.php';
-require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
-$bookService = new \App\Services\BookService($pdo);
-$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
+use App\Services\BookService;
+use App\Repositories\BorrowRepository;
+$bookService = new BookService($pdo);
+$borrowRepo = new BorrowRepository($pdo);
 
 // Get book details
 $book = $bookService->getBookById($bookId);
@@ -95,7 +102,6 @@ require_once __DIR__ . '/includes/header.php';
                     $userReserved = false;
                     $reservation = null;
                     if (isLoggedIn()) {
-                        require_once __DIR__ . '/app/Services/ReservationService.php';
                         $reservationService = new \App\Services\ReservationService($pdo);
                         $reservation = $reservationService->getUserPendingReservation($_SESSION['user_id'], $bookId);
                         if ($reservation) {

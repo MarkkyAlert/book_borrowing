@@ -1,6 +1,6 @@
     </main>
     
-    <!-- Footer -->
+    <!-- Footer (ปิด <main> ที่เปิดจาก includes/header.php) -->
     <footer class="bg-white border-t border-gray-100 mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="md:flex md:items-center md:justify-between">

@@ -12,11 +12,7 @@ require_once __DIR__ . '/../bootstrap.php';
 header('Content-Type: application/json; charset=utf-8');
 
 // [SECURITY] Staff only
-if (!isAdmin() && !isStaff()) {
-    http_response_code(403);
-    echo json_encode([]);
-    exit;
-}
+requireStaffApi();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);

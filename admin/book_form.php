@@ -1,6 +1,21 @@
 <?php
 /**
  * Book Form - เพิ่ม/แก้ไขหนังสือ
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้ทำ 3 อย่าง: สร้างหนังสือ, แก้ไขหนังสือ, ลบหนังสือ
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. GET ?id=X      → โหลดข้อมูลหนังสือเข้า form (edit mode)
+ * 2. GET (ไม่มี id) → form ว่าง (create mode)
+ * 3. POST action=save   → BookService::createBook() หรือ updateBook()
+ *    - รองรับ upload รูปปก (uploads/covers/)
+ * 4. POST action=delete → BookService::deleteBook() (ตรวจเงื่อนไข 3 ข้อก่อนลบ)
+ * 
+ * ⚠️ ระวัง:
+ * - deleteBook() ต้องไม่มี active borrow, borrow history, pending reservation
+ * - upload ตรวจ mime type + ขนาด — แก้ไข limit ที่ config.php
  */
 
 require_once __DIR__ . '/../bootstrap.php';

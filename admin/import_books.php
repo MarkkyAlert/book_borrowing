@@ -1,7 +1,21 @@
 <?php
 /**
- * Import Books from CSV
- * นำเข้าหนังสือจากไฟล์ CSV
+ * Import Books from CSV - นำเข้าหนังสือจากไฟล์ CSV
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้ upload CSV แล้ว import หนังสือเข้าระบบ (ทั้ง create + merge)
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. POST → upload CSV → parse ทีละแถว (ภายใน transaction เดียว)
+ * 2. ถ้า ISBN ตรงกับที่มีอยู่ → เพิ่ม quantity (merge)
+ * 3. ถ้า title+author ตรงกัน → เพิ่ม quantity (merge)
+ * 4. ถ้าไม่พบ → สร้างหนังสือใหม่
+ * 5. ล้มเหลวแถวใดแถวหนึ่ง → rollback ทั้งหมด
+ * 
+ * ⚠️ ระวัง:
+ * - ทั้ง batch อยู่ใน transaction เดียว — ผิด 1 แถว = rollback ทั้งไฟล์
+ * - CSV format: title, author, isbn, category, quantity, description
  */
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -41,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 // Skip header row
                 fgetcsv($handle);
                 
+                // [DATA INTEGRITY] Transaction ครอบทุกแถว — ถ้า error กลางทาง rollback ทั้งหมด (all-or-nothing)
                 $pdo->beginTransaction();
                 
                 try {
@@ -69,17 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             continue;
                         }
                         
-                        // 0. Check ISBN duplicate
+                        // [DATA INTEGRITY] ISBN ต้อง unique — ถ้าซ้ำให้ skip (ไม่ merge เพราะอาจเป็นคนละเล่ม)
                         if (!empty($isbn) && $bookRepo->isbnExists($isbn)) {
                             $skippedDetails[] = "แถวที่ $rowNumber: ISBN $isbn ซ้ำกับหนังสือในระบบ";
                             continue;
                         }
                         
-                        // 1. Check if Book Exists (Merge Strategy) using repository
+                        // [DATA INTEGRITY] Merge strategy: ชื่อ+ผู้แต่งตรงกัน → เพิ่ม quantity (ไม่สร้างซ้ำ)
                         $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
                         
                         if ($existingBook) {
-                            // UPDATE: Add to existing quantity using repository
+                            // [WRITE] เพิ่ม quantity+available ของหนังสือที่มีอยู่ (stock เพิ่มทันที)
                             $bookRepo->addQuantity($existingBook['id'], $qty);
                             $updatedCount++;
                         } else {

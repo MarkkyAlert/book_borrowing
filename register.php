@@ -1,6 +1,19 @@
 <?php
 /**
  * Register Page - สมัครสมาชิก
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้า public — ถ้า login แล้วจะ redirect ไป index.php
+ * - สมัครได้เฉพาะ role='member' — admin/staff ต้องสร้างผ่าน admin panel
+ * 
+ * 📂 Flow:
+ * 1. POST → CSRF check → rate limit (global key) → validateMemberData()
+ * 2. สำเร็จ → AuthService::register() → MemberService::createMember() → redirect login
+ * 3. ล้มเหลว → แสดง errors บน form (เก็บค่าเดิมไว้)
+ * 
+ * ⚠️ ระวัง:
+ * - rate limit ใช้ global key (ไม่ใช่ per-email) เพราะ attacker ใช้ email ใหม่ได้ทุกครั้ง
+ * - incrementRateLimit() เรียกก่อน validation — ป้องกัน bypass ด้วย invalid data
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -51,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        require_once __DIR__ . '/app/Services/AuthService.php';
         $authService = new \App\Services\AuthService(getDB());
         
         $result = $authService->register([

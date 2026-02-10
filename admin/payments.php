@@ -1,6 +1,18 @@
 <?php
 /**
- * Admin: Payment History
+ * Admin: Payment History - ประวัติการชำระค่าปรับ
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้มี 2 ส่วน: (1) รายการค้างชำระ + ปุ่ม "ชำระ" (2) ประวัติการชำระ
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. POST action=pay_fine → BorrowService::payFine() → lock row + บันทึก payment
+ * 2. GET → แสดงรายการค้างชำระ + ประวัติชำระ (filter: search)
+ * 
+ * ⚠️ ระวัง:
+ * - payFine() ใช้ UNIQUE constraint บน borrow_id — ชำระซ้ำจะ error
+ * - Idempotency key ป้องกัน double-submit
  */
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -19,7 +31,7 @@ $borrowService = new BorrowService($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
-    // CSRF check
+    // [SECURITY] CSRF — ป้องกันถูกหลอกให้บันทึกการชำระโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('payments.php');
@@ -36,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         try {
+            // [WRITE] Service จัดการ: lock row, ตรวจชำระซ้ำ (UNIQUE constraint), บันทึก payment
             $result = $borrowService->payFine($borrowId, $_SESSION['user_id']);
             
             // บันทึกว่า process แล้ว

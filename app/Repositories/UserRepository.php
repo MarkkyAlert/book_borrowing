@@ -271,7 +271,14 @@ class UserRepository
     }
 
     /**
-     * ดึงรายการสมาชิกพร้อม filters และ sorting
+     * ดึงรายการสมาชิกพร้อม filters, sorting และ borrow stats
+     * 
+     * @param array $filters {
+     *     search?: string,    // ค้นหาใน name, email, phone
+     *     status?: string,    // 'has_borrow' | 'no_borrow'
+     *     sort?: string       // 'newest' (default), 'oldest', 'az', 'za', 'most_borrows'
+     * }
+     * @return array[] แต่ละ element: user row + total_borrows, active_borrows (subquery)
      */
     public function findMembers(array $filters = []): array
     {
@@ -322,7 +329,14 @@ class UserRepository
     }
 
     /**
-     * ลบสมาชิก
+     * ลบสมาชิก (เฉพาะ role='member' เท่านั้น)
+     * 
+     * @param int $id ID สมาชิก
+     * @return bool true = สำเร็จ
+     * 
+     * @sideeffect DELETE FROM users WHERE role='member'
+     * @throws \PDOException ถ้ามี FK constraint (borrows/reservations)
+     * @note ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
      */
     public function deleteMember(int $id): bool
     {
@@ -331,7 +345,9 @@ class UserRepository
     }
 
     /**
-     * นับสมาชิกใหม่เดือนนี้
+     * นับสมาชิกใหม่เดือนนี้ (สำหรับ dashboard)
+     * 
+     * @return int จำนวน member ที่สมัครเดือนนี้ (ตาม created_at)
      */
     public function countNewThisMonth(): int
     {

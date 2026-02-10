@@ -1,6 +1,21 @@
 <?php
 /**
- * Admin Dashboard
+ * Admin Dashboard - หน้าหลักสำหรับ admin/staff
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดง summary cards, charts, รายการล่าสุด, และ alerts ต่างๆ
+ * - สิทธิ์: staff ขึ้นไป
+ * - ข้อมูลทั้งหมดมาจาก DashboardService (read-only aggregator)
+ * 
+ * 📂 Flow:
+ * 1. Expire overdue reservations (lazy — fallback สำหรับ cron ที่อาจไม่รัน)
+ * 2. ดึงสถิติ cards (หนังสือ, สมาชิก, ยืม, เกินกำหนด, จอง)
+ * 3. ดึง lists (ยืมล่าสุด, จองรอดำเนินการ, เกินกำหนด, ค้างชำระ, stock ใกล้หมด)
+ * 4. ดึง chart data (monthly borrow, category distribution)
+ * 
+ * ⚠️ ระวัง:
+ * - expireOverdueReservations() จะถูกเรียกทุกครั้งที่โหลด dashboard
+ *   ถ้า cron ทำงานปกติ จะไม่มี expired rows ให้ process (ไม่กระทบ performance)
  */
 
 require_once __DIR__ . '/../bootstrap.php';

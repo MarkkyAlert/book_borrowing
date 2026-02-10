@@ -1,6 +1,18 @@
 <?php
 /**
  * Borrow Form - บันทึกการยืม (Enhanced UX)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้มี 2 mode ที่ทำงานในไฟล์เดียวกัน:
+ *   1. AJAX scan (POST action=scan) → ค้นหาสมาชิก/หนังสือแบบ real-time → return JSON
+ *   2. Form submit (POST) → BorrowService::createBorrow() → สร้างรายการยืม
+ * - รองรับยืมหลายเล่มพร้อมกัน (book_ids เป็น array)
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * ⚠️ ระวัง:
+ * - AJAX scan ต้อง exit หลัง echo JSON — ห้ามให้ไหลไปถึง HTML
+ * - createBorrow() ใช้ transaction — ยืมทุกเล่มสำเร็จหรือ rollback ทั้งหมด
+ * - Idempotency key ใช้ hash ของ userId + bookIds ป้องกัน double-submit
  */
 
 require_once __DIR__ . '/../bootstrap.php';

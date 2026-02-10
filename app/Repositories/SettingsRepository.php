@@ -37,7 +37,13 @@ class SettingsRepository
     }
 
     /**
-     * บันทึกค่า setting (insert หรือ update ถ้ามีอยู่แล้ว)
+     * บันทึกค่า setting (upsert: insert หรือ update ถ้ามีอยู่แล้ว)
+     * 
+     * @param string $key   ชื่อ setting (setting_key)
+     * @param mixed  $value ค่าที่ต้องการบันทึก
+     * @return bool true = สำเร็จ
+     * 
+     * @sideeffect INSERT หรือ UPDATE ตาราง settings (ใช้ ON DUPLICATE KEY UPDATE)
      */
     public function set(string $key, mixed $value): bool
     {
@@ -50,7 +56,12 @@ class SettingsRepository
     }
 
     /**
-     * ลบ setting
+     * ลบ setting ตาม key
+     * 
+     * @param string $key ชื่อ setting ที่ต้องการลบ
+     * @return bool true = สำเร็จ
+     * 
+     * @sideeffect DELETE FROM settings
      */
     public function delete(string $key): bool
     {
@@ -59,7 +70,9 @@ class SettingsRepository
     }
 
     /**
-     * ดึง settings ทั้งหมด
+     * ดึง settings ทั้งหมดเป็น key-value map
+     * 
+     * @return array<string, string> { setting_key => setting_value, ... }
      */
     public function all(): array
     {

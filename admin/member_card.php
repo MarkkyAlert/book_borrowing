@@ -1,6 +1,14 @@
 <?php
 /**
- * Admin: Member Card Generator
+ * Admin: Member Card Generator - พิมพ์บัตรสมาชิก
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดง member card สำหรับพิมพ์ (ใช้ window.print())
+ * - สีบัตรมาจาก settings (card_color_primary, card_color_secondary)
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * GET ?id=X → UserRepository::findMemberById() → render card → window.print()
  */
 
 require_once __DIR__ . '/../bootstrap.php';

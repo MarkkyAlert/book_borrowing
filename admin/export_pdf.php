@@ -1,7 +1,17 @@
 <?php
 /**
  * Admin: Export Report as PDF (Print-friendly HTML)
- * ใช้ window.print() เพื่อแปลงเป็น PDF โดยไม่ต้องติดตั้ง library
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้สร้าง print-friendly HTML แล้วใช้ window.print() แปลงเป็น PDF
+ * - ไม่ต้องติดตั้ง PDF library — ใช้ browser print dialog
+ * - สิทธิ์: admin เท่านั้น
+ * 
+ * 📂 Flow:
+ * GET ?report=TYPE&start_date=X&end_date=Y → report_helper.php → render HTML table → window.print()
+ * 
+ * ⚠️ ระวัง:
+ * - เพิ่ม report type ใหม่ที่ includes/report_helper.php (shared กับ reports.php)
  */
 
 require_once __DIR__ . '/../bootstrap.php';

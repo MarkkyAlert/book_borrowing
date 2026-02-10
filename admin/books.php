@@ -1,6 +1,15 @@
 <?php
 /**
- * Books Management - จัดการหนังสือ
+ * Books Management - จัดการหนังสือ (รายการ + ลบ)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการหนังสือ + filter + ปุ่มลบ
+ * - เพิ่ม/แก้ไขอยู่ที่ book_form.php
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. GET → BookService::getBooks(filters) → แสดงรายการ
+ * 2. ปุ่มลบ (ถ้ามี) → ส่ง POST ไปที่ book_form.php หรือ AJAX
  */
 
 require_once __DIR__ . '/../bootstrap.php';

@@ -228,6 +228,35 @@ function requireStaff(): void
 }
 
 /**
+ * บังคับ staff สำหรับ API endpoint (ตอบ JSON แทน redirect)
+ * 
+ * @return void ถ้าเป็น staff / never ถ้าไม่ผ่าน (JSON 403 แล้ว exit)
+ * 
+ * @example // ใส่ไว้บรรทัดแรกของ API ที่ต้องเป็น staff
+ *          requireStaffApi();
+ */
+function requireStaffApi(): void
+{
+    if (!isLoggedIn() || !isStaff()) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+        exit;
+    }
+}
+
+/**
+ * บังคับ admin สำหรับ API endpoint (ตอบ JSON แทน redirect)
+ */
+function requireAdminApi(): void
+{
+    if (!isLoggedIn() || !isAdmin()) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+        exit;
+    }
+}
+
+/**
  * ดึงข้อมูลผู้ใช้ปัจจุบันจากฐานข้อมูล
  * 
  * @return array|null ['id', 'name', 'email', 'phone', 'role'] หรือ null ถ้าไม่ได้ login

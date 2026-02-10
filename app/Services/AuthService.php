@@ -15,7 +15,7 @@
  * 
  * ⚠️ ห้ามแก้ (Security Critical):
  * - login()     - ตรวจ password, ป้องกัน user enumeration
- * - register()  - สร้าง user, hash password
+ * - register()  - delegate ไป MemberService::createMember()
  * - requestPasswordReset() - สร้าง token, ป้องกัน enumeration
  * 
  * @package App\Services
@@ -57,6 +57,7 @@ class AuthService
     {
         $user = $this->userRepo->findByEmail($email);
         
+        // [SECURITY] ไม่แยกว่า "ไม่พบ email" หรือ "password ผิด" — return null เหมือนกัน
         if (!$user) {
             return null;
         }
@@ -83,7 +84,7 @@ class AuthService
      * }
      * @return array { success: bool, user_id?: int, error?: string }
      * 
-     * @sideeffect INSERT ลง users table
+     * @sideeffect INSERT ลง users table (ผ่าน MemberService)
      */
     public function register(array $data): array
     {
@@ -121,9 +122,10 @@ class AuthService
             return false;
         }
         
+        // [SECURITY] email ไม่เปลี่ยนผ่านหน้านี้ — ป้องกัน user แอบเปลี่ยน email ของตัวเอง (account takeover)
         return $this->userRepo->update($userId, [
             'name' => $data['name'],
-            'email' => $user['email'], // ไม่เปลี่ยน email
+            'email' => $user['email'],
             'phone' => $data['phone'] ?? null
         ]);
     }
@@ -148,6 +150,7 @@ class AuthService
             return ['success' => false, 'error' => 'ไม่พบผู้ใช้'];
         }
         
+        // [SECURITY] ต้องยืนยันรหัสผ่านเดิมก่อน — ป้องกันเปลี่ยนรหัสผ่านโดยคนที่ขโมย session
         if (!password_verify($currentPassword, $user['password'])) {
             return ['success' => false, 'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง'];
         }
@@ -225,10 +228,10 @@ class AuthService
         try {
             $this->pdo->beginTransaction();
             
-            // Update password
+            // [WRITE] เปลี่ยนรหัสผ่าน + ทำลาย token ใน transaction เดียวกัน
             $this->userRepo->updatePassword($resetRequest['user_id'], hashPassword($newPassword));
             
-            // Mark token as used
+            // [SECURITY] Mark token as used — ป้องกันใช้ token ซ้ำ
             $resetRepo->markUsed($resetRequest['id']);
             
             $this->pdo->commit();

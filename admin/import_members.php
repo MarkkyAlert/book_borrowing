@@ -1,9 +1,21 @@
 <?php
 /**
- * Import Members from CSV
- * นำเข้าสมาชิกจากไฟล์ CSV
+ * Import Members from CSV - นำเข้าสมาชิกจากไฟล์ CSV
  * 
- * ใช้ MemberService::importMember() เป็น Single Source of Truth
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้ upload CSV แล้ว import สมาชิกเข้าระบบ (upsert: create หรือ update)
+ * - ใช้ MemberService::importMember() เป็น Single Source of Truth
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * 1. POST → upload CSV → parse ทีละแถว (ภายใน transaction เดียว)
+ * 2. ถ้า email มีอยู่แล้ว → update name/phone (ไม่แก้ password)
+ * 3. ถ้า email ใหม่ → สร้างสมาชิกใหม่ด้วย default password
+ * 4. ล้มเหลวแถวใดแถวหนึ่ง → rollback ทั้งหมด
+ * 
+ * ⚠️ ระวัง:
+ * - สมาชิกใหม่จะได้ default password (123456) — ต้องแจ้งให้เปลี่ยน
+ * - CSV format: name, email, phone
  */
 
 require_once __DIR__ . '/../bootstrap.php';
@@ -36,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             } else {
                 fgetcsv($handle); // Skip header
                 
+                // [DATA INTEGRITY] Transaction ครอบทุกแถว — ถ้า error กลางทาง rollback ทั้งหมด (all-or-nothing)
                 $pdo->beginTransaction();
                 
                 try {
@@ -62,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             continue;
                         }
                         
-                        // [REFACTOR] ใช้ MemberService เป็น single source of truth
+                        // [WRITE] Upsert — email มีแล้ว update, ไม่มี create (รหัสผ่านเริ่มต้น = 123456)
                         try {
                             $result = $memberService->importMember([
                                 'name' => $name,

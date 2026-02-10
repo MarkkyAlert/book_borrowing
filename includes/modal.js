@@ -13,6 +13,7 @@
     // Create modal container on DOM ready
     let modalContainer = null;
 
+    /** สร้าง modal DOM container (lazy init — สร้างครั้งเดียวตอนใช้งานครั้งแรก) */
     function ensureContainer() {
         if (modalContainer) return modalContainer;
         
@@ -56,6 +57,7 @@
         return modalContainer;
     }
 
+    /** @returns {boolean} true ถ้า modal กำลังแสดงอยู่ */
     function isModalOpen() {
         const modal = document.getElementById('app-modal');
         return modal && !modal.classList.contains('hidden');
@@ -63,6 +65,19 @@
 
     let currentResolve = null;
 
+    /**
+     * แสดง modal dialog (internal)
+     * 
+     * @param {Object} options
+     * @param {'confirm'|'alert'|'success'|'warning'|'danger'|'error'} options.type  ประเภท modal (กำหนด icon/สี)
+     * @param {string}  options.title         หัวข้อ
+     * @param {string}  options.message       ข้อความ
+     * @param {string}  [options.confirmText] ข้อความปุ่มยืนยัน
+     * @param {string}  [options.cancelText]  ข้อความปุ่มยกเลิก
+     * @param {'primary'|'success'|'danger'|'secondary'} [options.confirmClass] สีปุ่มยืนยัน
+     * @param {boolean} [options.alertOnly]   true = แสดงปุ่ม OK อย่างเดียว (ไม่มี Cancel)
+     * @returns {Promise<boolean>} resolve(true) = กด OK, resolve(false) = กด Cancel/ESC/backdrop
+     */
     function showModal(options) {
         ensureContainer();
         
@@ -158,6 +173,11 @@
         });
     }
 
+    /**
+     * ปิด modal พร้อม resolve Promise
+     * 
+     * @param {boolean} result true = ยืนยัน, false = ยกเลิก
+     */
     function closeModal(result) {
         const backdrop = document.getElementById('app-modal-backdrop');
         const modal = document.getElementById('app-modal');
@@ -182,7 +202,20 @@
         }, 200);
     }
 
-    // Public API
+    /**
+     * แสดง confirm dialog (ปุ่ม ยกเลิก + ยืนยัน)
+     * 
+     * @param {string} message ข้อความที่จะแสดง
+     * @param {Object} [options]
+     * @param {string} [options.title]        หัวข้อ (default: 'ยืนยันการดำเนินการ')
+     * @param {string} [options.confirmText]  ข้อความปุ่มยืนยัน (default: 'ยืนยัน')
+     * @param {string} [options.cancelText]   ข้อความปุ่มยกเลิก (default: 'ยกเลิก')
+     * @param {string} [options.confirmClass] สีปุ่ม: 'primary'|'success'|'danger'
+     * @param {string} [options.type]         ประเภท icon (default: 'confirm')
+     * @returns {Promise<boolean>} true = ยืนยัน, false = ยกเลิก
+     * 
+     * @example modalConfirm('ยืนยันการลบ?', { confirmClass: 'danger' }).then(ok => { ... });
+     */
     window.modalConfirm = function(message, options = {}) {
         return showModal({
             type: options.type || 'confirm',
@@ -194,6 +227,14 @@
         });
     };
 
+    /**
+     * แสดง alert dialog (ปุ่ม ตกลง อย่างเดียว)
+     * 
+     * @param {string} message ข้อความ
+     * @param {Object} [options]
+     * @param {string} [options.title] หัวข้อ (default: 'แจ้งเตือน')
+     * @returns {Promise<boolean>} resolve(true) เมื่อกด OK
+     */
     window.modalAlert = function(message, options = {}) {
         return showModal({
             type: options.type || 'alert',
@@ -205,6 +246,14 @@
         });
     };
 
+    /**
+     * แสดง success dialog (icon เขียว, ปุ่ม ตกลง)
+     * 
+     * @param {string} message ข้อความ
+     * @param {Object} [options]
+     * @param {string} [options.title] หัวข้อ (default: 'สำเร็จ')
+     * @returns {Promise<boolean>}
+     */
     window.modalSuccess = function(message, options = {}) {
         return showModal({
             type: 'success',
@@ -216,6 +265,14 @@
         });
     };
 
+    /**
+     * แสดง error dialog (icon แดง, ปุ่ม ตกลง)
+     * 
+     * @param {string} message ข้อความ error
+     * @param {Object} [options]
+     * @param {string} [options.title] หัวข้อ (default: 'เกิดข้อผิดพลาด')
+     * @returns {Promise<boolean>}
+     */
     window.modalError = function(message, options = {}) {
         return showModal({
             type: 'error',
@@ -227,7 +284,16 @@
         });
     };
 
-    // Helper for form submission with confirm
+    /**
+     * Helper: confirm ก่อน submit form (ใช้กับ onsubmit)
+     * 
+     * @param {HTMLFormElement} form  form element ที่จะ submit
+     * @param {string}          message ข้อความยืนยัน
+     * @param {Object}          [options] ส่งต่อไปยัง modalConfirm
+     * @returns {false} คืน false เสมอเพื่อ prevent default submission
+     * 
+     * @example <form onsubmit="return confirmSubmit(this, 'ยืนยันการลบ?', {confirmClass:'danger'})">
+     */
     window.confirmSubmit = function(form, message, options = {}) {
         modalConfirm(message, options).then(function(confirmed) {
             if (confirmed) {

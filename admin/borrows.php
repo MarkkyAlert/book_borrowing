@@ -1,6 +1,19 @@
 <?php
 /**
  * Borrows Management - จัดการยืม-คืน
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการยืมทั้งหมด + ปุ่ม "คืนหนังสือ"
+ * - สิทธิ์: staff ขึ้นไป (requireStaff)
+ * 
+ * 📂 Flow:
+ * 1. POST action=return → BorrowService::returnBook() → คำนวณค่าปรับ, คืน stock, เปลี่ยน status
+ * 2. GET → แสดงรายการยืม (filter: search, status, overdue, due_today)
+ * 
+ * ⚠️ ระวัง:
+ * - POST ต้องทำก่อน GET (PRG pattern) — ป้องกัน refresh ซ้ำ
+ * - returnBook() ใช้ transaction + row lock — ห้ามเรียก DB โดยตรง
+ * - Idempotency key ป้องกัน double-submit
  */
 
 require_once __DIR__ . '/../bootstrap.php';

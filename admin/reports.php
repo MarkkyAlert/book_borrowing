@@ -1,6 +1,21 @@
 <?php
 /**
- * Admin: Advanced Reports
+ * Admin: Advanced Reports - รายงานเชิงลึก
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายงาน 6 ประเภท: books, members, revenue, overdue, borrows, unpaid
+ * - รองรับ CSV export (GET ?export=csv)
+ * - สิทธิ์: admin เท่านั้น (requireAdmin)
+ * 
+ * 📂 Flow:
+ * 1. รับ report type + date range จาก GET params
+ * 2. ดึงข้อมูลผ่าน report_helper.php::getReportConfig() (shared กับ export_pdf.php)
+ * 3. ถ้า ?export=csv → stream CSV download แล้ว exit
+ * 4. ถ้าไม่ → แสดง HTML table
+ * 
+ * ⚠️ ระวัง:
+ * - เพิ่ม report type ใหม่ที่ includes/report_helper.php (Single Source of Truth)
+ * - อย่าเพิ่มที่นี่อย่างเดียว ไม่งั้น PDF export จะไม่มีข้อมูล
  */
 
 require_once __DIR__ . '/../bootstrap.php';

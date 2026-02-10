@@ -1,6 +1,14 @@
 <?php
 /**
- * Homepage - หน้าแรก
+ * Homepage - หน้าแรก (public, ไม่ต้อง login)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้า public แสดงรายการหนังสือทั้งหมด + filter (search, category, status)
+ * - ใช้ HomeService::getBooks() ดึงข้อมูล
+ * - แต่ละหนังสือ link ไป book.php?id=X
+ * 
+ * 📂 Flow:
+ * GET → HomeService::getBooks(filters) → แสดง book grid + sidebar categories
  */
 
 require_once __DIR__ . '/bootstrap.php';

@@ -1,6 +1,14 @@
 <?php
 /**
- * Members Management - จัดการสมาชิก
+ * Members Management - จัดการสมาชิก (รายการ)
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงรายการสมาชิก + filter/sort + link ไป member_form.php
+ * - เพิ่ม/แก้ไข/ลบ อยู่ที่ member_form.php
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * GET → MemberService::getMembers(filters) → แสดงรายการ (พร้อม borrow stats)
  */
 
 require_once __DIR__ . '/../bootstrap.php';

@@ -218,7 +218,11 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการเกินกำหนด
+     * ดึงรายการยืมที่เกินกำหนดคืน (สำหรับ dashboard และ notification)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 10)
+     * @return array[] แต่ละ element: borrow row + user_name, phone, book_title
+     *                 เรียงตาม due_date ASC (เกินนานสุดขึ้นก่อน)
      */
     public function findOverdue(int $limit = 10): array
     {
@@ -236,7 +240,10 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมล่าสุด
+     * ดึงรายการยืมล่าสุด (สำหรับ dashboard)
+     * 
+     * @param int $limit จำนวนรายการสูงสุด (default: 5)
+     * @return array[] แต่ละ element: borrow row + user_name, book_title
      */
     public function findRecent(int $limit = 5): array
     {
@@ -253,7 +260,11 @@ class BorrowRepository
     }
 
     /**
-     * ดึงประวัติการยืมของ user
+     * ดึงประวัติการยืมของ user (สำหรับ profile และ member history)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @param int $limit  จำนวนรายการสูงสุด (default: 20)
+     * @return array[] แต่ละ element: borrow row + book_title, book_author
      */
     public function findByUserId(int $userId, int $limit = 20): array
     {
@@ -358,7 +369,9 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนรายการที่เกินกำหนดคืน (status='borrowing' AND due_date < today)
+     * นับจำนวนรายการที่เกินกำหนดคืน (สำหรับ badge notification)
+     * 
+     * @return int จำนวนรายการที่ status='borrowing' AND due_date < today
      */
     public function countOverdue(): int
     {
@@ -369,7 +382,9 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนการยืมที่ active ทั้งหมด
+     * นับจำนวนการยืมที่ active ทั้งระบบ (สำหรับ dashboard)
+     * 
+     * @return int จำนวนรายการที่ status='borrowing'
      */
     public function countActive(): int
     {
@@ -382,7 +397,10 @@ class BorrowRepository
     // เหตุผล: ReportRepository เป็น owner ของ report logic
 
     /**
-     * นับจำนวนการยืมของหนังสือ
+     * นับจำนวนการยืมทั้งหมดของหนังสือ (ใช้ตรวจก่อนลบหนังสือ)
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return int จำนวนครั้งที่ถูกยืม (ทุก status)
      */
     public function countByBook(int $bookId): int
     {
@@ -392,7 +410,10 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนการยืมทั้งหมดของ user
+     * นับจำนวนการยืมทั้งหมดของ user (ใช้ตรวจก่อนลบสมาชิก)
+     * 
+     * @param int $userId ID สมาชิก
+     * @return int จำนวนครั้งที่ยืม (ทุก status)
      */
     public function countByUser(int $userId): int
     {
@@ -402,7 +423,15 @@ class BorrowRepository
     }
 
     /**
-     * ดึงสถิติการยืมของ user
+     * ดึงสถิติการยืมของ user (สำหรับ profile page)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @return array {
+     *     total_borrows: int,     // ยืมทั้งหมด
+     *     active_borrows: int,   // ยังไม่คืน
+     *     returned: int,         // คืนแล้ว
+     *     total_fines: float     // ค่าปรับสะสม (บาท)
+     * }
      */
     public function getStatsByUser(int $userId): array
     {
@@ -420,7 +449,10 @@ class BorrowRepository
     }
 
     /**
-     * นับการยืมที่ active ของหนังสือ
+     * นับการยืมที่ active ของหนังสือ (ใช้ตรวจก่อนลบ — isBeingBorrowed)
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return int จำนวนคนที่กำลังยืมอยู่
      */
     public function countActiveByBook(int $bookId): int
     {
@@ -454,7 +486,9 @@ class BorrowRepository
     }
 
     /**
-     * นับยอดค่าปรับค้างชำระทั้งหมด
+     * ยอดค่าปรับค้างชำระทั้งระบบ (fine > 0 และยังไม่มี payment)
+     * 
+     * @return float ยอดรวม (บาท) หรือ 0
      */
     public function getTotalUnpaidFines(): float
     {
@@ -467,7 +501,17 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการค่าปรับค้างชำระของ user
+     * ดึงรายการค่าปรับค้างชำระของ user (สำหรับ profile page)
+     * 
+     * @param int $userId ID ผู้ใช้
+     * @return array[] แต่ละ element: {
+     *     id: int,              // borrow ID
+     *     fine_amount: float,   // ค่าปรับ (บาท)
+     *     borrow_date: string,  // วันยืม
+     *     due_date: string,     // กำหนดคืน
+     *     return_date: string,  // วันคืนจริง
+     *     book_title: string    // ชื่อหนังสือ
+     * }
      */
     public function getUnpaidFinesByUser(int $userId): array
     {

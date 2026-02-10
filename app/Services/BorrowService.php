@@ -106,7 +106,7 @@ class BorrowService
         $this->pdo->beginTransaction();
 
         try {
-            // 🔒 Critical Fix: ล็อคแถวข้อมูลผู้ใช้งาน (User Row) ก่อนเป็นอันดับแรก
+            // 🔒 ล็อค User Row ก่อน — ป้องกัน race condition เมื่อยืมพร้อมกันหลาย session
             $this->userRepo->lockById($userId);
 
             // ตรวจสอบจำนวนหนังสือที่ยืมอยู่ปัจจุบัน
@@ -182,23 +182,20 @@ class BorrowService
         $this->pdo->beginTransaction();
 
         try {
-            // Lock row - ป้องกันคืนซ้ำ
+            // [LOCK] ล็อคแถว borrow — ป้องกันคืนซ้ำ + ตรวจ status = 'borrowing' ใน query
             $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
 
             if (!$borrow) {
                 throw new Exception('ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
             }
 
-            // คำนวณค่าปรับตาม due_date
             $fine = $this->calculateFine($borrow['due_date'], date('Y-m-d'));
 
-            // เปลี่ยนสถานะ + บันทึกค่าปรับ
+            // [STATE] borrowing → returned (3 writes ใน 1 transaction)
             $this->borrowRepo->markAsReturned($borrowId, $fine['amount']);
-
-            // คืน stock
             $this->bookRepo->incrementAvailable($borrow['book_id']);
 
-            // บันทึก payment ถ้าจ่ายทันที
+            // [WRITE] บันทึก payment เฉพาะจ่ายทันที (UNIQUE บน borrow_id ป้องกันจ่ายซ้ำ)
             if ($payNow && $fine['amount'] > 0) {
                 $this->paymentRepo->create($borrowId, $fine['amount'], $recordedBy);
             }
@@ -345,12 +342,12 @@ class BorrowService
             return ['success' => false, 'reason' => $book['title'] . ' (ไม่มีเล่มว่าง)'];
         }
 
-        // Check if already borrowing this book
+        // [DATA INTEGRITY] ตรวจภายใต้ lock — ป้องกันยืมเล่มเดิมซ้ำจาก concurrent requests
         if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
             return ['success' => false, 'reason' => $book['title'] . ' (ยืมอยู่แล้ว)'];
         }
 
-        // Update book available count (atomic - ป้องกันติดลบ)
+        // [DATA INTEGRITY] Atomic decrement (WHERE available > 0) — ป้องกัน stock ติดลบ
         if (!$this->bookRepo->decrementAvailable($bookId)) {
             return ['success' => false, 'reason' => $book['title'] . ' (stock หมดระหว่างดำเนินการ)'];
         }

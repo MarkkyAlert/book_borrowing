@@ -1,6 +1,18 @@
 <?php
 /**
- * Admin Header Template
+ * Admin Header Template - layout wrapper สำหรับทุกหน้า admin/
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - ทุกหน้าใน admin/ จะ require ไฟล์นี้หลังจาก logic เสร็จ
+ * - ประกอบด้วย: <head>, top navbar, sidebar menu, เปิด <main>
+ * - ปิด </main> อยู่ที่ admin/footer.php
+ * - ต้องตั้ง $pageTitle ก่อน require เพื่อแสดงชื่อหน้าใน title bar
+ * 
+ * 📂 การใช้งาน (ในแต่ละหน้า admin/):
+ *   $pageTitle = 'ชื่อหน้า';
+ *   require_once __DIR__ . '/header.php';
+ *   // ... HTML content ...
+ *   require_once __DIR__ . '/footer.php';
  */
 
 require_once __DIR__ . '/../includes/functions.php';

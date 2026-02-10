@@ -1,6 +1,13 @@
 <?php
 /**
- * Admin: Book Barcode Labels
+ * Admin: Book Barcode Labels - พิมพ์ฉลากบาร์โค้ดหนังสือ
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดง barcode labels สำหรับหนังสือทุกเล่ม (ใช้ window.print())
+ * - สิทธิ์: staff ขึ้นไป
+ * 
+ * 📂 Flow:
+ * GET → BookRepository::findAllForLabels() → render labels → window.print()
  */
 
 require_once __DIR__ . '/../bootstrap.php';

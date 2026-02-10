@@ -133,7 +133,10 @@ class ReservationRepository
     }
 
     /**
-     * ดึงการจองตาม ID
+     * ดึงการจองตาม ID พร้อม user_name, email, book_title
+     * 
+     * @param int $id reservation ID
+     * @return array|null ข้อมูลการจอง หรือ null ถ้าไม่พบ
      */
     public function findById(int $id): ?array
     {
@@ -149,7 +152,12 @@ class ReservationRepository
     }
 
     /**
-     * ดึงการจองของ user สำหรับ book
+     * ดึงการจองของ user สำหรับ book เฉพาะเล่ม
+     * 
+     * @param int         $userId ผู้จอง
+     * @param int         $bookId หนังสือที่จอง
+     * @param string|null $status กรองตาม status หรือ null = ทุก status
+     * @return array|null reservation record หรือ null
      */
     public function findByUserAndBook(int $userId, int $bookId, ?string $status = null): ?array
     {
@@ -167,7 +175,15 @@ class ReservationRepository
     }
 
     /**
-     * สร้างการจองใหม่
+     * สร้างการจองใหม่ (status = 'pending')
+     * 
+     * @param int    $userId    ID ผู้จอง
+     * @param int    $bookId    ID หนังสือ
+     * @param string $expiresAt วันหมดอายุ (Y-m-d H:i:s)
+     * @return int ID ของ reservation ที่สร้าง
+     * 
+     * @sideeffect INSERT ลง reservations table
+     * @note ต้อง decrement stock แยกต่างหากใน Service layer
      */
     public function create(int $userId, int $bookId, string $expiresAt): int
     {
@@ -232,7 +248,9 @@ class ReservationRepository
     }
 
     /**
-     * นับจำนวน pending reservations
+     * นับจำนวน pending reservations ทั้งระบบ (สำหรับ badge notification)
+     * 
+     * @return int จำนวนรายการที่รอดำเนินการ
      */
     public function countPending(): int
     {
@@ -240,7 +258,9 @@ class ReservationRepository
     }
 
     /**
-     * ดึงรายการที่หมดอายุ
+     * ดึงรายการที่หมดอายุ (status=pending และเลย expires_at)
+     * 
+     * @return array[] reservation records ที่หมดอายุแล้วแต่ยังไม่ถูก expire
      */
     public function findExpired(): array
     {
@@ -275,7 +295,11 @@ class ReservationRepository
     }
 
     /**
-     * ดึงรายการหมดอายุพร้อม lock (สำหรับ batch expire)
+     * ดึงรายการหมดอายุพร้อม lock (สำหรับ batch expire ใน transaction)
+     * 
+     * @return array[] แต่ละ element: { id: int, book_id: int }
+     * 
+     * @note ต้องเรียกภายใน transaction — FOR UPDATE ล็อคแถวที่ match
      */
     public function findExpiredForUpdate(): array
     {
@@ -338,7 +362,10 @@ class ReservationRepository
     }
 
     /**
-     * นับจำนวน pending reservations ของหนังสือ
+     * นับจำนวน pending reservations ของหนังสือ (ใช้ตรวจก่อนลบหนังสือ)
+     * 
+     * @param int $bookId ID หนังสือ
+     * @return int จำนวนการจองที่รอดำเนินการ
      */
     public function countPendingByBook(int $bookId): int
     {
@@ -351,7 +378,10 @@ class ReservationRepository
     }
 
     /**
-     * นับจำนวน pending reservations ของ user
+     * นับจำนวน pending reservations ของ user (ใช้ตรวจก่อนลบสมาชิก)
+     * 
+     * @param int $userId ID สมาชิก
+     * @return int จำนวนการจองที่รอดำเนินการ
      */
     public function countPendingByUser(int $userId): int
     {
@@ -364,7 +394,11 @@ class ReservationRepository
     }
 
     /**
-     * ตรวจสอบว่ามีการจอง pending อยู่แล้วหรือไม่
+     * ตรวจสอบว่า user จองหนังสือเล่มนี้อยู่แล้วหรือไม่ (ป้องกันจองซ้ำ)
+     * 
+     * @param int $userId ID ผู้จอง
+     * @param int $bookId ID หนังสือ
+     * @return bool true = มีการจอง pending อยู่แล้ว (จองซ้ำไม่ได้)
      */
     public function hasPending(int $userId, int $bookId): bool
     {

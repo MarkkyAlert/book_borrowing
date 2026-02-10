@@ -1,10 +1,25 @@
 <?php
 /**
  * Profile Page - โปรไฟล์ผู้ใช้
+ * 
+ * ⭐ สำหรับคนมาใหม่:
+ * - หน้านี้แสดงข้อมูลส่วนตัว + ประวัติยืม + ค่าปรับค้าง + เปลี่ยนรหัสผ่าน
+ * - สิทธิ์: ต้อง login (ทุก role)
+ * - แสดงข้อมูลเฉพาะของ user ที่ login (ใช้ session user_id)
+ * 
+ * 📂 Flow:
+ * 1. POST action=update_profile   → AuthService::updateProfile() (เปลี่ยนได้แค่ name/phone)
+ * 2. POST action=change_password  → AuthService::changePassword() (ต้องยืนยัน password เดิม)
+ * 3. GET → แสดง profile info, borrow stats, borrow history, unpaid fines
+ * 
+ * ⚠️ ระวัง:
+ * - email เปลี่ยนไม่ได้ผ่านหน้านี้ (ป้องกัน account takeover)
+ * - change_password ต้องยืนยัน password เดิมก่อน (ป้องกันคนที่ขโมย session)
  */
 
 require_once __DIR__ . '/bootstrap.php';
 
+// [AUTH] ต้อง login — แสดงข้อมูลเฉพาะของตัวเอง (session user_id)
 requireLogin();
 
 $pdo = getDB();
@@ -12,12 +27,12 @@ $user = getCurrentUser();
 $errors = [];
 $success = false;
 
-require_once __DIR__ . '/app/Repositories/BorrowRepository.php';
-require_once __DIR__ . '/app/Repositories/ReservationRepository.php';
-require_once __DIR__ . '/app/Services/AuthService.php';
-$borrowRepo = new \App\Repositories\BorrowRepository($pdo);
-$reservationRepo = new \App\Repositories\ReservationRepository($pdo);
-$authService = new \App\Services\AuthService($pdo);
+use App\Repositories\BorrowRepository;
+use App\Repositories\ReservationRepository;
+use App\Services\AuthService;
+$borrowRepo = new BorrowRepository($pdo);
+$reservationRepo = new ReservationRepository($pdo);
+$authService = new AuthService($pdo);
 
 $borrowHistory = $borrowRepo->findByUserId($_SESSION['user_id'], 10);
 
@@ -43,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $action = $_POST['action'] ?? '';
     
+    // [SECURITY] อัปเดตได้เฉพาะ name/phone — email เปลี่ยนไม่ได้ผ่านหน้านี้ (ป้องกัน account takeover)
     if ($action === 'update_profile') {
         $name = trim($_POST['name'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
