@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS `books` (
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_available` (`available`),
     INDEX `idx_category` (`category_id`),
+    UNIQUE INDEX `uq_isbn` (`isbn`),
     FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT `chk_books_available_non_negative` CHECK (`available` >= 0),
     CONSTRAINT `chk_books_quantity_gte_available` CHECK (`quantity` >= `available`)
@@ -81,8 +82,8 @@ CREATE TABLE IF NOT EXISTS `borrows` (
     INDEX `idx_user` (`user_id`),
     INDEX `idx_book` (`book_id`),
     INDEX `idx_due_date` (`due_date`),
-    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
@@ -99,8 +100,8 @@ CREATE TABLE IF NOT EXISTS `reservations` (
     INDEX `idx_status` (`status`),
     INDEX `idx_user` (`user_id`),
     INDEX `idx_book` (`book_id`),
-    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (`borrow_id`) REFERENCES `borrows`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

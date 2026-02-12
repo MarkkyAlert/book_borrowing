@@ -42,10 +42,12 @@ namespace App\Services;
 require_once __DIR__ . '/../Repositories/BookRepository.php';
 require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 require_once __DIR__ . '/../Repositories/BorrowRepository.php';
+require_once __DIR__ . '/../Repositories/UserRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\ReservationRepository;
 use App\Repositories\BorrowRepository;
+use App\Repositories\UserRepository;
 use PDO;
 use Exception;
 
@@ -56,6 +58,7 @@ class ReservationService
     private BookRepository $bookRepo;
     private ReservationRepository $reservationRepo;
     private BorrowRepository $borrowRepo;
+    private UserRepository $userRepo; // [I-07 FIX] เพิ่มเพื่อ lockById() ตอน check quota
 
     // 🏗️ Constructor: สร้าง repo ทั้งหมด — ใช้ PDO เดียวกัน = transaction ทำงานข้าม repo
     public function __construct(PDO $pdo)
@@ -64,6 +67,7 @@ class ReservationService
         $this->bookRepo = new BookRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
         $this->borrowRepo = new BorrowRepository($pdo);
+        $this->userRepo = new UserRepository($pdo); // [I-07 FIX]
     }
 
     /**
@@ -126,10 +130,18 @@ class ReservationService
                 throw new Exception('คุณกำลังยืมหนังสือเล่มนี้อยู่แล้ว ไม่สามารถจองซ้ำได้');
             }
 
-            // �️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
+            // 🔒 [I-07 FIX] Lock user row ก่อน check quota
+            //    ป้องกัน: admin สร้าง borrow ให้ user ขณะเดียวกับที่ user จอง
+            //    → ถ้าไม่ lock ทั้งคู่อาจเห็น count ต่ำกว่าจริง → เกินโควต้าได้
+            //    เทียบกับ BorrowService::createBorrow() ที่ใช้ lockById() เช่นกัน
+            $this->userRepo->lockById($userId);
+
+            // 🛡️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
             //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้เพราะเกินโควต้า
             //    ⚠️ ต้องนับ pending reservations ด้วย เพราะจะกลายเป็น borrow เมื่อ approve
-            $activeBorrows = $this->borrowRepo->countActiveBorrows($userId);
+            //    🔒 [I-07 FIX] ใช้ countActiveBorrowsForUpdate() แทน countActiveBorrows()
+            //    เพื่อ lock borrow rows ป้องกัน concurrent borrow+reserve
+            $activeBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
             $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
             if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
                 throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
@@ -254,8 +266,12 @@ class ReservationService
             }
             
             // 🛡️ Step 3: ตรวจโควต้า (FOR UPDATE lock บน borrows)
+            //    🔒 [I-08 FIX] นับ pending reservations อื่นด้วย (ลบ 1 = ตัวที่กำลัง fulfill)
+            //    ป้องกัน: user มี 2 pending + 1 borrow (max=3) → ถ้า approve ทั้ง 2 จะเกินโควต้า
+            //    เดิมเช็คแค่ currentBorrows → ไม่เห็น pending อื่นที่กำลังจะกลายเป็น borrow
             $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
-            if ($currentBorrows >= MAX_BORROW_BOOKS) {
+            $otherPending = $this->reservationRepo->countPendingByUser($reservation['user_id']) - 1;
+            if (($currentBorrows + max(0, $otherPending)) >= MAX_BORROW_BOOKS) {
                 throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
             }
             

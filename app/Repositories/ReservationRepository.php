@@ -51,6 +51,11 @@ class ReservationRepository
     // 🗄️ PDO connection — inject ผ่าน constructor ใช้ร่วมกันทุกเมธอด
     private PDO $pdo;
 
+    // 🛡️ [I-11 FIX] flag ป้องกันเรียก lazy expire ซ้ำหลายครั้งใน request เดียว
+    //    findAll(), findByUser(), BookService::getBooks() ฯลฯ เรียก markExpiredReservations()
+    //    page เดียวอาจเรียก 2-3 ครั้ง → flag นี้ทำให้รันจริงแค่ครั้งแรก
+    private bool $expiredMarked = false;
+
     // 🏗️ Constructor: รับ PDO จากภายนอก (Dependency Injection)
     // → ใช้ connection เดียวกับ ReservationService
     // → ทำให้ transaction + FOR UPDATE lock ทำงานถูกต้อง
@@ -80,6 +85,12 @@ class ReservationRepository
      */
     public function markExpiredReservations(): int
     {
+        // 🛡️ [I-11 FIX] ถ้าเคย expire แล้วใน request นี้ → skip (ลด query ซ้ำ)
+        if ($this->expiredMarked) {
+            return 0;
+        }
+        $this->expiredMarked = true;
+
         // 📝 Step 1: ดึงรายการที่หมดอายุก่อน (pending + expires_at < NOW)
         //    ดึงเฉพาะ id + book_id (ใช้คืน stock)
         $expiredStmt = $this->pdo->prepare("
@@ -112,8 +123,12 @@ class ReservationRepository
                 // 📦 คืน stock +1 (เพราะตอนจองหัก stock ไว้)
                 // ⚠️ ห้ามลบขั้นตอนนี้! ถ้าไม่คืน stock → หนังสือจะหายไป 1 เล่ม
                 if ($updateStmt->rowCount() > 0) {
+                    // 🛡️ [I-05 FIX] เพิ่ม AND available < quantity ป้องกัน available เกิน quantity
+                    //    เทียบกับ BookRepository::incrementAvailable() ที่มี guard เดียวกัน
+                    //    defense-in-depth ร่วมกับ DB CHECK constraint (quantity >= available)
                     $stockStmt = $this->pdo->prepare("
-                        UPDATE books SET available = available + 1 WHERE id = ?
+                        UPDATE books SET available = available + 1
+                        WHERE id = ? AND available < quantity
                     ");
                     $stockStmt->execute([$res['book_id']]);
                 }
@@ -244,9 +259,14 @@ class ReservationRepository
             $params[] = $status;
         }
 
+        // 🛡️ [I-10 FIX] เรียงจากใหม่สุด + LIMIT 1 ป้องกันคืนผิด record
+        //    กรณี user มีหลาย reservations สำหรับ book เดียวกัน
+        //    (เช่น cancelled → จองใหม่) → ต้องคืน record ล่าสุด
+        $sql .= " ORDER BY created_at DESC LIMIT 1";
+
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
-        // 📤 คืน reservation record หรือ null
+        // 📤 คืน reservation record ล่าสุด หรือ null
         return $stmt->fetch() ?: null;
     }
 

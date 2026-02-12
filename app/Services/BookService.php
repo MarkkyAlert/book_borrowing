@@ -150,40 +150,56 @@ class BookService
      */
     public function updateBook(int $id, array $data): bool
     {
-        // 📝 Step 1: ดึงข้อมูลเดิม (ต้องใช้ quantity + available เดิม)
-        $book = $this->getBookById($id);
-        if (!$book) {
-            throw new Exception('ไม่พบหนังสือ');
-        }
+        // �️ [I-06 FIX] ครอบ transaction + FOR UPDATE lock ป้องกัน race condition
+        //    ถ้าไม่ lock → concurrent borrow/reserve อาจเปลี่ยน available ระหว่างที่เรา
+        //    อ่านค่าเดิม กับ เขียนค่าใหม่ → stock inconsistency
+        //    เช่น: admin อ่าน available=3, user จองทำให้เป็น 2, admin เขียนทับเป็น 8 → สูญหาย 1
+        $this->pdo->beginTransaction();
 
-        // 📝 Step 2: คำนวณ available ใหม่จาก quantity diff
-        //    สูตร: available_ใหม่ = available_เดิม + (quantity_ใหม่ - quantity_เดิม)
-        $oldQuantity = $book['quantity'];
-        $newQuantity = $data['quantity'] ?? $oldQuantity;
-        
-        // 🛡️ [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
-        //    เช่น quantity=10, available=3 → currentlyOut=7 → ลดเป็น 6 ไม่ได้ (ติดลบ)
-        $currentlyOut = $oldQuantity - $book['available'];
-        if ($newQuantity < $currentlyOut) {
-            throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
-        }
-        
-        // 📝 Step 3: คำนวณ available ใหม่
-        //    max(0, ...) ป้องกันติดลบ (safety net)
-        $quantityDiff = $newQuantity - $oldQuantity;
-        $newAvailable = max(0, $book['available'] + $quantityDiff);
+        try {
+            // 📝 Step 1: Lock book row (FOR UPDATE) ก่อนอ่านค่า
+            //    ป้องกัน concurrent borrow/reserve แก้ available ระหว่างเราคำนวณ
+            $book = $this->bookRepo->findByIdForUpdate($id);
+            if (!$book) {
+                throw new Exception('ไม่พบหนังสือ');
+            }
 
-        // 📝 Step 4: UPDATE ทั้งข้อมูล + quantity/available ที่คำนวณแล้ว
-        return $this->bookRepo->update($id, [
-            'title' => $data['title'],
-            'author' => $data['author'],
-            'isbn' => $data['isbn'] ?? null,
-            'category_id' => $data['category_id'] ?? null,
-            'description' => $data['description'] ?? null,
-            'cover_image' => $data['cover_image'] ?? null,
-            'quantity' => $newQuantity,
-            'available' => $newAvailable
-        ]);
+            // 📝 Step 2: คำนวณ available ใหม่จาก quantity diff
+            //    สูตร: available_ใหม่ = available_เดิม + (quantity_ใหม่ - quantity_เดิม)
+            $oldQuantity = $book['quantity'];
+            $newQuantity = $data['quantity'] ?? $oldQuantity;
+            
+            // 🛡️ [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
+            //    เช่น quantity=10, available=3 → currentlyOut=7 → ลดเป็น 6 ไม่ได้ (ติดลบ)
+            $currentlyOut = $oldQuantity - $book['available'];
+            if ($newQuantity < $currentlyOut) {
+                throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
+            }
+            
+            // 📝 Step 3: คำนวณ available ใหม่
+            //    max(0, ...) ป้องกันติดลบ (safety net)
+            $quantityDiff = $newQuantity - $oldQuantity;
+            $newAvailable = max(0, $book['available'] + $quantityDiff);
+
+            // 📝 Step 4: UPDATE ทั้งข้อมูล + quantity/available ที่คำนวณแล้ว
+            $result = $this->bookRepo->update($id, [
+                'title' => $data['title'],
+                'author' => $data['author'],
+                'isbn' => $data['isbn'] ?? null,
+                'category_id' => $data['category_id'] ?? null,
+                'description' => $data['description'] ?? null,
+                'cover_image' => $data['cover_image'] ?? null,
+                'quantity' => $newQuantity,
+                'available' => $newAvailable
+            ]);
+
+            $this->pdo->commit();
+            return $result;
+
+        } catch (\Exception $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**
