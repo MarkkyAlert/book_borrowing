@@ -55,8 +55,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     
     $id = (int) ($_POST['id'] ?? 0);
     
+    // 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดลบซ้ำ)
+    $idempotencyKey = 'delete_book_' . $id;
+    if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+        setFlash('info', 'รายการนี้ถูกลบไปแล้ว');
+        redirect('books.php');
+    }
+    
     try {
         $bookService->deleteBook($id);
+        // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
+        $_SESSION['processed_actions'][$idempotencyKey] = time();
         setFlash('success', 'ลบหนังสือสำเร็จ');
     } catch (Exception $e) {
         setFlash('error', $e->getMessage());

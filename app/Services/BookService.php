@@ -67,11 +67,15 @@ class BookService
      *
      * 📥 Input: @param array $filters {search?, category_id?, status?, sort?}
      * 📤 Output: @return array รายการหนังสือ
-     * ✅ Use case: admin/books.php, index.php
+     * ✅ Use case: admin/books.php (index.php ใช้ HomeService::getBooks() แทน)
      */
     public function getBooks(array $filters = []): array
     {
-        // 📝 Pass-through ไป Repository — Repository จัดการ search, category_id, status, sort ใน SQL
+        // � [LAZY EXPIRE] คืน stock จาก reservation ที่หมดอายุก่อนดึงข้อมูล
+        //    ถ้าไม่ทำ → admin/books.php จะแสดง available ผิด (จองหมดอายุแล้วแต่ stock ยังไม่คืน)
+        $this->reservationRepo->markExpiredReservations();
+
+        // �� Pass-through ไป Repository — Repository จัดการ search, category_id, status, sort ใน SQL
         //    Service ไม่เพิ่ม logic เพราะเป็นแค่การดึงข้อมูล
         return $this->bookRepo->findAll($filters);
     }
@@ -91,7 +95,7 @@ class BookService
         //    ถ้าไม่ทำ → book.php จะแสดง available ผิด (จองหมดอายุแล้วแต่ stock ยังไม่คืน)
         $this->reservationRepo->markExpiredReservations();
 
-        // �📝 Pass-through → findById (JOIN category_name)
+        // �� Pass-through → findById (JOIN category_name)
         return $this->bookRepo->findById($id);
     }
 
@@ -105,6 +109,10 @@ class BookService
      */
     public function getAvailableBooks(): array
     {
+        // 🔄 [LAZY EXPIRE] คืน stock จาก reservation ที่หมดอายุก่อนดึง dropdown
+        //    ถ้าไม่ทำ → admin/borrow_form.php dropdown จะแสดงหนังสือว่างน้อยกว่าจริง
+        $this->reservationRepo->markExpiredReservations();
+
         // 📝 Pass-through → findAvailable (WHERE available > 0)
         return $this->bookRepo->findAvailable();
     }

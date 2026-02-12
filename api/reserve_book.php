@@ -50,7 +50,27 @@ if ($bookId <= 0) {
     exit;
 }
 
-// 📝 เรียก Service (Single Source of Truth)
+// 🛡️ [SECURITY] Rate limit — ป้องกัน script ยิง reserve ถี่เกินไป
+//    10 ครั้ง / 5 นาที ต่อ user (ใช้ user_id เป็น key)
+//    ⚠️ ต้องส่ง window=5 ด้วย ไม่งั้นใช้ default 15 นาทีจาก config
+$rateLimitKey = 'reserve_' . $userId;
+if (!checkRateLimit($rateLimitKey, 10, 5)) {
+    http_response_code(429);
+    echo json_encode(['success' => false, 'message' => 'ส่งคำขอบ่อยเกินไป กรุณารอสักครู่']);
+    exit;
+}
+incrementRateLimit($rateLimitKey);
+
+// 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดจองซ้ำเร็วๆ)
+//    ใช้ user_id + book_id เป็น key — ถ้าจองเล่มเดียวกันซ้ำภายใน 5 วินาทีจะถูกบล็อก
+$idempotencyKey = 'reserve_' . $userId . '_' . $bookId;
+if (isset($_SESSION['processed_actions'][$idempotencyKey]) 
+    && (time() - $_SESSION['processed_actions'][$idempotencyKey]) < 5) {
+    echo json_encode(['success' => true, 'message' => 'จองหนังสือเรียบร้อยแล้ว']);
+    exit;
+}
+
+// �� เรียก Service (Single Source of Truth)
 try {
     $pdo = getDB();
     $reservationService = new ReservationService($pdo);
@@ -58,6 +78,9 @@ try {
     // 📝 Service จัดการทั้งหมด:
     //    expire เก่า, lock book, check stock, check duplicate, insert, decrement stock
     $result = $reservationService->createReservation($userId, $bookId);
+    
+    // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
+    $_SESSION['processed_actions'][$idempotencyKey] = time();
     
     // 📤 คืน JSON สำเร็จ
     echo json_encode([

@@ -35,7 +35,14 @@ if ($reservationId <= 0) {
     redirect(APP_URL . '/my_reservations.php');
 }
 
-// 📝 เรียก Service (Single Source of Truth)
+// �️ [IDEMPOTENCY] ป้องกัน double-submit (กดยกเลิกซ้ำเร็วๆ)
+$idempotencyKey = 'cancel_reservation_' . $reservationId;
+if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+    setFlash('info', 'รายการนี้ถูกยกเลิกไปแล้ว');
+    redirect(APP_URL . '/my_reservations.php');
+}
+
+// �📝 เรียก Service (Single Source of Truth)
 try {
     $pdo = getDB();
     $reservationService = new \App\Services\ReservationService($pdo);
@@ -44,6 +51,9 @@ try {
     //    🛡️ ส่ง $_SESSION['user_id'] ไปด้วย — Service จะเช็คว่าเป็นเจ้าของ
     //    ป้องกัน user A ยกเลิก reservation ของ user B
     $reservationService->cancelReservation($reservationId, $_SESSION['user_id']);
+    
+    // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
+    $_SESSION['processed_actions'][$idempotencyKey] = time();
     
     setFlash('success', 'ยกเลิกการจองเรียบร้อยแล้ว');
 } catch (\Exception $e) {

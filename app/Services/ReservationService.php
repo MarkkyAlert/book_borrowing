@@ -74,7 +74,7 @@ class ReservationService
      * 🔄 Flow:
      * 1. markExpiredReservations() (คืน stock จากที่หมดอายุ)
      * 2. BEGIN TX → lock book (FOR UPDATE)
-     * 3. check available > 0 + ไม่มี pending ซ้ำ
+     * 3. check available > 0 + ไม่มี pending ซ้ำ + ไม่ได้ยืมอยู่ + ไม่เกินโควต้า
      * 4. insert reservation + decrement available
      * 5. COMMIT
      *
@@ -135,7 +135,7 @@ class ReservationService
                 throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
             }
 
-            // �📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
+            // �� Step 5: INSERT reservation + คำนวณวันหมดอายุ
             $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
             $this->reservationRepo->create($userId, $bookId, $expiresAt);
 

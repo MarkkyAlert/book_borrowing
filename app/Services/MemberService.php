@@ -16,7 +16,7 @@
  *                             → ReservationRepository (เช็คก่อนลบ)
  *
  * 📍 Entrypoints:
- * - admin/members.php      → getMembers(), deleteMember()
+ * - admin/members.php      → getMembers()
  * - admin/member_form.php  → createMember(), updateMember(), updatePassword()
  * - api/add_member.php     → createMember() (quick add)
  * - register.php           → createMember() (ผ่าน AuthService)
@@ -185,7 +185,7 @@ class MemberService
      * 🎯 จุดประสงค์: ลบสมาชิก + ตรวจ 2 เงื่อนไขก่อนลบ
      * ==========================================================================
      *
-     * 🔄 Flow: check borrow history → check pending reservation → DELETE
+     * 🔄 Flow: BEGIN TX → check borrow history → check pending reservation → DELETE → COMMIT
      *
      * 📥 Input: @param int $id
      * 📤 Output: @return bool true = สำเร็จ
@@ -194,25 +194,40 @@ class MemberService
      * 🧠 เหตุผล:
      * - CASCADE DELETE จะลบ borrows ทำให้สถิติเสียหาย
      * - CASCADE DELETE จะลบ reservation แต่ไม่คืน stock
+     * - TX ป้องกัน race condition ระหว่าง guard check กับ DELETE
      *
-     * ✅ Use case: admin/members.php DELETE
+     * ✅ Use case: admin/member_form.php (action=delete — ปัจจุบัน UI ยังไม่เปิดใช้)
      */
     public function deleteMember(int $id): bool
     {
-        // 🛡️ Guard #1: มีประวัติการยืมหรือไม่
-        //    CASCADE DELETE จะลบ borrows → สถิติเสียหาย
-        if ($this->borrowRepo->countByUser($id) > 0) {
-            throw new Exception('ไม่สามารถลบได้ สมาชิกมีประวัติการยืม');
-        }
+        // � [ATOMIC] ใช้ Transaction ครอบ guard + DELETE
+        //    ป้องกัน race condition: guard ผ่าน → ระหว่างนั้นมี borrow ใหม่ → DELETE ทำให้ stock หาย
+        //    ถ้า guard ผ่านแต่ DELETE ล้มเหลว → rollback ทั้งหมด (ไม่มีผลข้างเคียง)
+        $this->pdo->beginTransaction();
 
-        // 🛡️ Guard #2: มี pending reservation หรือไม่
-        //    CASCADE DELETE จะลบ reservation แต่ stock ไม่ถูกคืน!
-        if ($this->reservationRepo->countPendingByUser($id) > 0) {
-            throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
-        }
+        try {
+            // ��️ Guard #1: มีประวัติการยืมหรือไม่
+            //    CASCADE DELETE จะลบ borrows → สถิติเสียหาย
+            if ($this->borrowRepo->countByUser($id) > 0) {
+                throw new Exception('ไม่สามารถลบได้ สมาชิกมีประวัติการยืม');
+            }
 
-        // 📝 ผ่าน guard แล้ว → ลบ (AND role='member' ป้องกันลบ admin)
-        return $this->userRepo->deleteMember($id);
+            // 🛡️ Guard #2: มี pending reservation หรือไม่
+            //    CASCADE DELETE จะลบ reservation แต่ stock ไม่ถูกคืน!
+            if ($this->reservationRepo->countPendingByUser($id) > 0) {
+                throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
+            }
+
+            // 📝 ผ่าน guard แล้ว → ลบ (AND role='member' ป้องกันลบ admin)
+            $result = $this->userRepo->deleteMember($id);
+
+            $this->pdo->commit();
+            return $result;
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -259,7 +274,7 @@ class MemberService
      *
      * 📥 Input: @param int $memberId, @param int $limit
      * 📤 Output: @return array[] borrow rows + book info
-     * ✅ Use case: admin/member_detail.php
+     * ✅ Use case: api/member_history.php, ReportService
      */
     public function getBorrowHistory(int $memberId, int $limit = 20): array
     {
@@ -274,7 +289,7 @@ class MemberService
      *
      * 📥 Input: @param int $memberId
      * 📤 Output: @return array {total_borrows, active_borrows, returned, total_fines}
-     * ✅ Use case: admin/member_detail.php
+     * ✅ Use case: ReportService (สถิติรายคน)
      */
     public function getMemberStatistics(int $memberId): array
     {

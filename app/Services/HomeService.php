@@ -5,9 +5,9 @@
  * ==========================================================================
  * 🎯 ไฟล์นี้ทำอะไร?
  * ==========================================================================
- * Service นี้เป็น read-only — ดึงข้อมูลหนังสือ/หมวดหมู่/สถิติ
- * สำหรับหน้า public (ไม่ต้อง login)
- * ไม่มี write operation ใดๆ
+ * Service นี้ดึงข้อมูลหนังสือ/หมวดหมู่/สถิติ สำหรับหน้า public (ไม่ต้อง login)
+ * ⚠️ มี side effect: markExpiredReservations() เป็น write operation (lazy expire)
+ *    ทำให้ stock ที่จองหมดอายุถูกคืนก่อนแสดงผล
  *
  * 🏗️ สถาปัตยกรรม:
  * index.php → HomeService → BookRepository
@@ -17,7 +17,7 @@
  * 📍 Entrypoint:
  * - index.php → getBooks(), getStats(), getCategories()
  *
- * 🛡️ Security: read-only — ไม่มี side effect
+ * 🛡️ Security: ไม่ต้อง auth — แต่มี lazy expire (write) เป็น side effect
  *
  * @package App\Services
  */
@@ -73,7 +73,7 @@ class HomeService
         //    ถ้าไม่ทำ → หนังสือที่จองหมดอายุแล้วจะยังแสดงว่า "หมด" อยู่
         $this->reservationRepo->markExpiredReservations();
 
-        // �📝 แปลง request params เป็น repo filters
+        // �� แปลง request params เป็น repo filters
         //    กรองเฉพาะค่าที่ไม่ว่างออก (ป้องกันส่งค่าว่างไป DB)
         $bookFilters = [];
         

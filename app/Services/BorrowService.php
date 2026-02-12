@@ -18,7 +18,8 @@
  *
  * 📍 Entrypoints:
  * - admin/borrow_form.php → createBorrow()
- * - admin/borrows.php     → returnBook(), payFine()
+ * - admin/borrows.php     → returnBook()
+ * - admin/payments.php    → payFine()
  * - DashboardService      → getOverdueBorrows(), getRecentBorrows()
  *
  * �️ Security Design:
@@ -354,7 +355,7 @@ class BorrowService
      * 📤 Output: @return array {success, amount, message}
      *
      * 🛡️ Security: FOR UPDATE lock ป้องกันชำระซ้ำ
-     * ✅ Use case: admin/borrows.php → ปุ่มรับชำระ
+     * ✅ Use case: admin/payments.php → ปุ่มรับชำระ
      */
     public function payFine(int $borrowId, ?int $recordedBy = null): array
     {

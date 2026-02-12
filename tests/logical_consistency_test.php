@@ -380,6 +380,9 @@ class LogicalConsistencyTest
             // Cancel existing reservation
             $this->pdo->exec("UPDATE reservations SET status = 'cancelled' WHERE user_id = {$this->testMemberA} AND book_id = {$this->testBookAlpha}");
             
+            // Clear active borrows for this book (upstream isAlreadyBorrowing guard blocks reservation)
+            $this->pdo->exec("UPDATE borrows SET status = 'returned' WHERE user_id = {$this->testMemberA} AND book_id = {$this->testBookAlpha} AND status = 'borrowing'");
+            
             // First reservation
             $result1 = $this->reservationService->createReservation($this->testMemberA, $this->testBookAlpha);
             

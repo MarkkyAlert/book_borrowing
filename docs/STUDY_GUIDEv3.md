@@ -113,7 +113,7 @@ book_borrowing/
 | **Helpers** | `includes/functions.php` | Auth, CSRF, validation, formatting | Business logic, SQL |
 | **Config** | `includes/config.php` | อ่าน .env → define constants | Logic ใดๆ |
 
-> *ข้อยกเว้น: `ReservationRepository::expireOverdueByBook()` จัดการ TX เอง (lazy expiration)
+> *ข้อยกเว้น: `ReservationRepository::markExpiredReservations()` จัดการ TX เอง (lazy expiration)
 
 ### 1.3 Entry Points สำคัญ (12 ไฟล์ที่ควรอ่านก่อน)
 
@@ -238,7 +238,7 @@ return $stmt->fetch() ?: null;
 
 #### Authorization / CSRF / Guards
 - ไม่ต้อง auth (หน้า public)
-- ไม่มี CSRF (ใช้ rate limit แทน)
+- `validateCSRFToken()` ตรวจทุก POST
 - Rate limit: `checkRateLimit('login_' . md5($email))` — 5 ครั้ง / 15 นาที
 
 #### Steps การทำงาน
@@ -629,18 +629,22 @@ Member จองหนังสือผ่าน AJAX โดย stock ถูก
 2. ตรวจ method POST → 405
 3. validateCSRFToken() → 403
 4. Validate book_id > 0 → 400
-5. ReservationService::createReservation($userId, $bookId)
+5. checkRateLimit('reserve_' + userId, 10, 5) → 429 (ใหม่: 10 ครั้ง/5นาที)
+6. Idempotency check (session key, 5 วินาที)
+7. ReservationService::createReservation($userId, $bookId)
+   ├── markExpiredReservations() ← lazy expiration (ก่อน TX)
    ├── beginTransaction()
-   ├── ReservationRepository::expireOverdueByBook() ← lazy expiration
-   │   └→ expire pending ที่หมดอายุ + คืน stock
-   ├── ตรวจ hasPendingReservation() → ห้ามจองซ้ำ
    ├── BookRepository::findByIdForUpdate() ← lock
    ├── ตรวจ available > 0
-   ├── BookRepository::decrementAvailable() ← กัน stock ทันที
+   ├── ตรวจ hasPending() → ห้ามจองซ้ำ
+   ├── ตรวจ isAlreadyBorrowing() → ห้ามจองถ้ายืมอยู่
+   ├── ตรวจโควต้า (activeBorrows + pendingReservations ≥ MAX_BORROW_BOOKS)
    ├── ReservationRepository::create()
    │   └→ status='pending', expires_at = +2 days
+   ├── BookRepository::decrementAvailable() ← กัน stock ทันที
    └── commit()
-6. JSON { success: true }
+8. บันทึก idempotency key
+9. JSON { success: true }
 ```
 
 #### DB Changes
@@ -716,6 +720,7 @@ Staff อนุมัติการจอง → สร้าง borrow อั�
    ├── beginTransaction()
    ├── ReservationRepository::findPendingForUpdate()
    │   └→ lock + status='pending' → null = ไม่ใช่ pending
+   ├── BorrowRepository::isAlreadyBorrowing() ← ตรวจยืมซ้ำ
    ├── BorrowRepository::countActiveBorrowsForUpdate() ← ตรวจ quota
    ├── BorrowRepository::create() ← สร้าง borrow
    ├── ReservationRepository::updateStatusWithBorrow($id, 'fulfilled', $borrowId)
@@ -944,7 +949,7 @@ Staff เพิ่มหนังสือใหม่ (พร้อม upload �
 |-------|-------------|---------|
 | Report type mapping | `report_helper.php::getReportConfig()` | `reports.php` + `export_pdf.php` |
 | Member creation | `MemberService::createMember()` | `register.php` + `admin/member_form.php` |
-| Reservation expiration | `ReservationRepository::expireOverdueByBook()` | createReservation (lazy), cron, admin dashboard (fallback) |
+| Reservation expiration | `ReservationRepository::markExpiredReservations()` | createReservation (lazy), cron, admin dashboard (fallback) |
 | `e()` escaping | `functions.php` | ทุกที่ที่แสดง user data — ถ้าลืมจุดใดก็ XSS |
 
 ---
@@ -1238,7 +1243,7 @@ validateMaxLength($val, $max)     // ความยาว
 validateName($name)               // ชื่อ
 
 // === Rate Limit ===
-checkRateLimit($key, $min, $max)  // เกิน limit ไหม
+checkRateLimit($key, $max, $window) // เกิน limit ไหม ($max=attempts, $window=minutes)
 incrementRateLimit($key)          // +1 counter
 resetRateLimit($key)              // reset
 

@@ -205,6 +205,13 @@ const modal = document.getElementById('historyModal');
 const backdrop = modal.querySelector('.modal-backdrop');
 const panel = modal.querySelector('.modal-panel');
 
+// 🛡️ [XSS] escape HTML entities ก่อนใส่ innerHTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function openHistoryModal(id) {
     const memberRow = document.querySelector(`[onclick="openHistoryModal(${id})"]`);
     const memberName = memberRow ? memberRow.closest('tr').querySelector('.font-medium.text-gray-900')?.textContent?.trim() : '';
@@ -239,10 +246,10 @@ function openHistoryModal(id) {
                     statusText = '<i class="bi bi-clock-fill mr-1"></i>กำลังยืม';
                 }
                 html += `<tr class="hover:bg-gray-50/50">
-                    <td class="px-6 py-3 font-medium text-gray-900 line-clamp-1 max-w-[200px]">${item.book_title}</td>
-                    <td class="px-6 py-3 text-gray-500">${item.borrow_date || '-'}</td>
-                    <td class="px-6 py-3 text-gray-500">${item.due_date || '-'}</td>
-                    <td class="px-6 py-3 text-gray-500">${item.return_date || '-'}</td>
+                    <td class="px-6 py-3 font-medium text-gray-900 line-clamp-1 max-w-[200px]">${escapeHtml(item.book_title)}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.borrow_date || '-')}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.due_date || '-')}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.return_date || '-')}</td>
                     <td class="px-6 py-3"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">${statusText}</span></td>
                 </tr>`;
             });

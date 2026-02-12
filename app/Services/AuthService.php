@@ -137,7 +137,7 @@ class AuthService
                 'password' => $data['password'] ?? ''
             ]);
             
-            // 📤 สำเร็จ → คืน user_id ไปให้ Controller login อัตโนมัติ
+            // 📤 สำเร็จ → คืน user_id (Controller redirect ไป login.php — ไม่ auto-login)
             return ['success' => true, 'user_id' => $result['id']];
         } catch (\Exception $e) {
             // ❌ MemberService throw Exception → ดักแล้วคืน error message
