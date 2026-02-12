@@ -18,12 +18,15 @@
  * - CSV format: title, author, isbn, category, quantity, description
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
-use App\Repositories\BookRepository;
-use App\Repositories\CategoryRepository;
+use App\Repositories\BookRepository;    // CRUD หนังสือ + merge (addQuantity)
+use App\Repositories\CategoryRepository; // ค้นหา/สร้างหมวดหมู่อัตโนมัติ
 
+// 📦 สร้าง repository instances
 $pdo = getDB();
 $bookRepo = new BookRepository($pdo);
 $categoryRepo = new CategoryRepository($pdo);
@@ -33,27 +36,27 @@ $errors = [];
 $successCount = 0;
 $failCount = 0;
 
+// ── POST: อัปโหลด CSV + นำเข้าหนังสือ ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     
-    // Validate CSRF
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'Invalid Request (CSRF)';
     } else {
         $file = $_FILES['csv_file'];
         
-        // Validate file type
+        // 🔍 [VALIDATION] ตรวจนามสกุลไฟล์ — รับเฉพาะ .csv
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if ($ext !== 'csv') {
             $errors[] = 'กรุณาอัปโหลดไฟล์ .csv เท่านั้น';
         } else {
-            // Read CSV
+            // 📄 เปิดไฟล์ CSV จาก tmp directory
             $handle = fopen($file['tmp_name'], 'r');
             
             if (!$handle) {
                 $errors[] = 'ไม่สามารถอ่านไฟล์ได้';
             } else {
-                // Skip header row
-                fgetcsv($handle);
+                fgetcsv($handle); // ข้าม header row (Title, Author, ISBN, Category, Quantity)
                 
                 // [DATA INTEGRITY] Transaction ครอบทุกแถว — ถ้า error กลางทาง rollback ทั้งหมด (all-or-nothing)
                 $pdo->beginTransaction();
@@ -64,10 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $rowNumber = 1;
                     $skippedDetails = [];
                     
+                    // 🔄 วนอ่านทีละแถว — แถวที่มีปัญหาจะ skip (เก็บรายละเอียด) ไม่ throw
                     while (($row = fgetcsv($handle)) !== false) {
                         $rowNumber++;
                         
-                        // Validate basic column count
+                        // 🔍 ตรวจจำนวนคอลัมน์ขั้นต่ำ (ต้องมีอย่างน้อย title + author)
                         if (count($row) < 2) {
                             $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อหนังสือ และ ผู้แต่ง)";
                             continue;
@@ -84,13 +88,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             continue;
                         }
                         
-                        // [DATA INTEGRITY] ISBN ต้อง unique — ถ้าซ้ำให้ skip (ไม่ merge เพราะอาจเป็นคนละเล่ม)
+                        // 🔍 [DATA INTEGRITY] ISBN unique — ถ้าซ้ำให้ skip
+                        //    ไม่ merge เพราะ ISBN เดียวกันอาจเป็นคนละเล่ม (edition ต่างกัน)
                         if (!empty($isbn) && $bookRepo->isbnExists($isbn)) {
                             $skippedDetails[] = "แถวที่ $rowNumber: ISBN $isbn ซ้ำกับหนังสือในระบบ";
                             continue;
                         }
                         
-                        // [DATA INTEGRITY] Merge strategy: ชื่อ+ผู้แต่งตรงกัน → เพิ่ม quantity (ไม่สร้างซ้ำ)
+                        // 🔄 [DATA INTEGRITY] Merge strategy:
+                        //    ชื่อ+ผู้แต่งตรงกัน → เพิ่ม quantity (ไม่สร้างซ้ำ)
+                        //    ไม่พบ → สร้างใหม่
                         $existingBook = $bookRepo->findByTitleAndAuthor($title, $author);
                         
                         if ($existingBook) {
@@ -98,19 +105,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             $bookRepo->addQuantity($existingBook['id'], $qty);
                             $updatedCount++;
                         } else {
-                            // INSERT: Create new book
-                            // Handle Category first using repository
+                            // ── INSERT: สร้างหนังสือใหม่ ──
+                            // 📂 จัดการหมวดหมู่ก่อน: ค้นหาตามชื่อ — ถ้าไม่พบ สร้างอัตโนมัติ
                             $categoryId = null;
                             if (!empty($categoryName)) {
                                 $cat = $categoryRepo->findByName($categoryName);
                                 if ($cat) {
                                     $categoryId = $cat['id'];
                                 } else {
-                                    $categoryId = $categoryRepo->create($categoryName);
+                                    $categoryId = $categoryRepo->create($categoryName); // auto-create
                                 }
                             }
                             
-                            // Create book using repository
+                            // [WRITE] สร้างหนังสือใน DB
                             $bookRepo->create([
                                 'title' => $title,
                                 'author' => $author,

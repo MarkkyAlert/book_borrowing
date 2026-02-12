@@ -10,15 +10,16 @@
  * GET → BookRepository::findAllForLabels() → render labels → window.print()
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
-
-requireStaff(); // Staff ต้องพิมพ์ฉลากหนังสือได้
+// 🔒 [AUTH] staff/admin เท่านั้น — ใช้พิมพ์สติ๊กเกอร์บาร์โค้ดติดหนังสือ
+requireStaff();
 
 use App\Repositories\BookRepository;
 
 $bookRepo = new BookRepository(getDB());
 
-// Fetch all books using repository
+// 📚 ดึงหนังสือทั้งหมด (id, title, isbn) สำหรับแสดงในตารางเลือก
 $books = $bookRepo->findAllForLabels();
 
 $pageTitle = 'พิมพ์รหัสบาร์โค้ด';
@@ -137,7 +138,8 @@ require_once __DIR__ . '/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
 <script>
-function toggleAll(checkbox) {
+// เลือก/ยกเลิกทั้งหมด — ใช้กับ checkbox “เลือกทั้งหมด” ด้านบน
+ function toggleAll(checkbox) {
     document.querySelectorAll('.book-checkbox').forEach(cb => cb.checked = checkbox.checked);
 }
 
@@ -146,6 +148,8 @@ function selectAll() {
     document.getElementById('checkAll').checked = true;
 }
 
+// 🏷️ สร้าง label HTML + barcode แล้วเรียก window.print()
+// Flow: เลือกหนังสือ + จำนวน → สร้าง label DOM → JsBarcode render SVG → window.print()
 function generateLabels() {
     const selected = document.querySelectorAll('.book-checkbox:checked');
     if (selected.length === 0) {
@@ -153,13 +157,14 @@ function generateLabels() {
         return;
     }
     
+    // 📝 สร้าง label ตามจำนวนที่ระบุ (qty) — แต่ละเล่มอาจพิมพ์หลายใบ
     const grid = document.getElementById('labelGrid');
     grid.innerHTML = '';
     
     selected.forEach(cb => {
         const bookId = cb.value;
         const title = cb.dataset.title || '';
-        const isbn = cb.dataset.isbn || bookId;
+        const isbn = cb.dataset.isbn || bookId; // ใช้ ISBN ถ้ามี, ไม่งั้นใช้ book ID
         const qty = document.querySelector(`input[name="qty[${bookId}]"]`)?.value || 1;
         
         for (let i = 0; i < qty; i++) {
@@ -174,12 +179,14 @@ function generateLabels() {
         }
     });
     
-    // Wait for DOM update then generate barcodes
+    // ⏱️ รอ DOM update แล้วค่อย render barcode ผ่าน JsBarcode (CODE128 format)
     setTimeout(() => {
         selected.forEach(cb => {
             const bookId = cb.value;
             const isbn = cb.dataset.isbn || bookId;
             try {
+                // 📊 JsBarcode: render SVG barcode ลงใน label
+                //    CODE128 รองรับทั้งตัวอักษรและตัวเลข (universal)
                 JsBarcode(`.barcode-${bookId}`, isbn, {
                     format: "CODE128",
                     width: 1.5,
@@ -191,7 +198,7 @@ function generateLabels() {
                 console.error('Barcode generation failed for:', isbn, e);
             }
         });
-        window.print();
+        window.print(); // 🖨️ เปิด print dialog ทันที
     }, 100);
 }
 </script>

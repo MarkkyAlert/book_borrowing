@@ -14,24 +14,26 @@
  * 🔗 มาจาก: forgot_password.php (สร้าง token)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// Redirect if already logged in
+// 🔁 ถ้า login แล้ว → ไม่ต้อง reset
 if (isLoggedIn()) {
     redirect(APP_URL . '/index.php');
 }
 
 $errors = [];
 $success = false;
-$validToken = false;
-$token = $_GET['token'] ?? '';
+$validToken = false;        // true = token valid → แสดง form
+$token = $_GET['token'] ?? ''; // รับ token จาก URL (?token=XXX)
 
 $pdo = getDB();
 
 use App\Services\AuthService;
 $authService = new AuthService($pdo);
 
-// Validate token
+// ── Step 1: ตรวจสอบ token ก่อนแสดง form ──
+// 🔍 ตรวจ: token ตรงกับ DB, ยังไม่เคยใช้ (used=0), ยังไม่หมดอายุ
 if (!empty($token)) {
     $resetRequest = $authService->validateResetToken($token);
     if ($resetRequest) {
@@ -39,9 +41,9 @@ if (!empty($token)) {
     }
 }
 
-// Process form
+// ── Step 2: POST → เปลี่ยนรหัสผ่าน (เฉพาะถ้า token valid) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
@@ -49,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation (ใช้ helper function เป็น single source of truth)
+    // 🔍 Validation ผ่าน helper function (Single Source of Truth)
     if (empty($errors)) {
         if ($err = validatePassword($password)) {
             $errors[] = $err;
@@ -61,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     }
     
     if (empty($errors)) {
+        // 🚀 [WRITE] เปลี่ยนรหัสผ่าน + mark token เป็น used (ใช้ได้ครั้งเดียว)
+        //    ทำใน transaction: hash password + UPDATE users + UPDATE token.used=1
         $result = $authService->resetPassword($token, $password);
         
         if ($result['success']) {

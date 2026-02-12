@@ -10,39 +10,40 @@
  * GET → BorrowRepository::findAll(user_id + filters) → แสดงรายการ (filter: status, search)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// [AUTH] ต้อง login — ดูได้เฉพาะรายการยืมของตัวเอง
+// 🔒 [AUTH] ต้อง login — ดูได้เฉพาะรายการยืมของตัวเองเท่านั้น
 requireLogin();
 
 $pdo = getDB();
-// [AUTH] ใช้ user_id จาก session — ป้องกันดูข้อมูลคนอื่น
+// 🛡️ [AUTH] ใช้ user_id จาก session — ป้องกันดูข้อมูลคนอื่น (ไม่รับ user_id จาก GET/POST)
 $userId = $_SESSION['user_id'];
 
 use App\Repositories\BorrowRepository;
 $borrowRepo = new BorrowRepository($pdo);
 
-// Get filter
+// 📥 รับ filter จาก query string
 $statusFilter = $_GET['status'] ?? '';
 
-// Build filters for borrow query
+// 🔧 สร้าง filter array — บังคับดูเฉพาะ user_id ของตัวเองเสมอ
 $filters = ['user_id' => $userId];
 
 if ($statusFilter === 'active') {
-    $filters['status'] = 'borrowing';
+    $filters['status'] = 'borrowing';  // กำลังยืม
 } elseif ($statusFilter === 'returned') {
-    $filters['status'] = 'returned';
+    $filters['status'] = 'returned';   // คืนแล้ว
 } elseif ($statusFilter === 'overdue') {
-    $filters['overdue'] = true;
+    $filters['overdue'] = true;        // เกินกำหนด
 }
 
-// Get user's borrows
+// 📚 ดึงรายการยืมของ user นี้ (พร้อม JOIN book_title, book_author)
 $borrows = $borrowRepo->findAll($filters);
 
-// Get statistics
+// 📊 ดึงสถิติสำหรับ stat cards (active_borrows, returned, total_borrows)
 $stats = $borrowRepo->getStatsByUser($userId);
 
-// Count overdue
+// ⏰ นับจำนวนรายการเกินกำหนด (สำหรับแสดง badge สีแดง)
 $overdueCount = 0;
 foreach ($borrows as $borrow) {
     if ($borrow['status'] === 'borrowing' && strtotime($borrow['due_date']) < strtotime('today')) {
@@ -53,17 +54,18 @@ foreach ($borrows as $borrow) {
 $pageTitle = 'รายการยืมของฉัน';
 require_once __DIR__ . '/includes/header.php';
 
-// Helper function to check if borrow is overdue
+// ── Helper functions สำหรับใช้ใน template ด้านล่าง ──
+// 🧮 ตรวจว่าเกินกำหนดหรือไม่
 function isOverdue($borrow): bool {
     return $borrow['status'] === 'borrowing' && strtotime($borrow['due_date']) < strtotime('today');
 }
 
-// Helper function to check if due today
+// 🧮 ตรวจว่าครบกำหนดวันนี้หรือไม่
 function isDueToday($borrow): bool {
     return $borrow['status'] === 'borrowing' && $borrow['due_date'] === date('Y-m-d');
 }
 
-// Helper function to get days remaining
+// 📅 คำนวณจำนวนวันที่เหลือ (ลบ = เลยกำหนด, บวก = เหลืออยู่)
 function getDaysRemaining($dueDate): int {
     $today = strtotime('today');
     $due = strtotime($dueDate);

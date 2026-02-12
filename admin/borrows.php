@@ -16,16 +16,19 @@
  * - Idempotency key ป้องกัน double-submit
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
 use App\Services\BorrowService;
 
+// 📦 สร้าง service instance — BorrowService จัดการ return, fine, stock ให้
 $pdo = getDB();
 $borrowService = new BorrowService($pdo);
 
-// Handle return book FIRST (before query)
-// [NOTE] ทำ POST action ก่อน fetch data - เพื่อให้ data ที่แสดงเป็น version ล่าสุด
+// ── POST: คืนหนังสือ (ทำก่อน fetch data — PRG pattern) ──
+// 🧠 ทำ POST ก่อน GET เพื่อให้ข้อมูลที่แสดงเป็น version ล่าสุดหลังคืน
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
@@ -69,7 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get filter parameters
+// ── GET: ดึงรายการยืม-คืนตาม filter ──
+// 📥 รับ filter จาก query string
 $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';
 $filter = $_GET['filter'] ?? '';
@@ -77,16 +81,18 @@ $filter = $_GET['filter'] ?? '';
 require_once __DIR__ . '/../app/Repositories/BorrowRepository.php';
 $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
 
+// 🔧 สร้าง filter array — เฉพาะค่าที่ valid เท่านั้น
 $filters = ['search' => $search];
 if ($status === 'borrowing' || $status === 'returned') {
     $filters['status'] = $status;
 }
 if ($filter === 'overdue') {
-    $filters['overdue'] = true;
+    $filters['overdue'] = true;       // แสดงเฉพาะเกินกำหนด
 } elseif ($filter === 'due_today') {
-    $filters['due_today'] = true;
+    $filters['due_today'] = true;     // แสดงเฉพาะครบกำหนดวันนี้
 }
 
+// 📊 ดึงข้อมูลพร้อม JOIN (book_title, user_name, ฯลฯ)
 $borrows = $borrowRepo->findAll($filters);
 
 $pageTitle = 'จัดการยืม-คืน';
@@ -164,8 +170,11 @@ require_once __DIR__ . '/header.php';
                 <tbody class="divide-y divide-gray-100">
                     <?php foreach ($borrows as $index => $borrow): ?>
                         <?php 
+                            // 🧮 ตรวจสอบว่าเกินกำหนดหรือไม่
                             $isOverdue = $borrow['status'] === 'borrowing' && strtotime($borrow['due_date']) < strtotime('today');
-                            // Use stored fine for returned items, calculate for borrowing items
+                            // 💰 คำนวณค่าปรับ:
+                            //   - returned → ใช้ค่าที่บันทึกไว้ใน DB (fine_amount)
+                            //   - borrowing → คำนวณแบบ real-time จาก due_date ถึงวันนี้
                             if ($borrow['status'] === 'returned') {
                                 $fineAmount = (float)($borrow['fine_amount'] ?? 0);
                                 $fine = ['days' => 0, 'amount' => $fineAmount];

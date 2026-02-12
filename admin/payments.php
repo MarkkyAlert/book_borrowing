@@ -15,19 +15,22 @@
  * - Idempotency key ป้องกัน double-submit
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
-use App\Repositories\PaymentRepository;
-use App\Repositories\BorrowRepository;
-use App\Services\BorrowService;
+use App\Repositories\PaymentRepository; // ดึงประวัติการชำระ + สถิติรายได้
+use App\Repositories\BorrowRepository;  // ดึงรายการค้างชำระ
+use App\Services\BorrowService;         // Business logic: payFine (transaction + UNIQUE constraint)
 
+// 📦 สร้าง service/repository instances
 $pdo = getDB();
 $paymentRepo = new PaymentRepository($pdo);
 $borrowRepo = new BorrowRepository($pdo);
 $borrowService = new BorrowService($pdo);
 
-// Handle pay fine POST action
+// ── POST: บันทึกการชำระค่าปรับ ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
@@ -62,15 +65,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Calculate Stats via Repository
-$totalRevenue = $paymentRepo->getTotalCollected();
-$unpaidTotal = $borrowRepo->getTotalUnpaidFines();
-$thisMonthRevenue = $paymentRepo->getThisMonthTotal();
+// ── GET: ดึงข้อมูลสำหรับแสดงผล ──
+// 📊 Stats cards: รายได้รวม, ค้างชำระ, เดือนนี้
+$totalRevenue = $paymentRepo->getTotalCollected();     // ยอดชำระแล้วทั้งหมด
+$unpaidTotal = $borrowRepo->getTotalUnpaidFines();     // ยอดค้างชำระรวม
+$thisMonthRevenue = $paymentRepo->getThisMonthTotal(); // ยอดเดือนนี้
 
-// Get unpaid fines list
+// 💰 รายการค้างชำระ (จำกัด 50 รายการ)
 $unpaidList = $borrowRepo->getUnpaidFinesList(50);
 
-// Group unpaid fines by user
+// 👥 จัดกลุ่มค้างชำระตาม user — แสดงยอดรวมแต่ละคน
 $unpaidByUser = [];
 foreach ($unpaidList as $item) {
     $userId = $item['user_id'];
@@ -87,14 +91,14 @@ foreach ($unpaidList as $item) {
     $unpaidByUser[$userId]['items'][] = $item;
 }
 
-// Search Logic
+// 🔍 ค้นหาประวัติการชำระ
 $search = trim($_GET['search'] ?? '');
 $filters = [];
 if (!empty($search)) {
     $filters['search'] = $search;
 }
 
-// Fetch Payments via Repository
+// 📜 ดึงประวัติการชำระทั้งหมด (พร้อม JOIN ชื่อสมาชิก, หนังสือ, ผู้บันทึก)
 $payments = $paymentRepo->findAll($filters);
 
 $pageTitle = 'ประวัติการชำระเงิน';

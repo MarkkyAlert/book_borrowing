@@ -18,19 +18,20 @@
  * - session_regenerate_id() ป้องกัน session fixation — ห้ามลบ
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// Redirect if already logged in
+// 🔁 ถ้า login แล้ว → redirect ไปหน้าแรกเลย (ไม่ต้อง login ซ้ำ)
 if (isLoggedIn()) {
     redirect(APP_URL . '/index.php');
 }
 
 $errors = [];
-$email = '';
+$email = ''; // เก็บไว้สำหรับแสดงค่าเดิมใน form ถ้า error
 
-// Process login
+// ── POST: ตรวจสอบและเข้าสู่ระบบ ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้กด login
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
@@ -47,8 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
-        // [SECURITY] Rate limiting ป้องกัน brute force attack
-        // ใช้ md5(email) เป็น key เพื่อนับแยกตาม email
+        // 🛡️ [SECURITY] Rate limiting ป้องกัน brute force attack
+        //    ใช้ md5(email) เป็น key — นับแยกตาม email (ไม่ใช่ IP เพราะ shared IP จะโดน block ทั้งองค์กร)
         $rateLimitKey = 'login_' . md5($email);
         
         if (!checkRateLimit($rateLimitKey)) {
@@ -58,13 +59,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $authService->login($email, $password);
             
             if ($user) {
-                // [SECURITY] Reset counter เมื่อ login สำเร็จ
+                // ✅ Login สำเร็จ — reset counter + สร้าง session ใหม่
                 resetRateLimit($rateLimitKey);
                 
-                // [SECURITY] regenerate session ID ป้องกัน session fixation attack
+                // 🛡️ [SECURITY] regenerate session ID ป้องกัน session fixation attack
+                //    attacker รู้ session ID เก่า → หลัง login จะได้ ID ใหม่ → attacker ใช้ ID เก่าไม่ได้
                 session_regenerate_id(true);
                 
-                // [AUTH] เก็บข้อมูล user ใน session
+                // 🔑 [AUTH] เก็บข้อมูล user ใน session
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_email'] = $user['email'];
@@ -72,16 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 setFlash('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' . $user['name']);
                 
-                // Redirect based on role
+                // 🔀 Redirect ตาม role: admin/staff → admin panel, member → homepage
                 if ($user['role'] === 'admin' || $user['role'] === 'staff') {
                     redirect(APP_URL . '/admin/');
                 } else {
                     redirect(APP_URL . '/index.php');
                 }
             } else {
-                // [SECURITY] นับ attempt ก่อนแจ้ง error
+                // ❌ Login ล้มเหลว — นับ attempt ก่อนแจ้ง error
                 incrementRateLimit($rateLimitKey);
-                // [SECURITY] ไม่บอกว่า email หรือ password ผิด - ป้องกัน user enumeration
+                // 🛡️ [SECURITY] ไม่บอกว่า email หรือ password ผิด — ป้องกัน user enumeration
                 $errors[] = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
             }
         }

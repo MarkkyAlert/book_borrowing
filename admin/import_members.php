@@ -18,35 +18,41 @@
  * - CSV format: name, email, phone
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
 use App\Services\MemberService;
 
+// 📦 สร้าง service instance — MemberService::importMember() เป็น Single Source of Truth
 $pdo = getDB();
 $memberService = new MemberService($pdo);
 
 $messages = [];
 $errors = [];
 
+// ── POST: อัปโหลด CSV + นำเข้าสมาชิก ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     
-    // [SECURITY] Validate CSRF
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'Invalid Request (CSRF)';
     } else {
         $file = $_FILES['csv_file'];
         
+        // 🔍 [VALIDATION] ตรวจนามสกุลไฟล์ — รับเฉพาะ .csv
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if ($ext !== 'csv') {
             $errors[] = 'กรุณาอัปโหลดไฟล์ .csv เท่านั้น';
         } else {
+            // 📄 เปิดไฟล์ CSV จาก tmp directory
             $handle = fopen($file['tmp_name'], 'r');
             
             if (!$handle) {
                 $errors[] = 'ไม่สามารถอ่านไฟล์ได้';
             } else {
-                fgetcsv($handle); // Skip header
+                fgetcsv($handle); // ข้าม header row (Name, Email, Phone)
                 
                 // [DATA INTEGRITY] Transaction ครอบทุกแถว — ถ้า error กลางทาง rollback ทั้งหมด (all-or-nothing)
                 $pdo->beginTransaction();
@@ -57,10 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $createdCount = 0;
                     $updatedCount = 0;
                     
+                    // 🔄 วนอ่านทีละแถว — แถวที่มีปัญหาจะ skip (ไม่ throw)
                     while (($row = fgetcsv($handle)) !== false) {
                         $rowNumber++;
                         
-                        // Columns: Name, Email, Phone
+                        // 🔍 ตรวจคอลัมน์ขั้นต่ำ (Name + Email)
                         if (count($row) < 2) {
                             $skippedDetails[] = "แถวที่ $rowNumber: ข้อมูลไม่ครบ (ต้องมีอย่างน้อย ชื่อ และ อีเมล)";
                             continue;
@@ -75,7 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             continue;
                         }
                         
-                        // [WRITE] Upsert — email มีแล้ว update, ไม่มี create (รหัสผ่านเริ่มต้น = 123456)
+                        // 🔄 [WRITE] Upsert ผ่าน MemberService::importMember():
+                        //    email มีแล้ว → update name/phone (ไม่แก้ password)
+                        //    email ใหม่ → create พร้อม default password (123456)
+                        // ⚠️ ต้องแจ้งสมาชิกใหม่เปลี่ยนรหัสผ่านทันที
                         try {
                             $result = $memberService->importMember([
                                 'name' => $name,

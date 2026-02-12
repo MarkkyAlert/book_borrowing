@@ -16,19 +16,22 @@
  * - Idempotency key ป้องกัน double-submit (approve ซ้ำ = error)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
-requireStaff(); // Staff ต้องจัดการจองได้
+// 🔒 [AUTH] staff/admin เท่านั้น
+requireStaff();
 
-use App\Services\ReservationService;
-use App\Repositories\ReservationRepository;
+use App\Services\ReservationService;       // Business logic: fulfill, cancel (transaction + stock)
+use App\Repositories\ReservationRepository; // ดึงรายการจอง (read-only)
 
+// 📦 สร้าง service/repository instances
 $pdo = getDB();
 $reservationService = new ReservationService($pdo);
 $reservationRepo = new ReservationRepository($pdo);
 
-// Handle Actions (Approve / Cancel)
+// ── POST: อนุมัติ / ยกเลิกการจอง ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF check
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff อนุมัติ/ยกเลิกการจอง
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
         redirect('reservations.php');
@@ -46,13 +49,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         if ($action === 'approve') {
-            // [STATE] pending → fulfilled + สร้าง borrow record
+            // [STATE TRANSITION] pending → fulfilled
+            //   🚀 fulfillReservation() ทำ: สร้าง borrow record + เปลี่ยน status เป็น fulfilled
+            //   ⚠️ ใช้ transaction + row lock ภายใน Service
             $result = $reservationService->fulfillReservation($resId);
             $_SESSION['processed_actions'][$idempotencyKey] = time();
             setFlash('success', $result['message']);
 
         } elseif ($action === 'cancel') {
-            // [STATE] pending → cancelled + คืน stock
+            // [STATE TRANSITION] pending → cancelled
+            //   📦 cancelReservation() ทำ: คืน stock (available +1) + เปลี่ยน status
             $reservationService->cancelReservation($resId);
             $_SESSION['processed_actions'][$idempotencyKey] = time();
             setFlash('success', 'ยกเลิกการจองและคืนสต็อกหนังสือเรียบร้อยแล้ว');
@@ -64,7 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('reservations.php');
 }
 
-// Fetch Reservations via Repository
+// ── GET: ดึงรายการจองตาม filter ──
+// 📥 default แสดงเฉพาะ "pending" — staff สนใจรายการที่รอดำเนินการเป็นหลัก
 $statusFilter = $_GET['status'] ?? 'pending';
 $filters = [];
 if ($statusFilter !== 'all') {

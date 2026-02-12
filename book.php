@@ -10,9 +10,12 @@
  * GET ?id=X → BookService::getBookById() → แสดงรายละเอียด + ประวัติยืมล่าสุด
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
+// 🔓 หน้า public — ไม่ต้อง login (แต่ปุ่มจองต้อง login)
 
 $pdo = getDB();
+// 📥 รับ book ID จาก query string + validate
 $bookId = (int) ($_GET['id'] ?? 0);
 
 if ($bookId <= 0) {
@@ -25,7 +28,7 @@ use App\Repositories\BorrowRepository;
 $bookService = new BookService($pdo);
 $borrowRepo = new BorrowRepository($pdo);
 
-// Get book details
+// 📚 ดึงรายละเอียดหนังสือ (JOIN category_name)
 $book = $bookService->getBookById($bookId);
 
 if (!$book) {
@@ -33,14 +36,14 @@ if (!$book) {
     redirect(APP_URL . '/index.php');
 }
 
-// Get current borrow count (how many copies are currently borrowed)
+// 📊 คำนวณจำนวนเล่มที่ถูกยืมอยู่ (quantity - available)
 $currentBorrowCount = $book['quantity'] - $book['available'];
 $currentBorrows = [];
 if ($currentBorrowCount > 0) {
-    $currentBorrows = $borrowRepo->findCurrentByBook($bookId);
+    $currentBorrows = $borrowRepo->findCurrentByBook($bookId); // รายชื่อผู้ยืมปัจจุบัน
 }
 
-// Get borrow history
+// 📜 ดึงประวัติการยืมล่าสุด 5 รายการ (แสดงเฉพาะ admin)
 $borrowHistory = $borrowRepo->findHistoryByBook($bookId, 5);
 
 $pageTitle = $book['title'];

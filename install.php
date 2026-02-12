@@ -6,10 +6,11 @@
  * ⚠️ ควรลบไฟล์นี้หลังติดตั้งเสร็จ
  */
 
+// 🔌 โหลดเฉพาะ config (constants) — ไม่ใช้ bootstrap เพราะ DB ยังไม่มี
 require_once __DIR__ . '/includes/config.php';
 
 // =====================================================
-// 🔒 INSTALL LOCK - ป้องกันการติดตั้งซ้ำ
+// 🔒 INSTALL LOCK — ป้องกันการติดตั้งซ้ำ (ตรวจไฟล์ .installed)
 // =====================================================
 $lockFile = __DIR__ . '/.installed';
 $isInstalled = file_exists($lockFile);
@@ -65,21 +66,22 @@ if ($isInstalled) {
 $messages = [];
 $success = false;
 
-// Process installation
+// ── POST: เริ่มติดตั้ง ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // Connect without database
+        // 🔌 เชื่อมต่อ MySQL โดยไม่ระบุ database (เพราะยังไม่มี)
         $dsn = "mysql:host=" . DB_HOST . ";charset=" . DB_CHARSET;
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
         ]);
 
-        // Create database
+        // 🗄️ สร้าง database + เลือกใช้
         $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         $pdo->exec("USE `" . DB_NAME . "`");
         $messages[] = "✅ สร้างฐานข้อมูล `" . DB_NAME . "` สำเร็จ";
 
-        // Create users table
+        // 📝 สร้างตาราง users — เก็บข้อมูลสมาชิก/เจ้าหน้าที่
+        //    email UNIQUE = ป้องกันซ้ำ, role ENUM = จำกัดค่าที่รับ
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `users` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `users` สำเร็จ";
 
-        // Create categories table
+        // 📝 สร้างตาราง categories — name UNIQUE ป้องกันหมวดหมู่ซ้ำ
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `categories` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -107,7 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `categories` สำเร็จ";
 
-        // Create books table
+        // 📝 สร้างตาราง books
+        //    CHECK constraints: available >= 0 + quantity >= available (ป้องกัน stock ติดลบ)
+        //    FK category_id ON DELETE SET NULL = ลบหมวดหมู่ได้โดยหนังสือไม่หาย
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `books` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -130,7 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `books` สำเร็จ";
 
-        // Create borrows table
+        // 📝 สร้างตาราง borrows — เก็บรายการยืม/คืน
+        //    FK ON DELETE CASCADE = ลบ user/book → ลบ borrow ด้วย
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `borrows` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -154,7 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `borrows` สำเร็จ";
 
-        // Create rate_limits table (for DB-based rate limiting)
+        // 📝 สร้างตาราง rate_limits — นับ attempt ตาม key_name
+        //    ใช้ DB แทน session เพื่อให้ rate limit คงอยู่แม้เปลี่ยน browser
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `rate_limits` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -166,7 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `rate_limits` สำเร็จ";
 
-        // Create reservations table
+        // 📝 สร้างตาราง reservations — เก็บรายการจองหนังสือ
+        //    borrow_id เชื่อมกับ borrows เมื่อจองถูก fulfill
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `reservations` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -186,7 +193,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `reservations` สำเร็จ";
 
-        // Create payments table
+        // 📝 สร้างตาราง payments — เก็บการชำระค่าปรับ
+        //    UNIQUE(borrow_id) = จ่ายได้ครั้งเดียวต่อ borrow (ป้องกัน double pay)
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `payments` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -202,7 +210,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `payments` สำเร็จ";
 
-        // Create password_resets table
+        // 📝 สร้างตาราง password_resets — เก็บ token สำหรับ reset password
+        //    token UNIQUE, used = ใช้ได้ครั้งเดียว (one-time-use)
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `password_resets` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -218,7 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `password_resets` สำเร็จ";
 
-        // Create settings table
+        // 📝 สร้างตาราง settings — key-value store สำหรับการตั้งค่า (สีธีม, ชื่อห้องสมุด, ...)
+        //    setting_key UNIQUE = upsert pattern (INSERT ON DUPLICATE UPDATE)
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `settings` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -230,17 +240,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `settings` สำเร็จ";
 
-        // Insert default admin (ใช้ password จาก form หรือสร้าง random)
+        // ── สร้างบัญชี Admin เริ่มต้น ──
+        //    ใช้ password จาก form หรือสร้าง random (ถ้าเว้นว่างหรือสั้นเกินไป)
         $adminEmail = trim($_POST['admin_email'] ?? 'admin@library.com');
         $adminPlainPassword = $_POST['admin_password'] ?? '';
         
         if (empty($adminPlainPassword) || strlen($adminPlainPassword) < MIN_PASSWORD_LENGTH) {
-            // สร้าง random password ที่ปลอดภัย
-            $adminPlainPassword = bin2hex(random_bytes(6)); // 12 chars
+            // 🔐 สร้าง random password ที่ปลอดภัย (12 hex chars)
+            $adminPlainPassword = bin2hex(random_bytes(6));
         }
         
+        // 🔒 hash password ด้วย bcrypt (PASSWORD_DEFAULT)
         $adminPassword = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
         
+        // ตรวจว่ามี admin อยู่แล้วหรือยัง (ป้องกันติดตั้งซ้ำสร้าง admin ซ้ำ)
         $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$adminEmail]);
         
@@ -252,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messages[] = "ℹ️ บัญชี Admin มีอยู่แล้ว";
         }
 
-        // Insert sample categories
+        // 🏷️ เพิ่มหมวดหมู่ตัวอย่าง (INSERT IGNORE = ข้ามถ้ามีแล้ว)
         $categories = ['นิยาย', 'วิชาการ', 'การ์ตูน', 'จิตวิทยา', 'ธุรกิจ'];
         $stmt = $pdo->prepare("INSERT IGNORE INTO categories (name) VALUES (?)");
         foreach ($categories as $cat) {
@@ -260,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $messages[] = "✅ เพิ่มหมวดหมู่ตัวอย่าง " . count($categories) . " หมวด";
 
-        // Insert sample books (with quantity)
+        // 📚 เพิ่มหนังสือตัวอย่าง (ตรวจซ้ำก่อน insert, quantity = available เริ่มต้น)
         $books = [
             ['เกมล่าสังหาร', 'ซูซาน คอลลินส์', 'นิยาย', 3],
             ['Atomic Habits', 'James Clear', 'จิตวิทยา', 5],
@@ -284,7 +297,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $messages[] = "✅ เพิ่มหนังสือตัวอย่าง " . count($books) . " เล่ม";
 
-        // สร้าง lock file เพื่อป้องกันการติดตั้งซ้ำ
+        // 🔒 สร้าง lock file ป้องกันติดตั้งซ้ำ (จะถูกตรวจตอนเข้าหน้าครั้งถัดไป)
+        //    ถ้าอยากติดตั้งใหม่ ให้ลบ .installed หรือเพิ่ม ?force=1
         file_put_contents($lockFile, date('Y-m-d H:i:s') . "\nInstalled successfully.");
         
         $success = true;

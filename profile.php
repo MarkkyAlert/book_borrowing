@@ -17,12 +17,14 @@
  * - change_password ต้องยืนยัน password เดิมก่อน (ป้องกันคนที่ขโมย session)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// [AUTH] ต้อง login — แสดงข้อมูลเฉพาะของตัวเอง (session user_id)
+// 🔒 [AUTH] ต้อง login — แสดงข้อมูลเฉพาะของตัวเอง (session user_id)
 requireLogin();
 
 $pdo = getDB();
+// 👤 ดึงข้อมูล user ปัจจุบันจาก DB (ไม่ใช้เฉพาะ session เพราะอาจ stale)
 $user = getCurrentUser();
 $errors = [];
 $success = false;
@@ -34,23 +36,24 @@ $borrowRepo = new BorrowRepository($pdo);
 $reservationRepo = new ReservationRepository($pdo);
 $authService = new AuthService($pdo);
 
+// ── ดึงข้อมูลสำหรับแสดงผล ──
+// 📜 ประวัติการยืมล่าสุด 10 รายการ
 $borrowHistory = $borrowRepo->findByUserId($_SESSION['user_id'], 10);
 
-// Get borrow statistics
+// 📊 สถิติการยืม (active, returned, total)
 $borrowStats = $borrowRepo->getStatsByUser($_SESSION['user_id']);
 $activeBorrows = $borrowStats['active_borrows'] ?? 0;
 
-// Get user's unpaid fines
+// 💰 รายการค่าปรับค้างชำระ
 $unpaidFines = $borrowRepo->getUnpaidFinesByUser($_SESSION['user_id']);
-
 $totalUnpaidAmount = array_sum(array_column($unpaidFines, 'fine_amount'));
 
-// Get pending reservations count
+// 🔖 จำนวนรายการจองที่รอดำเนินการ
 $pendingReservations = $reservationRepo->findByUser($_SESSION['user_id'], 'pending');
 
-// Process profile update
+// ── POST: อัปเดตโปรไฟล์ / เปลี่ยนรหัสผ่าน ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF validation
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect(APP_URL . '/profile.php');
@@ -58,7 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $action = $_POST['action'] ?? '';
     
-    // [SECURITY] อัปเดตได้เฉพาะ name/phone — email เปลี่ยนไม่ได้ผ่านหน้านี้ (ป้องกัน account takeover)
+    // ── Action: อัปเดตข้อมูลส่วนตัว ──
+    // 🛡️ [SECURITY] อัปเดตได้เฉพาะ name/phone — email เปลี่ยนไม่ได้ผ่านหน้านี้
+    //    ป้องกัน account takeover: ถ้าเปลี่ยน email ได้ คนที่ขโมย session อาจเปลี่ยน email แล้ว reset password ได้
     if ($action === 'update_profile') {
         $name = trim($_POST['name'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
@@ -84,8 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // ── Action: เปลี่ยนรหัสผ่าน ──
     if ($action === 'change_password') {
-        // [SECURITY] Rate limiting for password attempts
+        // 🛡️ [SECURITY] Rate limiting สำหรับการลองรหัสผ่าน (brute force old password)
         $rateLimitKey = 'password_change';
         
         if (!checkRateLimit($rateLimitKey)) {
@@ -119,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Reload user data
+    // 🔄 โหลดข้อมูล user ใหม่หลัง POST (เผื่อแสดงข้อมูลล่าสุดใน form)
     $user = getCurrentUser();
 }
 

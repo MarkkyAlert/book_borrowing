@@ -14,16 +14,19 @@
  * - เพิ่ม report type ใหม่ที่ includes/report_helper.php (shared กับ reports.php)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
-
+// 🔒 [AUTH] admin เท่านั้น
 requireAdmin();
 
 use App\Repositories\ReportRepository;
 
+// 📦 สร้าง repository instance + รับประเภทรายงาน
 $reportRepo = new ReportRepository(getDB());
 $reportType = $_GET['report'] ?? 'books';
 
-// Date range filter (validate format like reports.php)
+// ── Date Range Validation (เหมือน reports.php) ──
+// 📅 ตรวจ format YYYY-MM-DD + fallback ถ้าไม่ถูกต้อง
 $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !strtotime($startDate)) {
@@ -32,14 +35,16 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !strtotime($startDate)) 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) || !strtotime($endDate)) {
     $endDate = date('Y-m-d');
 }
-// Prepare Data via Helper (Single Source of Truth - shared with reports.php)
+// 📦 ดึงข้อมูลผ่าน report_helper.php (Single Source of Truth — shared กับ reports.php)
+//    เพิ่ม report type ใหม่ที่ report_helper.php เท่านั้น
 require_once __DIR__ . '/../includes/report_helper.php';
 $reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, true);
-$data = $reportConfig['data'];
-$headers = $reportConfig['headers'];
-$reportTitle = $reportConfig['title'];
-$filename = $reportConfig['filename'];
+$data = $reportConfig['data'];         // array ข้อมูลรายงาน
+$headers = $reportConfig['headers'];   // หัวคอลัมน์
+$reportTitle = $reportConfig['title']; // ชื่อรายงาน (แสดงบนหัวกระดาษ)
+$filename = $reportConfig['filename']; // ชื่อไฟล์
 
+// 🏢 ชื่อหน่วยงานจาก settings — แสดงบนหัวกระดาษ PDF
 $orgName = getSetting('org_name', 'ระบบห้องสมุด');
 ?>
 <!DOCTYPE html>

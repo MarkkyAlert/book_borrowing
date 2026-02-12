@@ -11,23 +11,29 @@
  * GET ?id=X → UserRepository::findMemberById() → render card → window.print()
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
-
-requireStaff(); // Staff ต้องพิมพ์บัตรสมาชิกได้
+// 🔒 [AUTH] staff/admin เท่านั้น — สมาชิกพิมพ์บัตรเองไม่ได้
+requireStaff();
 
 use App\Repositories\UserRepository;
 
+// 📥 รับ member ID จาก query string
 $id = (int)($_GET['id'] ?? 0);
 $userRepo = new UserRepository(getDB());
 
+// 🔍 ดึงข้อมูลสมาชิกจาก DB
 $member = $userRepo->findMemberById($id);
 
+// ⚠️ ถ้าไม่พบสมาชิก → แสดง error แล้วปิดหน้าต่างอัตโนมัติหลัง 2 วินาที
+//    หน้านี้เปิดใน popup window — ไม่ใช้ admin layout
 if (!$member) {
     http_response_code(404);
     exit('<h3 style="font-family:sans-serif;text-align:center;margin-top:40px;">ไม่พบสมาชิก</h3><script>setTimeout(()=>window.close(),2000)</script>');
 }
 
-// Get Settings
+// 🎨 ดึงค่าจาก settings (DB) — admin ปรับได้ที่หน้า settings.php
+// 🧠 ค่าเหล่านี้ถูกใช้ใน CSS variable (--primary, --secondary) และ inline style
 $orgName = getSetting('org_name', 'LIBRARY CARD');
 $colorPrimary = getSetting('card_color_primary', '#1e3a8a');
 $colorSecondary = getSetting('card_color_secondary', '#3b82f6');

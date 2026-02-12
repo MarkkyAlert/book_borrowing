@@ -19,15 +19,19 @@
  * - deleteMember() ป้องกัน cascade delete — ถ้ามีประวัติยืมจะ throw Exception
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
 use App\Services\MemberService;
 
+// 📦 สร้าง service instance — MemberService เป็น Single Source of Truth สำหรับ member CRUD
 $pdo = getDB();
 $memberService = new MemberService($pdo);
 
 $errors = [];
+// 📝 ค่า default สำหรับ create mode — จะถูก overwrite ถ้าเป็น edit mode
 $member = [
     'id' => 0,
     'name' => '',
@@ -37,7 +41,7 @@ $member = [
 ];
 $isEdit = false;
 
-// Get member for editing
+// ── Edit Mode: โหลดข้อมูลสมาชิกเข้า form ──
 if (isset($_GET['id'])) {
     $id = (int) $_GET['id'];
     $existingMember = $memberService->getMemberById($id);
@@ -51,9 +55,9 @@ if (isset($_GET['id'])) {
     }
 }
 
-// Handle form submission
+// ── POST: บันทึกข้อมูลสมาชิก (create หรือ update) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff แก้ข้อมูลสมาชิก
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('members.php');
@@ -67,8 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $member['id'] = (int) ($_POST['id'] ?? 0);
     $isEdit = $member['id'] > 0;
     
-    // Validation via shared helper (Single Source of Truth)
-    // Email duplicate ตรวจที่ Service ฝ่ายเดียว — ไม่ต้องตรวจซ้ำที่นี่
+    // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับหน้าอื่นที่จัดการสมาชิก)
+    //    Email duplicate ตรวจที่ Service ฝ่ายเดียว — ไม่ต้องตรวจซ้ำที่นี่
     $errors = array_merge($errors, validateMemberData([
         'name' => $member['name'], 'email' => $member['email'],
         'phone' => $member['phone'], 'password' => $password
@@ -77,21 +81,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         try {
             if ($isEdit) {
-                // Update via Service
+                // [WRITE] อัปเดตข้อมูลสมาชิก ผ่าน Service (ตรวจ email ซ้ำให้)
                 $memberService->updateMember($member['id'], [
                     'name' => $member['name'],
                     'email' => $member['email'],
                     'phone' => $member['phone']
                 ]);
                 
-                // Update password only if provided (via Service - validates + hashes)
+                // 🔑 อัปเดตรหัสผ่านเฉพาะถ้ากรอก — Service จะ validate + hash ให้
                 if (!empty($password)) {
                     $memberService->updatePassword($member['id'], $password);
                 }
                 
                 setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');
             } else {
-                // Create via Service (generates random password if not provided)
+                // [WRITE] สร้างสมาชิกใหม่ — ถ้าไม่กรอกรหัสผ่าน Service จะ auto-generate ให้
                 $memberService->createMember([
                     'name' => $member['name'],
                     'email' => $member['email'],

@@ -15,13 +15,21 @@
  *   require_once __DIR__ . '/footer.php';
  */
 
+// 🔌 โหลด helper functions (e(), redirect(), requireStaff(), ฯลฯ)
 require_once __DIR__ . '/../includes/functions.php';
-requireStaff(); // ใช้ requireStaff เพราะแต่ละหน้าจะตรวจสอบสิทธิ์เองอีกที
+// 🔒 [AUTH] ตรวจสิทธิ์ซ้ำในระดับ template — defense-in-depth
+//    แม้แต่ละหน้าจะตรวจแล้ว แต่ถ้า dev ลืมเรียก requireStaff() ในหน้าใหม่
+//    header.php จะเป็น safety net ให้
+requireStaff();
 
+// 📍 ระบุหน้าปัจจุบัน — ใช้ highlight active menu item ใน sidebar
 $currentPage = basename($_SERVER['PHP_SELF']);
+// 👤 ดึงข้อมูล user จาก session → DB (ชื่อ, role, ฯลฯ)
 $user = getCurrentUser();
 
-// Handle case where user was deleted but session exists
+// 🛡️ [SECURITY] Session orphan protection:
+//    ถ้า user ถูกลบจาก DB แต่ session ยังอยู่ → destroy session แล้ว redirect
+//    ป้องกัน ghost session ที่อ้างถึง user ที่ไม่มีอยู่แล้ว
 if (!$user) {
     session_destroy();
     redirect(APP_URL . '/login.php');

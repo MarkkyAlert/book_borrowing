@@ -18,20 +18,25 @@
  *   ถ้า cron ทำงานปกติ จะไม่มี expired rows ให้ process (ไม่กระทบ performance)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB connection)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] ต้องเป็น staff/admin เท่านั้น — member เข้าไม่ได้
 requireStaff();
 
 use App\Services\DashboardService;
 use App\Services\ReservationService;
 
+// 📦 สร้าง service instances — DashboardService เป็น read-only aggregator ดึงข้อมูลจากหลาย repository
 $pdo = getDB();
 $dashboardService = new DashboardService($pdo);
 
-// [AUTO] Expire overdue reservations on dashboard load (fallback for cron)
+// [AUTO] Lazy expiration — หมดอายุการจองที่เกินกำหนด (fallback สำหรับ cron)
+// 🧠 ถ้า cron ทำงานปกติ → ไม่มี expired rows = method รันเร็ว (ไม่กระทบ performance)
+// ⚠️ ถ้า cron ไม่ทำงาน → dashboard จะเป็นด่านสุดท้ายที่ cleanup ให้
 $reservationService = new ReservationService($pdo);
 $reservationService->expireOverdueReservations();
 
-// Get card statistics
+// 📊 ดึงสถิติ summary cards — query เดียวได้หลายค่า (optimized)
 $stats = $dashboardService->getCardStats();
 $totalBooks = $stats['total_books'];
 $availableBooks = $stats['available_books'];
@@ -41,49 +46,50 @@ $activeBorrows = $stats['active_borrows'];
 $overdueBorrows = $stats['overdue_borrows'];
 $pendingReservations = $stats['pending_reservations'];
 
-// Get lists
-$recentBorrows = $dashboardService->getRecentBorrows(5);
-$recentReservations = $dashboardService->getRecentReservations(5);
-$overdueList = $dashboardService->getOverdueList(10);
+// 📋 ดึงรายการล่าสุด + alerts (จำกัดจำนวนเพื่อ performance)
+$recentBorrows = $dashboardService->getRecentBorrows(5);       // 5 รายการยืมล่าสุด
+$recentReservations = $dashboardService->getRecentReservations(5); // 5 การจองล่าสุด
+$overdueList = $dashboardService->getOverdueList(10);           // 10 รายการเกินกำหนด
 
-// Low stock books (available <= 2)
+// 📦 หนังสือ stock ใกล้หมด (available <= threshold) — แจ้งเตือนให้สั่งซื้อเพิ่ม
 $lowStockBooks = $dashboardService->getLowStockBooks(2, 5);
 
-// Unpaid fines list for PDF report
+// 💰 รายการค้างชำระ — ใช้แสดงบน dashboard + PDF export
 $unpaidFinesList = $dashboardService->getUnpaidFinesList(10);
 
-// All categories with stats for PDF report
+// 📁 สถิติหมวดหมู่ทั้งหมด — ใช้ใน PDF export
 $allCategoriesStats = $dashboardService->getAllCategoriesWithStats();
 
-// Date range for chart (default: 6 months)
+// 📈 ช่วงเวลาสำหรับกราฟ (default: 6 เดือน)
 $chartRange = isset($_GET['range']) ? (int)$_GET['range'] : 6;
+// [VALIDATION] Whitelist — อนุญาตเฉพาะค่าที่กำหนด ป้องกัน query ช่วงเวลาที่ไม่เหมาะสม
 $validRanges = [1, 3, 6, 12];
 if (!in_array($chartRange, $validRanges)) {
     $chartRange = 6;
 }
 
-// Chart data
-$monthlyBorrows = $dashboardService->getMonthlyStats($chartRange);
-$categoryStats = $dashboardService->getCategoryStats(6);
-$totalFines = $dashboardService->getTotalFinesCollected();
-$unpaidFines = $dashboardService->getUnpaidFines();
-$topBorrowers = $dashboardService->getTopBorrowers(5);
-$popularBooks = $dashboardService->getPopularBooks(5);
+// 📊 ดึงข้อมูลสำหรับ Chart.js (กราฟแท่ง, กราฟโดนัท)
+$monthlyBorrows = $dashboardService->getMonthlyStats($chartRange); // สถิติรายเดือน (ยืม/คืน/ค่าปรับ)
+$categoryStats = $dashboardService->getCategoryStats(6);           // Top 6 หมวดหมู่ที่ถูกยืมบ่อย
+$totalFines = $dashboardService->getTotalFinesCollected();         // รายได้ค่าปรับรวม (ชำระแล้ว)
+$unpaidFines = $dashboardService->getUnpaidFines();               // ยอดค้างชำระรวม
+$topBorrowers = $dashboardService->getTopBorrowers(5);            // Top 5 นักอ่าน
+$popularBooks = $dashboardService->getPopularBooks(5);            // Top 5 หนังสือยอดนิยม
 
-// Books status for pie chart
+// 🥧 ข้อมูลสำหรับ Pie Chart สถานะหนังสือ (พร้อมยืม vs กำลังถูกยืม)
 $bookStatusData = [
     'available' => (int)$availableBooks,
     'borrowed' => (int)$borrowedBooks
 ];
 
-// Prepare chart data for JavaScript
-$chartLabels = array_column($monthlyBorrows, 'month_name');
-$chartBorrows = array_column($monthlyBorrows, 'total_borrows');
-$chartReturned = array_column($monthlyBorrows, 'returned');
-$chartFines = array_column($monthlyBorrows, 'total_fines');
+// 🔄 แปลง PHP array → format ที่ Chart.js ใช้ได้ (จะถูก json_encode ใน <script>)
+$chartLabels = array_column($monthlyBorrows, 'month_name');   // ชื่อเดือน (Jan, Feb, ...)
+$chartBorrows = array_column($monthlyBorrows, 'total_borrows'); // จำนวนยืมแต่ละเดือน
+$chartReturned = array_column($monthlyBorrows, 'returned');     // จำนวนคืนแต่ละเดือน
+$chartFines = array_column($monthlyBorrows, 'total_fines');     // ค่าปรับแต่ละเดือน
 
-$categoryLabels = array_column($categoryStats, 'name');
-$categoryData = array_column($categoryStats, 'borrow_count');
+$categoryLabels = array_column($categoryStats, 'name');        // ชื่อหมวดหมู่
+$categoryData = array_column($categoryStats, 'borrow_count');  // จำนวนยืมแต่ละหมวดหมู่
 
 $pageTitle = 'Dashboard';
 require_once __DIR__ . '/header.php';

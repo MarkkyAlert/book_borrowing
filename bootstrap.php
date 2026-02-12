@@ -35,25 +35,23 @@
  * การใช้งาน: require_once __DIR__ . '/bootstrap.php';
  */
 
-// Prevent direct access
+// 🛡️ [SECURITY] ป้องกันเข้าถึงไฟล์นี้ตรงๆ (http://...bootstrap.php)
+//    ไฟล์นี้ต้องถูก require จากหน้าอื่นเท่านั้น
 if (basename($_SERVER['PHP_SELF']) === 'bootstrap.php') {
     http_response_code(403);
     exit('Direct access not allowed');
 }
 
-// Define base path
+// 📁 กำหนด root path ของโปรเจค — ใช้ทั่วระบบแทน __DIR__ . '/...'
 define('BASE_PATH', __DIR__);
 
-// Load config (single source of truth)
-require_once BASE_PATH . '/includes/config.php';
+// ── โหลดไฟล์หลัก (ลำดับสำคัญ: config → db → functions) ──
+// ⚠️ ห้ามสลับลำดับ! config กำหนด constant ที่ db และ functions ต้องใช้
+require_once BASE_PATH . '/includes/config.php';    // 1️⃣ constants (DB_HOST, APP_URL, ...)
+require_once BASE_PATH . '/includes/db.php';        // 2️⃣ PDO singleton (getDB())
+require_once BASE_PATH . '/includes/functions.php';  // 3️⃣ helper functions (e(), redirect(), ...)
 
-// Load database connection
-require_once BASE_PATH . '/includes/db.php';
-
-// Load helper functions
-require_once BASE_PATH . '/includes/functions.php';
-
-// [CLEANUP] ล้าง idempotency keys ที่หมดอายุ
+// 🧹 [CLEANUP] ล้าง idempotency keys ที่หมดอายุ (>60วินาที) ทุก request
 cleanupIdempotencyKeys();
 
 /**

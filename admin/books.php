@@ -12,36 +12,42 @@
  * 2. ปุ่มลบ (ถ้ามี) → ส่ง POST ไปที่ book_form.php หรือ AJAX
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
-use App\Services\BookService;
-use App\Repositories\CategoryRepository;
+use App\Services\BookService;         // Business logic: ค้นหา, ลบ (รวม cleanup cover image)
+use App\Repositories\CategoryRepository; // ดึงรายการหมวดหมู่สำหรับ filter dropdown
 
+// สร้าง service/repository instances
 $pdo = getDB();
 $bookService = new BookService($pdo);
 $categoryRepo = new CategoryRepository($pdo);
 
-// Get filter parameters
+// ── GET: ดึงข้อมูลหนังสือตาม filter ──
+// รับ filter จาก query string (XSS-safe เพราะ e() ใน HTML)
 $search = trim($_GET['search'] ?? '');
-$categoryId = (int) ($_GET['category'] ?? 0);
+$category = $_GET['category'] ?? '';
 $status = $_GET['status'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
 
-// Get books via Service
+// ดึงหนังสือตาม filter ผ่าน Service (จัดการ search, sort, pagination ให้)
 $books = $bookService->getBooks([
     'search' => $search,
-    'category_id' => $categoryId,
+    'category_id' => $category,
     'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
     'sort' => $sort
 ]);
 
-// Get categories for filter
+// ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
 $categories = $categoryRepo->findAll();
 
-// Handle delete
+// ── POST: ลบหนังสือ (PRG pattern — ทำก่อน fetch data) ──
+// ทำ POST ก่อน GET เพื่อให้ข้อมูลที่แสดงเป็น version ล่าสุดหลังลบ
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     // [SECURITY] ตรวจ CSRF ก่อนทำ destructive action
+    // [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff ลบหนังสือโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('books.php');

@@ -15,13 +15,16 @@
  * - Idempotency key ใช้ hash ของ userId + bookIds ป้องกัน double-submit
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
-use App\Repositories\BookRepository;
-use App\Repositories\UserRepository;
-use App\Services\BorrowService;
+use App\Repositories\BookRepository;  // ดึงหนังสือที่ available > 0
+use App\Repositories\UserRepository;  // ดึงรายชื่อสมาชิก + ค้นหาสมาชิก
+use App\Services\BorrowService;       // Business logic: createBorrow (transaction + stock check)
 
+// 📦 สร้าง service/repository instances
 $pdo = getDB();
 $bookRepo = new BookRepository($pdo);
 $userRepo = new UserRepository($pdo);
@@ -29,13 +32,16 @@ $borrowService = new BorrowService($pdo);
 
 $errors = [];
 
-// Get available books using repository
+// 📚 ดึงหนังสือที่ available > 0 สำหรับ dropdown (Select2)
 $availableBooks = $bookRepo->findAvailable();
 
-// Get members using repository
+// 👥 ดึงสมาชิกทั้งหมดสำหรับ dropdown (Select2)
 $members = $userRepo->findAllMembers();
 
-// Handle AJAX Scan Requests
+// ── Mode 1: AJAX Scan (POST action=scan) ──
+// 🔍 ค้นหาสมาชิก/หนังสือแบบ real-time → return JSON
+//    ใช้กับ barcode scanner หรือพิมพ์ ID แล้วกด Enter
+// ⚠️ ต้อง exit หลัง echo JSON — ห้ามให้ไหลไปถึง HTML
 if (isset($_POST['action']) && $_POST['action'] === 'scan') {
     header('Content-Type: application/json');
     
@@ -72,28 +78,31 @@ if (isset($_POST['action']) && $_POST['action'] === 'scan') {
     exit;
 }
 
-// Handle form submission
+// ── Mode 2: Form Submit (POST) ──
+// 📝 สร้างรายการยืมจริง → BorrowService::createBorrow()
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF check - ป้องกัน attacker หลอกให้ staff กดยืมโดยไม่รู้ตัว
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff กดยืมโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('borrow_form.php');
     }
     
-    // Sanitize input (validation ทำใน BorrowService - Single Source of Truth)
+    // 📥 Sanitize input — validation หนักๆ ทำใน BorrowService (Single Source of Truth)
     $userId = (int) ($_POST['user_id'] ?? 0);
-    $bookIds = $_POST['book_ids'] ?? [];
-    $borrowDays = (int) ($_POST['borrow_days'] ?? DEFAULT_BORROW_DAYS);
+    $bookIds = $_POST['book_ids'] ?? [];               // array ของ book IDs ที่เลือก
+    $borrowDays = (int) ($_POST['borrow_days'] ?? DEFAULT_BORROW_DAYS); // จำนวนวันยืม
     
     if (!is_array($bookIds)) {
         $bookIds = [$bookIds];
     }
     $bookIds = array_filter(array_map('intval', $bookIds));
     
-    // Use BorrowService for validation + transaction logic
+    // 🚀 เรียก BorrowService — จัดการ validation + transaction + stock lock
     {
         // [IDEMPOTENCY] ป้องกัน double-submit (กดปุ่มซ้ำ / refresh)
-        sort($bookIds); // sort เพื่อให้ key เหมือนกันไม่ว่าจะเลือกลำดับไหน
+        // 🧠 sort เพื่อให้ key เหมือนกันไม่ว่าจะเลือกลำดับไหน
+        //    เช่น [3,1,2] กับ [1,2,3] → md5 เดียวกัน
+        sort($bookIds);
         $idempotencyKey = 'borrow_' . $userId . '_' . md5(json_encode($bookIds));
         
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {

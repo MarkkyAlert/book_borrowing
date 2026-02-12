@@ -11,28 +11,31 @@
  * GET → HomeService::getBooks(filters) → แสดง book grid + sidebar categories
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
+// 🔓 หน้า public — ไม่ต้อง login
 
 use App\Services\HomeService;
 
+// 📦 สร้าง service instance — HomeService เป็น read-only (ไม่มี write)
 $pdo = getDB();
 $homeService = new HomeService($pdo);
 
-// Get search/filter parameters
+// 📥 รับ filter จาก query string
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
-$status = $_GET['status'] ?? '';
+$status = $_GET['status'] ?? '';  // 'available' หรือ '' (ทั้งหมด)
 
-// Get data via Service
+// 📚 ดึงหนังสือ + หมวดหมู่ ผ่าน Service (JOIN category_name ให้)
 $data = $homeService->getBooks([
     'search' => $search,
     'category_id' => $categoryId,
     'status' => $status
 ]);
-$books = $data['books'];
-$categories = $data['categories'];
+$books = $data['books'];           // array ข้อมูลหนังสือ
+$categories = $data['categories']; // array หมวดหมู่ทั้งหมด (สำหรับ dropdown)
 
-// Get stats
+// 📊 ดึงสถิติสำหรับ Hero Section (total, available, members)
 $stats = $homeService->getStats();
 $totalBooks = $stats['total_books'];
 $availableBooks = $stats['available_books'];

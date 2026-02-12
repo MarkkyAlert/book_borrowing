@@ -18,22 +18,26 @@
  * - อย่าเพิ่มที่นี่อย่างเดียว ไม่งั้น PDF export จะไม่มีข้อมูล
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] admin เท่านั้น — staff ดูรายงานไม่ได้
+requireAdmin();
 
-requireAdmin(); // Reports are for Admin only
+use App\Repositories\ReportRepository; // ดึงข้อมูลรายงานต่างๆ
+use App\Repositories\BorrowRepository;  // ดึงข้อมูลการยืมสำหรับรายงาน
 
-use App\Repositories\ReportRepository;
-use App\Repositories\BorrowRepository;
-
+// 📦 สร้าง repository instances
 $pdo = getDB();
 $reportRepo = new ReportRepository($pdo);
 $borrowRepo = new BorrowRepository($pdo);
+// 📥 รับประเภทรายงาน + flag ว่าเป็น CSV export หรือไม่
 $reportType = $_GET['report'] ?? 'books';
 $isExport = isset($_GET['export']) && $_GET['export'] === 'csv';
 
-// Date range filter with validation
-$startDate = $_GET['start_date'] ?? date('Y-m-01'); // Default: start of current month
-$endDate = $_GET['end_date'] ?? date('Y-m-d'); // Default: today
+// ── Date Range Filter + Validation ──
+// 📅 ค่าเริ่มต้น: ต้นเดือนนี้, ค่าสิ้นสุด: วันนี้
+$startDate = $_GET['start_date'] ?? date('Y-m-01');
+$endDate = $_GET['end_date'] ?? date('Y-m-d');
 
 // [VALIDATION] ตรวจสอบ format วันที่ (YYYY-MM-DD)
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !strtotime($startDate)) {
@@ -67,33 +71,32 @@ if ($startDate === $today && $endDate === $today) {
     $activeRange = 'year';
 }
 
-// Prepare Data via Helper (Single Source of Truth - shared with export_pdf.php)
+// 📦 ดึงข้อมูลผ่าน report_helper.php (Single Source of Truth)
+//    ใช้ร่วมกับ export_pdf.php — เพิ่ม report type ใหม่ที่ report_helper.php เท่านั้น
 require_once __DIR__ . '/../includes/report_helper.php';
 $reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, false);
-$data = $reportConfig['data'];
-$headers = $reportConfig['headers'];
-$filename = $reportConfig['filename'];
+$data = $reportConfig['data'];       // array ข้อมูลรายงาน
+$headers = $reportConfig['headers']; // หัวคอลัมน์ตาราง
+$filename = $reportConfig['filename']; // ชื่อไฟล์สำหรับ export
 
-// Handle Export
+// ── CSV Export: stream download แล้ว exit ──
 if ($isExport) {
+    // 📤 ตั้ง header ให้ browser download เป็นไฟล์ CSV
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
     
     $output = fopen('php://output', 'w');
     
-    // Add BOM for Excel UTF-8 compatibility
+    // 🧠 BOM (Byte Order Mark) — ทำให้ Excel รู้จัก UTF-8 (ไม่งั้นภาษาไทยจะเพี้ยน)
     fputs($output, "\xEF\xBB\xBF");
     
-    // Write Headers
-    fputcsv($output, $headers);
-    
-    // Write Data
+    fputcsv($output, $headers);  // เขียนหัวคอลัมน์
     foreach ($data as $row) {
-        fputcsv($output, $row);
+        fputcsv($output, $row);  // เขียนข้อมูลทีละแถว
     }
     
     fclose($output);
-    exit;
+    exit; // ⚠️ ต้อง exit — ห้ามให้ HTML ด้านล่างถูกต่อเข้าไปในไฟล์
 }
 
 $pageTitle = 'รายงานและสถิติ';

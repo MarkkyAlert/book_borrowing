@@ -14,28 +14,29 @@
  * 🔗 ต่อไป: reset_password.php?token=XXX
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// Redirect if already logged in
+// 🔁 ถ้า login แล้ว → redirect ไปหน้าแรก (ไม่ต้อง reset password)
 if (isLoggedIn()) {
     redirect(APP_URL . '/index.php');
 }
 
 $errors = [];
 $success = false;
-$resetLink = null;
+$resetLink = null; // แสดงเฉพาะ demo mode (localhost + APP_DEBUG)
 $email = '';
 
-// Process form
+// ── POST: ขอ reset link ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
     
     $email = trim($_POST['email'] ?? '');
     
-    // [SECURITY] Rate limiting ป้องกัน spam/enumeration
+    // 🛡️ [SECURITY] Rate limiting ป้องกัน spam + การใช้หน้านี้เพื่อ enumerate email
     $rateLimitKey = 'forgot_password';
     if (!checkRateLimit($rateLimitKey)) {
         $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
@@ -50,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (empty($errors)) {
+        // 🚀 [WRITE] สร้าง reset token (hash เก็บใน DB, หมดอายุ 1 ชั่วโมง)
         $authService = new \App\Services\AuthService(getDB());
         
         $result = $authService->requestPasswordReset($email);
@@ -59,8 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $success = true;
             
+            // 🧠 Demo mode: แสดง reset link เฉพาะ localhost + APP_DEBUG=true
+            //    production จะส่งทาง email แทน (ยังไม่ได้ตั้งค่า mail server)
             if ($result['token'] && defined('APP_DEBUG') && APP_DEBUG) {
-                // Demo mode: แสดง link เฉพาะ localhost เท่านั้น (production จะส่งทาง email)
                 $isLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
                 if ($isLocal) {
                     $resetLink = APP_URL . '/reset_password.php?token=' . $result['token'];

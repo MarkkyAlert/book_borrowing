@@ -13,17 +13,18 @@
  * 2. GET → โหลดค่าจาก SettingsRepository แสดงใน form
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
-// [AUTH] Admin only — staff ไม่ควรเปลี่ยนการตั้งค่าระบบ (เช่น ชื่อหน่วยงาน, สีบัตร)
+// 🔒 [AUTH] Admin only — staff ไม่ควรเปลี่ยนการตั้งค่าระบบ (เช่น ชื่อหน่วยงาน, สีบัตร)
 requireAdmin();
 
-// Handle Form Submission
+// ── POST: บันทึกการตั้งค่า ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF — ป้องกันถูกหลอกให้เปลี่ยนค่าระบบโดยไม่รู้ตัว
+    // 🛡️ [SECURITY] CSRF — ป้องกันถูกหลอกให้เปลี่ยนค่าระบบโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
     } else {
-        // [VALIDATION] ตรวจสอบค่าก่อนบันทึก
+        // 📥 รับค่าจาก form + validate ก่อนบันทึก
         $orgName = trim($_POST['org_name'] ?? '');
         $colorPrimary = trim($_POST['card_color_primary'] ?? '#1e3a8a');
         $colorSecondary = trim($_POST['card_color_secondary'] ?? '#3b82f6');
@@ -36,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'ชื่อหน่วยงานต้องไม่เกิน 100 ตัวอักษร';
         }
         
-        // Validate color format (#XXXXXX)
+        // 🎨 [VALIDATION] ตรวจ format สี (#RRGGBB) — ป้องกัน XSS ผ่าน CSS injection
         if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $colorPrimary)) {
             $errors[] = 'รูปแบบสีหลักไม่ถูกต้อง';
         }
@@ -47,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($errors)) {
             setFlash('error', implode(' | ', $errors));
         } else {
+            // [WRITE] บันทึกผ่าน updateSetting() — upsert pattern (INSERT ... ON DUPLICATE KEY UPDATE)
             updateSetting('org_name', $orgName);
             updateSetting('card_color_primary', $colorPrimary);
             updateSetting('card_color_secondary', $colorSecondary);
@@ -57,6 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ── GET: โหลดค่าปัจจุบันจาก DB ──
+// 🧠 ค่าเหล่านี้อยู่ในตาราง settings (ไม่ใช่ .env) — admin ปรับได้ผ่าน UI
 $orgName = getSetting('org_name', 'LIBRARY CARD');
 $cardColorPrimary = getSetting('card_color_primary', '#1e3a8a');
 $cardColorSecondary = getSetting('card_color_secondary', '#3b82f6');

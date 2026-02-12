@@ -11,20 +11,23 @@
  * GET → MemberService::getMembers(filters) → แสดงรายการ (พร้อม borrow stats)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
 use App\Services\MemberService;
 
+// 📦 สร้าง service instance — MemberService จัดการ filter, sort, borrow stats ให้
 $pdo = getDB();
 $memberService = new MemberService($pdo);
 
-// Get parameters
+// 📥 รับ filter/sort จาก query string
 $search = trim($_GET['search'] ?? '');
-$status = $_GET['status'] ?? '';
-$sort = $_GET['sort'] ?? 'newest';
+$status = $_GET['status'] ?? '';    // has_borrow | no_borrow | ''
+$sort = $_GET['sort'] ?? 'newest'; // newest | oldest | az | most_borrows
 
-// Get members via Service
+// 📊 ดึงสมาชิกพร้อม borrow stats (active_borrows, total_borrows) ผ่าน Service
 $members = $memberService->getMembers([
     'search' => $search,
     'status' => $status,

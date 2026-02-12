@@ -17,20 +17,23 @@
  * - ลบหมวดหมู่ที่มีหนังสือไม่ได้ (hasBooks check)
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
 use App\Repositories\CategoryRepository;
 
+// 📦 สร้าง repository instance
 $pdo = getDB();
 $categoryRepo = new CategoryRepository($pdo);
 
 $errors = [];
-$editCategory = null;
+$editCategory = null; // ถ้า != null → form จะเปลี่ยนเป็น edit mode
 
-// Handle actions
+// ── POST: CRUD actions (add / update / delete) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff แก้ไขหมวดหมู่
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('categories.php');
@@ -38,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $action = $_POST['action'] ?? '';
     
-    // Add category
+    // ── Action: เพิ่มหมวดหมู่ใหม่ ──
     if ($action === 'add') {
         $name = trim($_POST['name'] ?? '');
         
@@ -48,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'ชื่อหมวดหมู่ต้องไม่เกิน 100 ตัวอักษร';
         }
         
-        // Check duplicate via repository
+        // 🔍 [DATA INTEGRITY] ตรวจชื่อซ้ำ — ป้องกัน duplicate ใน DB
         if (empty($errors)) {
             if ($categoryRepo->nameExists($name)) {
                 $errors[] = 'ชื่อหมวดหมู่นี้มีอยู่แล้ว';
@@ -62,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Update category
+    // ── Action: อัปเดตหมวดหมู่ ──
     if ($action === 'update') {
         $id = (int) ($_POST['id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
@@ -71,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'กรุณากรอกชื่อหมวดหมู่';
         }
         
-        // Check duplicate (exclude current) via repository
+        // 🔍 [DATA INTEGRITY] ตรวจชื่อซ้ำ (exclude ตัวเอง) — nameExists($name, $excludeId)
         if (empty($errors)) {
             if ($categoryRepo->nameExists($name, $id)) {
                 $errors[] = 'ชื่อหมวดหมู่นี้มีอยู่แล้ว';
@@ -87,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Delete category
+    // ── Action: ลบหมวดหมู่ ──
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
         
@@ -106,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get for edit via repository
+// ── GET ?edit=ID: โหลดข้อมูลเข้า form สำหรับแก้ไข ──
 if (isset($_GET['edit'])) {
     $editId = (int) $_GET['edit'];
-    $editCategory = $categoryRepo->findById($editId);
+    $editCategory = $categoryRepo->findById($editId); // ถ้า null → form จะเป็น add mode
 }
 
-// Get all categories with book count via repository
+// 📊 ดึงหมวดหมู่ทั้งหมดพร้อมจำนวนหนังสือ (LEFT JOIN + COUNT)
 $categories = $categoryRepo->findAllWithBookCount();
 
 $pageTitle = 'จัดการหมวดหมู่';

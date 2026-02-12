@@ -18,19 +18,23 @@
  * - upload ตรวจ mime type + ขนาด — แก้ไข limit ที่ config.php
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+// 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
-use App\Repositories\BookRepository;
-use App\Repositories\CategoryRepository;
-use App\Services\BookService;
+use App\Repositories\BookRepository;    // ดึง/ตรวจข้อมูลหนังสือ (ISBN ซ้ำ, findById)
+use App\Repositories\CategoryRepository; // ดึงรายการหมวดหมู่สำหรับ dropdown
+use App\Services\BookService;            // Business logic: create, update, delete (รวม cover cleanup)
 
+// 📦 สร้าง service/repository instances
 $pdo = getDB();
 $bookRepo = new BookRepository($pdo);
 $categoryRepo = new CategoryRepository($pdo);
 $bookService = new BookService($pdo);
 
 $errors = [];
+// 📝 ค่า default สำหรับ create mode — จะถูก overwrite ถ้าเป็น edit mode
 $book = [
     'id' => 0,
     'title' => '',
@@ -44,7 +48,8 @@ $book = [
 ];
 $isEdit = false;
 
-// Get book for editing
+// ── Edit Mode: โหลดข้อมูลหนังสือเข้า form ──
+// 🔍 ถ้ามี ?id=X → ดึงข้อมูลจาก DB เพื่อ pre-fill form
 if (isset($_GET['id'])) {
     $id = (int) $_GET['id'];
     $existingBook = $bookRepo->findById($id);
@@ -58,24 +63,26 @@ if (isset($_GET['id'])) {
     }
 }
 
-// Handle form submission
+// ── POST: บันทึกข้อมูลหนังสือ (create หรือ update) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF validation
+    // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff สร้าง/แก้หนังสือ
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('books.php');
     }
     
+    // 📥 รับ input จาก form — trim ป้องกัน whitespace หัว/ท้าย
     $book['title'] = trim($_POST['title'] ?? '');
     $book['author'] = trim($_POST['author'] ?? '');
     $book['isbn'] = trim($_POST['isbn'] ?? '');
     $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
     $book['description'] = trim($_POST['description'] ?? '');
-    $book['quantity'] = max(1, (int) ($_POST['quantity'] ?? 1));
+    $book['quantity'] = max(1, (int) ($_POST['quantity'] ?? 1)); // ขั้นต่ำ 1 เล่ม
     $isEdit = !empty($_POST['id']);
     $book['id'] = (int) ($_POST['id'] ?? 0);
     
-    // Validation
+    // ── Input Validation ──
+    // 🔍 ตรวจสอบข้อมูลก่อนส่งเข้า Service
     if (empty($book['title'])) {
         $errors[] = 'กรุณากรอกชื่อหนังสือ';
     } elseif (mb_strlen($book['title']) > 200) {
@@ -88,14 +95,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'ชื่อผู้แต่งต้องไม่เกิน 100 ตัวอักษร';
     }
     
-    // Check ISBN duplicate using repository
+    // 🔍 [DATA INTEGRITY] ตรวจ ISBN ซ้ำ — exclude ตัวเองในกรณี edit
+    //    isbnExists($isbn, $excludeId) จะไม่นับ ID ของหนังสือที่กำลังแก้
     if (!empty($book['isbn'])) {
         if ($bookRepo->isbnExists($book['isbn'], $book['id'] ?: null)) {
             $errors[] = 'ISBN นี้มีในระบบแล้ว';
         }
     }
     
-    // [FILE UPLOAD] จัดการรูปปก - มีความเสี่ยงสูงถ้าไม่ validate ถูกต้อง
+    // ── [FILE UPLOAD] จัดการรูปปก ──
+    // ⚠️ มีความเสี่ยงสูงถ้าไม่ validate — อาจถูก upload shell/malware
     $coverImage = $book['cover_image'] ?? null;
     if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['cover_image'];
@@ -139,7 +148,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // ── บันทึกข้อมูล (ถ้าไม่มี error) ──
     if (empty($errors)) {
+        // 📦 เตรียม data array ส่งเข้า Service
         $bookData = [
             'title' => $book['title'],
             'author' => $book['author'],
@@ -152,9 +163,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             if ($isEdit) {
+                // [WRITE] อัปเดตหนังสือ — Service จัดการ available adjustment ให้
                 $bookService->updateBook($book['id'], $bookData);
                 setFlash('success', 'อัปเดตหนังสือสำเร็จ');
             } else {
+                // [WRITE] สร้างหนังสือใหม่ — available = quantity
                 $bookService->createBook($bookData);
                 setFlash('success', 'เพิ่มหนังสือสำเร็จ');
             }
@@ -172,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get categories using repository
+// 📂 ดึงหมวดหมู่ทั้งหมดสำหรับ dropdown ใน form
 $categories = $categoryRepo->findAll();
 
 $pageTitle = $isEdit ? 'แก้ไขหนังสือ' : 'เพิ่มหนังสือ';

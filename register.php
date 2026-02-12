@@ -16,34 +16,38 @@
  * - incrementRateLimit() เรียกก่อน validation — ป้องกัน bypass ด้วย invalid data
  */
 
+// 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/bootstrap.php';
 
-// Redirect if already logged in
+// 🔁 ถ้า login แล้ว → redirect ไปหน้าแรก
 if (isLoggedIn()) {
     redirect(APP_URL . '/index.php');
 }
 
 $errors = [];
+// 📝 เก็บค่าไว้สำหรับแสดงค่าเดิมใน form ถ้าเกิด error
 $name = '';
 $email = '';
 $phone = '';
 
-// Process registration
+// ── POST: สมัครสมาชิกใหม่ ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [SECURITY] CSRF validation
+    // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
     
-    // [SECURITY] Rate limiting ป้องกัน spam registration
-    // ใช้ global key (ไม่ใช่ per-email) เพราะ attacker สามารถใช้ email ใหม่ทุกครั้ง
+    // 🛡️ [SECURITY] Rate limiting ป้องกัน spam registration
+    //    ใช้ global key (ไม่ใช่ per-email) — เพราะ attacker สร้าง email ใหม่ได้ทุกครั้ง
+    //    ถ้าใช้ per-email → attacker แค่เปลี่ยน email ก็ bypass ได้
     $rateLimitKey = 'register';
     
     if (!checkRateLimit($rateLimitKey)) {
         $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
     }
     
-    // นับ attempt ก่อน validation - ป้องกันการ bypass ด้วย invalid data
+    // 🧠 นับ attempt ก่อน validation — ป้องกัน bypass ด้วย invalid data
+    //    ถ้านับหลัง validate → bot ส่ง invalid data ได้ไม่จำกัด
     incrementRateLimit($rateLimitKey);
     
     $name = trim($_POST['name'] ?? '');
@@ -52,18 +56,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
-    // Validation via shared helper (Single Source of Truth)
+    // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ admin member_form.php)
     $errors = array_merge($errors, validateMemberData([
         'name' => $name, 'email' => $email,
         'phone' => $phone, 'password' => $password
     ]));
     
-    // Page-specific: confirm password match
+    // 🔒 Page-specific: ตรวจ confirm password ตรงกัน
     if ($password !== $confirmPassword) {
         $errors[] = 'รหัสผ่านไม่ตรงกัน';
     }
     
     if (empty($errors)) {
+        // 🚀 [WRITE] สมัครผ่าน AuthService → MemberService::createMember()
+        //    สร้างได้เฉพาะ role=member — admin/staff ต้องสร้างผ่าน admin panel
         $authService = new \App\Services\AuthService(getDB());
         
         $result = $authService->register([
