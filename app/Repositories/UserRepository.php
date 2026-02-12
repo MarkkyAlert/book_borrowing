@@ -1,21 +1,44 @@
 <?php
 /**
  * UserRepository - Data Access Layer สำหรับผู้ใช้งาน
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - Repository นี้จัดการ CRUD สำหรับตาราง users
- * - รองรับ 3 roles: admin, staff, member
- * - password ต้อง hash ก่อนส่งเข้า create()/updatePassword()
- * 
- * 📌 Methods สำคัญ:
- * - findByEmail()     → ใช้ตอน login (รวม password hash)
- * - findMemberById()  → ดึงเฉพาะ member (ไม่รวม password)
- * - emailExists()     → ตรวจซ้ำก่อน register/update
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Repository นี้จัดการ CRUD สำหรับตาราง users (ผู้ใช้ทั้งหมดในระบบ)
+ * รองรับ 3 roles: admin, staff, member
+ *
+ * 📚 โครงสร้างตาราง users:
+ * +------------+--------------+------------------------------------------+
+ * | Column     | Type         | อธิบาย                                     |
+ * +------------+--------------+------------------------------------------+
+ * | id         | INT AUTO PK  | Primary Key                              |
+ * | name       | VARCHAR      | ชื่อ-นามสกุล                             |
+ * | email      | VARCHAR UNQ  | อีเมล (unique, ใช้ login)               |
+ * | phone      | VARCHAR NULL | เบอร์โทร (ไม่บังคับ)                    |
+ * | password   | VARCHAR      | bcrypt hash (ห้ามเก็บ plaintext)      |
+ * | role       | ENUM         | 'admin', 'staff', 'member'               |
+ * | created_at | DATETIME     | วันสมัคร                                   |
+ * +------------+--------------+------------------------------------------+
+ *
+ * 📍 Entrypoints:
+ * - AuthService      → findByEmail() (login), create() (register), updatePassword() (reset)
+ * - MemberService    → findMemberById(), create(), update(), deleteMember(), emailExists()
+ * - admin/members.php → findMembers() (แสดงรายการสมาชิก)
+ * - DashboardService → countMembers(), countNewThisMonth()
+ * - BorrowService    → lockById() (row lock ก่อนยืม)
+ *
+ * 🛡️ Security Design:
+ * - password เก็บเป็น bcrypt hash เสมอ (ห้ามเก็บ plaintext)
+ * - findByEmail() คืน password hash สำหรับ login เท่านั้น
+ * - findById()/findMemberById() ไม่คืน password กลับ (SELECT เฉพาะ column)
+ * - lockById() ใช้ FOR UPDATE ป้องกัน race condition
+ *
  * ⚠️ ห้ามแก้:
- * - findByEmail() return password hash - ใช้สำหรับ login เท่านั้น
- * - create() รับ hashed password - ห้ามส่ง plaintext
- * 
+ * - findByEmail() return password hash — ใช้สำหรับ login เท่านั้น
+ * - create() รับ hashed password — ห้ามส่ง plaintext
+ * - lockById() ต้องเรียกใน transaction เท่านั้น
+ *
  * @package App\Repositories
  */
 
@@ -25,40 +48,58 @@ use PDO;
 
 class UserRepository
 {
+    // 🗄️ PDO connection — inject ผ่าน constructor ใช้ร่วมกันทุกเมธอด
     private PDO $pdo;
 
+    // 🏗️ Constructor: รับ PDO จากภายนอก (Dependency Injection)
+    // → ใช้ connection เดียวกับ AuthService / MemberService / BorrowService
+    // → ทำให้ transaction + FOR UPDATE lock ทำงานถูกต้อง
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
     }
 
     /**
-     * ดึงผู้ใช้ทั้งหมดตาม filters
-     * 
-     * @param array $filters {
-     *     role?: string,    // กรองตาม role ('admin', 'staff', 'member')
-     *     search?: string   // ค้นหาใน name, email, phone
-     * }
-     * @return array รายการผู้ใช้ (ไม่รวม password)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ทั้งหมดตาม filters (ไม่คืน password)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param array $filters {role?: string, search?: string}
+     *              - role: กรองตาม role เช่น 'member'
+     *              - search: ค้นใน name, email, phone (LIKE)
+     *
+     * 📤 Output:
+     * @return array [{id, name, email, phone, role, created_at}, ...]
+     *
+     * 🛡️ Security: SELECT เฉพาะ column (ไม่รวม password) + prepared statement
+     * ✅ Use case: findAllMembers() เรียกต่อด้วย role='member'
      */
     public function findAll(array $filters = []): array
     {
+        // 📦 สร้างเงื่อนไข WHERE จาก filters
         $where = [];
         $params = [];
 
+        // 🏷️ Filter: role (เช่น 'member', 'staff', 'admin')
         if (!empty($filters['role'])) {
             $where[] = "role = ?";
             $params[] = $filters['role'];
         }
 
+        // 🔍 Filter: ค้นหาใน name, email, phone (LIKE)
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $where[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+            // 📌 array_merge เพราะต้องต่อท้าย params จาก role filter (ถ้ามี)
             $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
         }
 
+        // 🔗 ประกอบ WHERE clause
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        // 📝 SQL: ดึง users (ไม่รวม password) + filters
+        // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
         $stmt = $this->pdo->prepare("
             SELECT id, name, email, phone, role, created_at 
             FROM users 
@@ -66,166 +107,263 @@ class UserRepository
             ORDER BY name
         ");
         $stmt->execute($params);
+        // 📤 คืน array users (ไม่มี password)
         return $stmt->fetchAll();
     }
 
     /**
-     * ดึงสมาชิกทั้งหมด (role = 'member')
-     * 
-     * @return array รายการสมาชิก (ไม่รวม password)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงสมาชิกทั้งหมด (role='member' เท่านั้น)
+     * ==========================================================================
+     * Shortcut ของ findAll(['role' => 'member'])
+     *
+     * 📤 Output: @return array รายการสมาชิก (ไม่รวม password)
+     * ✅ Use case: admin/borrow_form.php → dropdown เลือกสมาชิก
      */
     public function findAllMembers(): array
     {
+        // 📌 Shortcut: เรียก findAll() พร้อมกรอง role='member'
+        // 🧠 แยกเมธอดเพื่อความสะดวก — ไม่ต้องส่ง filter ทุกครั้ง
         return $this->findAll(['role' => 'member']);
     }
 
     /**
-     * ดึงผู้ใช้ตาม ID
-     * 
-     * @param int $id User ID
-     * @return array|null ข้อมูลผู้ใช้ (ไม่รวม password) หรือ null ถ้าไม่พบ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ตาม ID (ไม่คืน password)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id User ID
+     * 📤 Output: @return array|null {id, name, email, phone, role, created_at} หรือ null
+     *
+     * 🛡️ Security: SELECT เฉพาะ column — ไม่รวม password hash
+     * ✅ Use case: getCurrentUser() ใน functions.php, profile.php
      */
     public function findById(int $id): ?array
     {
+        // 📝 SQL: ดึง user ตาม ID (ไม่รวม password)
+        // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash (ปลอดภัย)
         $stmt = $this->pdo->prepare("
             SELECT id, name, email, phone, role, created_at 
             FROM users WHERE id = ?
         ");
         $stmt->execute([$id]);
+        // 📤 คืน user data (ไม่มี password) หรือ null
         return $stmt->fetch() ?: null;
     }
 
     /**
-     * ดึงผู้ใช้ตาม email (รวม password สำหรับ login)
-     * 
-     * @param string $email อีเมล
-     * @return array|null ข้อมูลผู้ใช้ทั้งหมด (รวม password hash)
-     * 
-     * @security ใช้สำหรับ login - ไม่ควรส่ง password กลับไป client
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ตาม email (รวม password hash สำหรับ login)
+     * ==========================================================================
+     * เมธอดนี้เป็นเมธอดเดียวที่ SELECT * (รวม password)
+     * เพราะ AuthService ต้องใช้ password_verify() เทียบกับ hash
+     *
+     * 📥 Input: @param string $email อีเมลที่ user กรอกตอน login
+     * 📤 Output: @return array|null ข้อมูลทั้งหมด (รวม password hash) หรือ null
+     *
+     * 🛡️ Security:
+     * - คืน password hash เฉพาะ AuthService ใช้ — ห้ามส่งกลับไป client
+     * - ไม่แยกว่า "email ไม่พบ" หรือ "password ผิด" — ป้องกัน user enumeration
+     *
+     * ⚠️ Edge case: email ไม่มีในระบบ → null → AuthService แสดง "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
+     * ✅ Use case: login.php → AuthService::login() → findByEmail()
      */
     public function findByEmail(string $email): ?array
     {
+        // 📝 SQL: SELECT * รวม password hash (เมธอดเดียวที่คืน password)
+        // 🔴 เมธอดนี้ใช้สำหรับ login เท่านั้น!
+        //    AuthService ใช้ password_verify() เทียบกับ hash
+        //    ห้ามส่ง password hash กลับไป client!
         $stmt = $this->pdo->prepare("
             SELECT * FROM users WHERE email = ?
         ");
         $stmt->execute([$email]);
+        // 📤 คืน user data (รวม password hash) หรือ null
         return $stmt->fetch() ?: null;
     }
 
     /**
-     * ดึงสมาชิกตาม ID (role = 'member' เท่านั้น)
-     * 
-     * @param int $id User ID
-     * @return array|null ข้อมูลสมาชิก หรือ null ถ้าไม่พบหรือไม่ใช่ member
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงสมาชิกตาม ID (เฉพาะ role='member' ไม่คืน password)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id User ID
+     * 📤 Output: @return array|null {id, name, email, phone, role, created_at} หรือ null
+     *
+     * 🧠 เหตุผล:
+     * - ทำไมแยกจาก findById()? เพราะกรอง role='member' ด้วย
+     *   ป้องกันการดึงข้อมูล admin/staff ผ่านเมธอดนี้
+     *
+     * ✅ Use case: admin/member_form.php, admin/member_card.php
      */
     public function findMemberById(int $id): ?array
     {
+        // 📝 SQL: ดึงสมาชิกตาม ID (เฉพาะ role='member')
+        // 🛡️ AND role='member' ป้องกันดึงข้อมูล admin/staff ผ่านเมธอดนี้
+        // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
         $stmt = $this->pdo->prepare("
             SELECT id, name, email, phone, role, created_at 
             FROM users WHERE id = ? AND role = 'member'
         ");
         $stmt->execute([$id]);
+        // 📤 คืน member data หรือ null (ถ้า id ไม่ใช่ member → null)
         return $stmt->fetch() ?: null;
     }
 
     /**
-     * สร้างผู้ใช้ใหม่
-     * 
-     * @param array $data {
-     *     name: string,       // ชื่อ (required)
-     *     email: string,      // อีเมล (required, unique)
-     *     password: string,   // password hash (required, ต้อง hash ก่อนส่งมา)
-     *     phone?: string,     // เบอร์โทร
-     *     role?: string       // role (default: 'member')
-     * }
-     * @return int ID ของผู้ใช้ที่สร้าง
-     * @sideeffect INSERT ลง users table
-     * @security password ต้อง hash ก่อนส่งมา (ใช้ password_hash)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างผู้ใช้ใหม่ (INSERT users)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param array $data {name, email, password(ต้อง hash แล้ว), phone?, role?}
+     *              - มาจาก: MemberService::createMember(), AuthService::register()
+     *
+     * 📤 Output: @return int ID ของ user ที่สร้าง
+     *
+     * 🛡️ Security:
+     * - password ต้องเป็น hash แล้ว (ห้ามส่ง plaintext) — Service layer hash ก่อนเรียก
+     * - prepared statement ป้องกัน SQL Injection
+     *
+     * ⚠️ Edge case: email ซ้ำ → UNIQUE violation → PDOException
+     *    Service ต้องเช็ค emailExists() ก่อน
+     *
+     * ✅ Use case:
+     * 1) register.php → AuthService → MemberService::createMember() → create()
+     * 2) admin/member_form.php → MemberService::createMember() → create()
      */
     public function create(array $data): int
     {
+        // 📝 SQL: INSERT user ใหม่
+        // 🔴 $data['password'] ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
+        //    Service layer ต้อง password_hash() ก่อนเรียก
         $stmt = $this->pdo->prepare("
             INSERT INTO users (name, email, phone, password, role)
             VALUES (?, ?, ?, ?, ?)
         ");
 
+        // 🚀 bind ค่าทั้งหมด
         $stmt->execute([
-            $data['name'],
-            $data['email'],
-            $data['phone'] ?? null,
-            $data['password'],
-            $data['role'] ?? 'member'
+            $data['name'],              // ชื่อ (บังคับ)
+            $data['email'],             // อีเมล (บังคับ, UNIQUE)
+            $data['phone'] ?? null,     // เบอร์โทร (ไม่บังคับ)
+            $data['password'],          // password hash (บังคับ, ต้องเป็น hash!)
+            $data['role'] ?? 'member'   // role (default: member)
         ]);
 
+        // 📤 คืน user ID ที่สร้าง (AUTO_INCREMENT)
         return (int) $this->pdo->lastInsertId();
     }
 
     /**
-     * อัปเดตข้อมูลผู้ใช้ (ไม่รวม password)
-     * 
-     * @param int $id User ID
-     * @param array $data { name: string, email: string, phone?: string }
-     * @return bool true = สำเร็จ
-     * @sideeffect UPDATE users table
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อัปเดตข้อมูลผู้ใช้ (ไม่รวม password)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int   $id   User ID
+     * @param array $data {name, email, phone?} - มาจาก MemberService, AuthService
+     *
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * 🧠 เหตุผล: แยก update password ออกเป็น updatePassword() ต่างหาก
+     *    เพื่อป้องกันการ update profile แล้วทับ password โดยไม่ตั้งใจ
+     *
+     * ✅ Use case: MemberService::updateMember(), AuthService::updateProfile()
      */
     public function update(int $id, array $data): bool
     {
+        // 📝 SQL: UPDATE ข้อมูล user (ไม่รวม password)
+        // 🧠 แยก update password ออกเป็น updatePassword() ต่างหาก
+        //    ป้องกัน update profile แล้วทับ password โดยไม่ตั้งใจ
         $stmt = $this->pdo->prepare("
             UPDATE users SET name = ?, email = ?, phone = ?
             WHERE id = ?
         ");
 
+        // 🚀 bind: [$name, $email, $phone, $id]
         return $stmt->execute([
-            $data['name'],
-            $data['email'],
-            $data['phone'] ?? null,
-            $id
+            $data['name'],              // 1. ชื่อ
+            $data['email'],             // 2. อีเมล
+            $data['phone'] ?? null,     // 3. เบอร์โทร (null ถ้าไม่ระบุ)
+            $id                         // 4. WHERE id = ?
         ]);
     }
 
     /**
-     * อัปเดตรหัสผ่าน
-     * 
-     * @param int    $id             ID ผู้ใช้
-     * @param string $hashedPassword password ที่ hash แล้ว (ต้อง hash ก่อนส่งมา)
-     * @return bool true = สำเร็จ
-     * 
-     * @security password ต้อง hash ก่อนส่งมา (ใช้ password_hash)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อัปเดตรหัสผ่าน (เฉพาะ password)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $id             User ID
+     * @param string $hashedPassword password ที่ hash แล้ว (ห้ามส่ง plaintext!)
+     *                               - มาจาก: AuthService::resetPassword(), changePassword()
+     *
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * 🛡️ Security: รับเฉพาะ hash — Service layer ต้อง hashPassword() ก่อนเรียก
+     * ✅ Use case:
+     * 1) reset_password.php → AuthService::resetPassword() → updatePassword()
+     * 2) profile.php → AuthService::changePassword() → updatePassword()
+     * 3) admin/member_form.php → MemberService → updatePassword()
      */
     public function updatePassword(int $id, string $hashedPassword): bool
     {
+        // 📝 SQL: เปลี่ยนเฉพาะ password (ไม่แตะข้อมูลอื่น)
+        // 🔴 $hashedPassword ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
+        //    Service layer ต้อง password_hash() ก่อนเรียก
         $stmt = $this->pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
         return $stmt->execute([$hashedPassword, $id]);
     }
 
     /**
-     * ลบผู้ใช้
-     * 
-     * @param int $id User ID
-     * @return bool true = สำเร็จ
-     * @sideeffect DELETE from users table
-     * @throws PDOException ถ้ามี FK constraint (เช่น มี borrow records)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ลบผู้ใช้ (ทุก role)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id User ID
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * ⚠️ Edge case: ถ้ามี borrow/reservation อยู่ → FK constraint → PDOException
+     *    ควรใช้ deleteMember() แทน (กรอง role='member')
+     *    หรือเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
      */
     public function delete(int $id): bool
     {
+        // 📝 SQL: ลบ user ทุก role (ไม่กรอง role)
+        // ⚠️ ถ้ามี borrow/reservation ค้าง → FK constraint → PDOException
+        //    ควรใช้ deleteMember() แทน (กรอง role='member' ปลอดภัยกว่า)
+        //    หรือเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
         $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ?");
         return $stmt->execute([$id]);
     }
 
     /**
-     * ตรวจสอบว่า email ซ้ำหรือไม่
-     * 
-     * @param string   $email     อีเมลที่ต้องการตรวจสอบ
-     * @param int|null $excludeId ID ที่ต้องการยกเว้น (ใช้ตอน update)
-     * @return bool true = มีอยู่แล้ว (ห้ามใช้)
-     * 
-     * @usecase ใช้ตอน register หรือ update profile
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจว่า email ซ้ำหรือไม่ (ก่อน register/update)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param string   $email     email ที่ตรวจ
+     * @param int|null $excludeId ID ยกเว้น (ใช้ตอน update — ไม่นับตัวเอง)
+     *
+     * 📤 Output: @return bool true = มีอยู่แล้ว (ห้ามใช้)
+     *
+     * 🧠 เหตุผล: เหมือน CategoryRepository::nameExists() — $excludeId ป้องกันนับตัวเองตอน update
+     * ✅ Use case:
+     * 1) register.php → MemberService → emailExists('new@mail.com')
+     * 2) admin/member_form.php → MemberService → emailExists('new@mail.com', 5)
      */
     public function emailExists(string $email, ?int $excludeId = null): bool
     {
+        // 📝 SQL เริ่มต้น: นับจำนวน user ที่ email ตรงกัน
         $sql = "SELECT COUNT(*) FROM users WHERE email = ?";
         $params = [$email];
 
+        // 🧠 $excludeId = ยกเว้น ID ตัวเอง (ใช้ตอน update)
+        //    เช่น แก้ไข user ID=5 ที่มี email "a@b.com"
+        //    ต้องยกเว้น ID=5 ออก ไม่งั้นจะบอกว่า "email ซ้ำ" กับตัวเอง
         if ($excludeId) {
             $sql .= " AND id != ?";
             $params[] = $excludeId;
@@ -233,6 +371,7 @@ class UserRepository
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+        // 📤 > 0 = email ซ้ำ (true → ห้ามใช้), = 0 = ใช้ได้ (false)
         return $stmt->fetchColumn() > 0;
     }
 
@@ -240,12 +379,17 @@ class UserRepository
     // เหตุผล: ลด duplication, BorrowRepository เป็น owner ของ borrows table
 
     /**
-     * นับจำนวนสมาชิก (role = 'member')
-     * 
-     * @return int จำนวนสมาชิก
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนสมาชิกทั้งหมด (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 📤 Output: @return int จำนวน member
+     * ✅ Use case: admin/index.php → DashboardService → "จำนวนสมาชิก"
      */
     public function countMembers(): int
     {
+        // 📝 SQL: นับจำนวนสมาชิกทั้งหมด (เฉพาะ member ไม่รวม admin/staff)
+        // 🧠 ใช้ query() เพราะไม่มี user input
         return (int) $this->pdo->query("
             SELECT COUNT(*) FROM users WHERE role = 'member'
         ")->fetchColumn();
@@ -255,36 +399,69 @@ class UserRepository
     // เหตุผล: BorrowRepository เป็น owner ของ borrows table และมี COALESCE ป้องกัน null
 
     /**
-     * Lock user row สำหรับ transaction
-     * 
-     * @param int $id ID ผู้ใช้
-     * @return array|null ข้อมูลผู้ใช้ (ถูก lock จน commit/rollback)
-     * 
-     * @note ต้องเรียกภายใน transaction เท่านั้น
-     * @security FOR UPDATE ป้องกัน race condition เช่น ยืมเกินโควต้า
+     * ==========================================================================
+     * 🎯 จุดประสงค์: Lock user row ป้องกัน race condition (SELECT FOR UPDATE)
+     * ==========================================================================
+     * ใช้ล็อค row ของ user ระหว่างทำ transaction
+     * ป้องกันหลาย request ทำงานพร้อมกัน เช่น ยืมหนังสือ 2 เล่มพร้อมกัน
+     *
+     * 📥 Input: @param int $id User ID
+     * 📤 Output: @return array|null {id} (ถูก lock จน commit/rollback)
+     *
+     * 🛡️ Security:
+     * - FOR UPDATE = row-level lock — request อื่นต้องรอ
+     * - ต้องเรียกภายใน transaction เท่านั้น (ไม่งั้น lock ไม่ทำงาน)
+     *
+     * ✅ Use case: BorrowService::createBorrow() → lockById() ก่อนตรวจโควต้ายืม
      */
     public function lockById(int $id): ?array
     {
+        // 📝 SQL: SELECT id + FOR UPDATE = ดึง + ล็อกแถว
+        // 🔴 FOR UPDATE = row-level lock:
+        //    request อื่นที่อยากแก้ user นี้ต้อง "wait" จน transaction นี้จบ
+        //    ป้องกันยืมหนังสือ 2 เล่มพร้อมกัน (race condition)
+        // ⚠️ ต้องเรียกใน transaction (beginTransaction...commit) เท่านั้น!
+        // 🧠 SELECT เฉพาะ id (ไม่ต้องการข้อมูลอื่น แค่ล็อกแถว)
         $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = ? FOR UPDATE");
         $stmt->execute([$id]);
+        // 📤 คืน {id} (ถูกล็อก) หรือ null
         return $stmt->fetch() ?: null;
     }
 
     /**
-     * ดึงรายการสมาชิกพร้อม filters, sorting และ borrow stats
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการสมาชิกพร้อม filters, sorting และสถิติการยืม
+     * ==========================================================================
+     * เมธอดหลักสำหรับหน้า admin/members.php
+     *
+     * 🔄 Flow: SELECT users + subquery(total_borrows, active_borrows)
+     *        + WHERE filters + HAVING status + ORDER BY sort
+     *
+     * 📥 Input:
      * @param array $filters {
-     *     search?: string,    // ค้นหาใน name, email, phone
-     *     status?: string,    // 'has_borrow' | 'no_borrow'
-     *     sort?: string       // 'newest' (default), 'oldest', 'az', 'za', 'most_borrows'
+     *     search?: string  — ค้นใน name, email, phone (LIKE)
+     *     status?: string  — 'has_borrow' | 'no_borrow' (HAVING)
+     *     sort?: string    — 'newest', 'oldest', 'az', 'za', 'most_borrows'
      * }
-     * @return array[] แต่ละ element: user row + total_borrows, active_borrows (subquery)
+     *
+     * 📤 Output:
+     * @return array[] แต่ละ element: user row + total_borrows, active_borrows
+     *
+     * 🧠 เหตุผลเชิงออกแบบ:
+     * - ใช้ subquery แทน JOIN เพราะไม่ต้องการ GROUP BY users
+     * - HAVING ใช้กรอง status เพราะเป็นค่าจาก subquery (WHERE ไม่ได้)
+     * - sort ใช้ switch-case แปลงเป็น ORDER BY clause
+     *
+     * 🛡️ Security: prepared statement, sort whitelist (ไม่ใช้ user input ตรงใน ORDER BY)
+     * ✅ Use case: admin/members.php GET
      */
     public function findMembers(array $filters = []): array
     {
+        // 📝 เริ่มจาก role='member' เสมอ (กรองเฉพาะสมาชิก)
         $where = ["role = 'member'"];
         $params = [];
 
+        // 🔍 Filter: ค้นหาใน name, email, phone (LIKE)
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $where[] = "(name LIKE ? OR email LIKE ? OR phone LIKE ?)";
@@ -293,9 +470,12 @@ class UserRepository
             $params[] = "%{$search}%";
         }
 
+        // 🔗 ประกอบ WHERE clause
         $whereSQL = 'WHERE ' . implode(' AND ', $where);
         
-        // Status filter (requires subquery/HAVING)
+        // 🏷️ Status filter: กรองตามสถานะการยืม
+        // 🧠 ใช้ HAVING ไม่ใช้ WHERE เพราะ active_borrows มาจาก subquery
+        //    WHERE กรองได้แค่ column จริง / HAVING กรองได้ค่าจาก subquery/aggregate
         $havingSQL = "";
         $status = $filters['status'] ?? '';
         if ($status === 'has_borrow') {
@@ -304,7 +484,8 @@ class UserRepository
             $havingSQL = "HAVING active_borrows = 0";
         }
         
-        // Sort mapping
+        // 📊 Sort mapping (whitelist ป้องกัน SQL Injection)
+        // 🛡️ ไม่ใช้ user input ตรงๆ ใน ORDER BY — ใช้ switch แปลงเป็นค่าที่อนุญาต
         $orderBy = 'u.created_at DESC';
         $sort = $filters['sort'] ?? 'newest';
         switch ($sort) {
@@ -315,6 +496,10 @@ class UserRepository
             default: $orderBy = 'u.created_at DESC'; break;
         }
 
+        // 📝 SQL: ดึงสมาชิก + subquery นับการยืม
+        // 🧠 subquery แทน JOIN เพราะไม่ต้องการ GROUP BY users
+        //    total_borrows = ยืมทั้งหมด (borrowing + returned)
+        //    active_borrows = ยืมค้างอยู่ (borrowing only)
         $stmt = $this->pdo->prepare("
             SELECT u.*,
                    (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
@@ -325,32 +510,49 @@ class UserRepository
             ORDER BY {$orderBy}
         ");
         $stmt->execute($params);
+        // 📤 คืน array สมาชิก + สถิติการยืม
         return $stmt->fetchAll();
     }
 
     /**
-     * ลบสมาชิก (เฉพาะ role='member' เท่านั้น)
-     * 
-     * @param int $id ID สมาชิก
-     * @return bool true = สำเร็จ
-     * 
-     * @sideeffect DELETE FROM users WHERE role='member'
-     * @throws \PDOException ถ้ามี FK constraint (borrows/reservations)
-     * @note ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ลบสมาชิก (เฉพาะ role='member' ปลอดภัยกว่า delete())
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id Member ID
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * 🧠 เหตุผล:
+     * - ทำไมแยกจาก delete()? เพราะเพิ่ม AND role='member' ป้องกันลบ admin/staff โดยไม่ตั้งใจ
+     *
+     * ⚠️ Edge case: ถ้ามี borrow/reservation อยู่ → FK constraint → PDOException
+     *    ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
+     *
+     * ✅ Use case: admin/member_form.php → MemberService::deleteMember() → deleteMember()
      */
     public function deleteMember(int $id): bool
     {
+        // 📝 SQL: ลบเฉพาะ member (กรอง role='member')
+        // 🛡️ AND role='member' ป้องกันลบ admin/staff โดยไม่ตั้งใจ
+        //    แม้ ID จะตรงกับ admin → DELETE 0 rows (ไม่ลบ)
+        // ⚠️ ถ้ามี borrow/reservation ค้าง → FK constraint → PDOException
+        //    ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
         $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'member'");
         return $stmt->execute([$id]);
     }
 
     /**
-     * นับสมาชิกใหม่เดือนนี้ (สำหรับ dashboard)
-     * 
-     * @return int จำนวน member ที่สมัครเดือนนี้ (ตาม created_at)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับสมาชิกใหม่เดือนนี้ (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 📤 Output: @return int จำนวน member ที่สมัครเดือนนี้
+     * ✅ Use case: admin/index.php → DashboardService → "สมาชิกใหม่เดือนนี้"
      */
     public function countNewThisMonth(): int
     {
+        // 📝 SQL: นับสมาชิกใหม่เดือนนี้ (role='member' + MONTH+YEAR)
+        // 🧠 กรองทั้ง MONTH + YEAR ป้องกันดึงข้ามปี (ม.ค.ปีนี้ vs ม.ค.ปีก่อน)
         return (int) $this->pdo->query("
             SELECT COUNT(*) FROM users 
             WHERE role = 'member' AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())

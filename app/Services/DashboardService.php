@@ -1,16 +1,28 @@
 <?php
 /**
  * DashboardService - Business Logic สำหรับ Admin Dashboard
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - Service นี้เป็น read-only aggregator — รวมสถิติจากหลาย Repository
- * - ไม่มี write operation ใดๆ (ไม่ INSERT/UPDATE/DELETE)
- * - ทุก method เป็น "ดึงข้อมูล" สำหรับแสดงผลบน dashboard
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Service นี้เป็น read-only aggregator — รวมสถิติจากหลาย Repository
+ * ไม่มี write operation ใดๆ (ไม่ INSERT/UPDATE/DELETE)
+ * ทุก method เป็น "ดึงข้อมูล" สำหรับแสดงผลบน dashboard
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * admin/index.php → DashboardService → BookRepository
+ *                                      → BorrowRepository
+ *                                      → UserRepository
+ *                                      → CategoryRepository
+ *                                      → ReservationRepository
+ *                                      → PaymentRepository
+ *                                      → ReportRepository
+ *
  * 📍 Entrypoint:
- * - admin/index.php → getCardStats(), getRecentBorrows(), getOverdueList(),
- *                      getMonthlyStats(), getCategoryStats(), getTopBorrowers(), etc.
- * 
+ * - admin/index.php → ทุก method
+ *
+ * 🛡️ Security: read-only — ไม่มี side effect
+ *
  * @package App\Services
  */
 
@@ -35,6 +47,7 @@ use PDO;
 
 class DashboardService
 {
+    // 🗄️ PDO + Repositories ทั้งหมด (read-only — ไม่มี write)
     private PDO $pdo;
     private BookRepository $bookRepo;
     private BorrowRepository $borrowRepo;
@@ -44,6 +57,8 @@ class DashboardService
     private PaymentRepository $paymentRepo;
     private ReportRepository $reportRepo;
     
+    // 🏗️ Constructor: สร้าง repo ทั้งหมด — ใช้ PDO เดียวกัน
+    //    ไม่ต้องการ transaction เพราะเป็น read-only service
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
@@ -57,119 +72,161 @@ class DashboardService
     }
     
     /**
-     * ดึงสถิติ summary cards (book/borrow/members stats)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติ summary cards (book/borrow/member/reservation)
+     * ==========================================================================
+     *
+     * 📤 Output: @return array {total_books, available_books, borrowed_books,
+     *          total_members, active_borrows, overdue_borrows, pending_reservations}
+     * ✅ Use case: admin/index.php → stat cards ด้านบน
      */
     public function getCardStats(): array
     {
+        // 📝 รวมสถิติจากหลาย repo เป็น 1 array
+        //    แต่ละ key เป็น 1 stat card บน dashboard
         $bookStats = $this->bookRepo->getStatistics();
         return [
-            'total_books' => $bookStats['total'],
-            'available_books' => $bookStats['available'],
-            'borrowed_books' => $bookStats['borrowed'],
-            'total_members' => $this->userRepo->countMembers(),
-            'active_borrows' => $this->borrowRepo->countActive(),
-            'overdue_borrows' => $this->borrowRepo->countOverdue(),
-            'pending_reservations' => $this->reservationRepo->countPending()
+            'total_books' => $bookStats['total'],           // หนังสือทั้งหมด
+            'available_books' => $bookStats['available'],    // หนังสือว่าง
+            'borrowed_books' => $bookStats['borrowed'],      // หนังสือถูกยืม
+            'total_members' => $this->userRepo->countMembers(),             // สมาชิกทั้งหมด
+            'active_borrows' => $this->borrowRepo->countActive(),           // ยืมค้างอยู่
+            'overdue_borrows' => $this->borrowRepo->countOverdue(),         // เกินกำหนด
+            'pending_reservations' => $this->reservationRepo->countPending() // จองรอรับ
         ];
     }
     
     /**
-     * ดึงรายการยืมล่าสุด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการยืมล่าสุด (pass-through)
+     * ==========================================================================
      */
     public function getRecentBorrows(int $limit = 5): array
     {
+        // 📝 Pass-through → borrows ล่าสุด
         return $this->borrowRepo->findRecent($limit);
     }
     
     /**
-     * ดึงรายการจองล่าสุด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการจองล่าสุด (pass-through)
+     * ==========================================================================
      */
     public function getRecentReservations(int $limit = 5): array
     {
+        // 📝 Pass-through → pending reservations ล่าสุด
         return $this->reservationRepo->findPending($limit);
     }
     
     /**
-     * ดึงรายการเกินกำหนด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการเกินกำหนดคืน (pass-through)
+     * ==========================================================================
      */
     public function getOverdueList(int $limit = 10): array
     {
+        // 📝 Pass-through → borrows ที่ due_date < today
         return $this->borrowRepo->findOverdue($limit);
     }
     
     /**
-     * ดึงสถิติรายเดือน (สำหรับ Chart)
-     * ใช้ ReportRepository เป็น single source of truth
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติรายเดือน (สำหรับ Chart)
+     * ==========================================================================
      */
     public function getMonthlyStats(int $months = 6): array
     {
+        // 📝 Pass-through → สถิติรายเดือน (สำหรับ Chart.js)
         return $this->reportRepo->getMonthlyReport($months);
     }
     
     /**
-     * ดึงสถิติหมวดหมู่ (สำหรับ Chart)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติหมวดหมู่ (สำหรับ Chart)
+     * ==========================================================================
      */
     public function getCategoryStats(int $limit = 6): array
     {
+        // 📝 Pass-through → หมวดหมู่ + จำนวนยืม (สำหรับ Chart.js)
         return $this->categoryRepo->getStatistics($limit);
     }
     
     /**
-     * ดึงยอดค่าปรับที่รับชำระแล้ว
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดค่าปรับที่รับชำระแล้ว (pass-through)
+     * ==========================================================================
      */
     public function getTotalFinesCollected(): float
     {
+        // 📝 Pass-through → SUM(amount) จาก payments
         return $this->paymentRepo->getTotalCollected();
     }
 
     /**
-     * ดึงยอดค่าปรับค้างชำระ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดค่าปรับค้างชำระ (pass-through)
+     * ==========================================================================
      */
     public function getUnpaidFines(): float
     {
+        // 📝 Pass-through → SUM(fine_amount) ที่ยังไม่มี payment
         return $this->paymentRepo->getUnpaidTotal();
     }
 
     /**
-     * ดึงสมาชิกที่ยืมมากที่สุด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สมาชิกยืมมากที่สุด (pass-through)
+     * ==========================================================================
      */
     public function getTopBorrowers(int $limit = 5): array
     {
+        // 📝 Pass-through → สมาชิกยืมมากที่สุด
         return $this->reportRepo->getTopBorrowers($limit);
     }
     
     /**
-     * ดึงหนังสือยอดนิยม
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หนังสือยอดนิยม (pass-through)
+     * ==========================================================================
      */
     public function getPopularBooks(int $limit = 5): array
     {
+        // 📝 Pass-through → หนังสือยอดนิยม
         return $this->reportRepo->getPopularBooks($limit);
     }
 
     /**
-     * ดึงหนังสือที่ใกล้หมด stock
-     * 
-     * @param int $threshold จำนวน available ที่ถือว่า "ใกล้หมด"
-     * @param int $limit จำนวนรายการที่ต้องการ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หนังสือใกล้หมด stock (pass-through)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $threshold, @param int $limit
      */
     public function getLowStockBooks(int $threshold = 2, int $limit = 5): array
     {
+        // 📝 Pass-through → หนังสือที่ available <= threshold
         return $this->bookRepo->findLowStock($threshold, $limit);
     }
 
     /**
-     * ดึงรายการค้างชำระค่าปรับ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการค้างชำระค่าปรับ (pass-through)
+     * ==========================================================================
      */
     public function getUnpaidFinesList(int $limit = 10): array
     {
+        // 📝 Pass-through → borrows ที่มี fine_amount > 0 แต่ยังไม่มี payment
         return $this->borrowRepo->getUnpaidFinesList($limit);
     }
 
     /**
-     * ดึงหมวดหมู่ทั้งหมดพร้อมสถิติ (สำหรับ PDF report)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หมวดหมู่ทั้งหมด + สถิติ (สำหรับ PDF report)
+     * ==========================================================================
      */
     public function getAllCategoriesWithStats(): array
     {
+        // 📝 Pass-through → หมวดหมู่ทั้งหมด + สถิติ (สำหรับ PDF report)
         return $this->reportRepo->getAllCategoriesWithStats();
     }
 }

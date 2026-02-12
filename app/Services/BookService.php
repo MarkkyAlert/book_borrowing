@@ -1,21 +1,32 @@
 <?php
 /**
  * BookService - Business Logic สำหรับการจัดการหนังสือ
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - Service นี้จัดการ CRUD หนังสือ
- * - quantity = จำนวนทั้งหมด, available = จำนวนที่ว่าง
- * - available จะลดเมื่อยืม/จอง และเพิ่มเมื่อคืน/ยกเลิก
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Service นี้จัดการ CRUD หนังสือ + business rule validation
+ * เช่น quantity/available ต้องสัมพันธ์กัน และเงื่อนไขการลบ
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * Controller (admin/books.php) → BookService → BookRepository
+ *                                              → BorrowRepository (เช็คก่อนลบ)
+ *                                              → ReservationRepository (เช็คก่อนลบ)
+ *
  * 📍 Entrypoints:
  * - admin/books.php      → getBooks(), deleteBook()
  * - admin/book_form.php  → createBook(), updateBook()
  * - index.php, book.php  → getBooks(), getBookById()
- * 
+ * - DashboardService     → getStatistics()
+ *
+ * 🛡️ Security Design:
+ * - deleteBook() ใช้ transaction + row lock + ตรวจ 3 เงื่อนไขก่อนลบ
+ * - updateBook() ตรวจว่าลด quantity ได้โดยไม่ทำให้ available ติดลบ
+ *
  * ⚠️ ห้ามแก้:
- * - available ห้ามแก้โดยตรง - ต้องผ่าน BorrowService/ReservationService
+ * - available ห้ามแก้โดยตรง — ต้องผ่าน BorrowService/ReservationService
  * - deleteBook() ตรวจ borrow history ก่อนลบ
- * 
+ *
  * @package App\Services
  */
 
@@ -33,11 +44,14 @@ use Exception;
 
 class BookService
 {
+    // 🗄️ PDO connection — ใช้สำหรับ transaction (deleteBook)
     private PDO $pdo;
+    // 🗄️ Repositories — แต่ละตัวจัดการ table เฉพาะ
     private BookRepository $bookRepo;
     private BorrowRepository $borrowRepo;
     private ReservationRepository $reservationRepo;
 
+    // 🏗️ Constructor: สร้าง repo ทั้งหมด — ใช้ PDO เดียวกัน = transaction ทำงานถูกต้อง
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
@@ -47,91 +61,107 @@ class BookService
     }
 
     /**
-     * ดึงรายการหนังสือทั้งหมด พร้อม filter
-     * 
-     * @param array $filters {
-     *     search?: string,
-     *     category_id?: int,
-     *     status?: string ('available', 'borrowed', 'out_of_stock', 'low_stock'),
-     *     sort?: string ('newest', 'oldest', 'az')
-     * }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการหนังสือ + filters (pass-through ไป Repository)
+     * ==========================================================================
+     *
+     * 📥 Input: @param array $filters {search?, category_id?, status?, sort?}
+     * 📤 Output: @return array รายการหนังสือ
+     * ✅ Use case: admin/books.php, index.php
      */
     public function getBooks(array $filters = []): array
     {
-        // Repository จัดการ search, category_id, status, sort ใน SQL ทั้งหมด
+        // 📝 Pass-through ไป Repository — Repository จัดการ search, category_id, status, sort ใน SQL
+        //    Service ไม่เพิ่ม logic เพราะเป็นแค่การดึงข้อมูล
         return $this->bookRepo->findAll($filters);
     }
 
     /**
-     * ดึงหนังสือตาม ID
-     * 
-     * @param int $id ID หนังสือ
-     * @return array|null ข้อมูลหนังสือพร้อม category_name, null ถ้าไม่พบ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงหนังสือตาม ID (พร้อม category_name)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id
+     * 📤 Output: @return array|null หนังสือ + category_name หรือ null
+     * ✅ Use case: book.php, admin/book_form.php (edit mode)
      */
     public function getBookById(int $id): ?array
     {
+        // 📝 Pass-through → findById (JOIN category_name)
         return $this->bookRepo->findById($id);
     }
 
     /**
-     * ดึงหนังสือที่ยังว่างอยู่ (available > 0)
-     * 
-     * @return array[] รายการหนังสือที่มี stock เรียงตามชื่อ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงหนังสือที่ยังว่าง (available > 0)
+     * ==========================================================================
+     *
+     * 📤 Output: @return array[] หนังสือที่มี stock เรียงตามชื่อ
+     * ✅ Use case: admin/borrow_form.php → dropdown เลือกหนังสือ
      */
     public function getAvailableBooks(): array
     {
+        // 📝 Pass-through → findAvailable (WHERE available > 0)
         return $this->bookRepo->findAvailable();
     }
 
     /**
-     * สร้างหนังสือใหม่
-     * 
-     * @param array $data {
-     *     title: string,        // ชื่อหนังสือ (required)
-     *     author: string,       // ผู้แต่ง (required)
-     *     isbn?: string,        // ISBN
-     *     category_id?: int,    // ID หมวดหมู่
-     *     description?: string, // รายละเอียด
-     *     cover_image?: string, // ชื่อไฟล์รูปปก
-     *     quantity?: int        // จำนวน (default: 1)
-     * }
-     * @return int ID หนังสือที่สร้าง
-     * @sideeffect INSERT ลง books table
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างหนังสือใหม่ (pass-through ไป Repository)
+     * ==========================================================================
+     *
+     * 📥 Input: @param array $data {title, author, isbn?, category_id?, description?, cover_image?, quantity?}
+     * 📤 Output: @return int Book ID ที่สร้าง
+     * ✅ Use case: admin/book_form.php POST (create mode)
      */
     public function createBook(array $data): int
     {
+        // 📝 Pass-through → INSERT (available = quantity โดย default ใน repo)
         return $this->bookRepo->create($data);
     }
 
     /**
-     * อัปเดตหนังสือ
-     * 
-     * @param int $id ID หนังสือ
-     * @param array $data ข้อมูลที่ต้องการอัปเดต (ดูโครงสร้างใน createBook)
-     * @return bool true = สำเร็จ
-     * @throws Exception ถ้าไม่พบหนังสือ
-     * @sideeffect UPDATE books table, available จะถูกคำนวณใหม่ตาม quantity diff
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อัปเดตหนังสือ + คำนวณ available ตาม quantity diff
+     * ==========================================================================
+     *
+     * 🔄 Flow: findById → validate quantity → calc available → update
+     *
+     * 📥 Input: @param int $id, @param array $data {title, author, isbn?, ...}
+     * 📤 Output: @return bool true = สำเร็จ
+     * @throws Exception ถ้าลด quantity ต่ำกว่าจำนวนที่ออกอยู่
+     *
+     * 🧠 เหตุผล: available = old_available + (new_quantity - old_quantity)
+     *   ห้ามลด quantity < currentlyOut (จะทำให้ available ติดลบ)
+     *
+     * ✅ Use case: admin/book_form.php POST (edit mode)
      */
     public function updateBook(int $id, array $data): bool
     {
+        // 📝 Step 1: ดึงข้อมูลเดิม (ต้องใช้ quantity + available เดิม)
         $book = $this->getBookById($id);
         if (!$book) {
             throw new Exception('ไม่พบหนังสือ');
         }
 
-        // Calculate new available based on quantity change
+        // 📝 Step 2: คำนวณ available ใหม่จาก quantity diff
+        //    สูตร: available_ใหม่ = available_เดิม + (quantity_ใหม่ - quantity_เดิม)
         $oldQuantity = $book['quantity'];
         $newQuantity = $data['quantity'] ?? $oldQuantity;
         
-        // [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ — ไม่งั้น available จะติดลบ
+        // 🛡️ [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
+        //    เช่น quantity=10, available=3 → currentlyOut=7 → ลดเป็น 6 ไม่ได้ (ติดลบ)
         $currentlyOut = $oldQuantity - $book['available'];
         if ($newQuantity < $currentlyOut) {
             throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
         }
         
+        // 📝 Step 3: คำนวณ available ใหม่
+        //    max(0, ...) ป้องกันติดลบ (safety net)
         $quantityDiff = $newQuantity - $oldQuantity;
         $newAvailable = max(0, $book['available'] + $quantityDiff);
 
+        // 📝 Step 4: UPDATE ทั้งข้อมูล + quantity/available ที่คำนวณแล้ว
         return $this->bookRepo->update($id, [
             'title' => $data['title'],
             'author' => $data['author'],
@@ -145,51 +175,56 @@ class BookService
     }
 
     /**
-     * ลบหนังสือพร้อมตรวจเงื่อนไข 3 ข้อ และลบไฟล์รูปปก
-     * 
-     * @param int $id ID หนังสือ
-     * @return bool true = สำเร็จ
-     * 
-     * @throws Exception ถ้า:
-     *     - หนังสือกำลังถูกยืม (isBeingBorrowed)
-     *     - มีประวัติการยืม (hasBorrowHistory)
-     *     - มีการจองที่รอดำเนินการ (countPendingByBook > 0)
-     * 
-     * @sideeffect DELETE จาก books table + ลบไฟล์ uploads/covers/
-     * @security ใช้ transaction + row lock (FOR UPDATE) ป้องกัน race condition
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ลบหนังสือ + ตรวจ 3 เงื่อนไข + ลบรูปปก
+     * ==========================================================================
+     *
+     * 🔄 Flow: BEGIN TX → lock row → check 3 guards → DELETE → COMMIT → delete cover file
+     *
+     * 📥 Input: @param int $id Book ID
+     * 📤 Output: @return bool true = สำเร็จ
+     * @throws Exception ถ้ามีคนยืม/มีประวัติ/มี pending reservation
+     *
+     * 🛡️ Security: transaction + FOR UPDATE lock
+     * 🧠 เหตุผล: ลบรูปหลัง COMMIT — ป้องกัน orphan file ถ้า DB ล้มเหลว
+     * ✅ Use case: admin/books.php DELETE
      */
     public function deleteBook(int $id): bool
     {
+        // 📝 Step 1: เปิด transaction
         $this->pdo->beginTransaction();
 
         try {
-            // Lock book row
+            // 🔒 Step 2: Lock book row (FOR UPDATE) ป้องกันลบพร้อมกัน 2 admin
             $book = $this->bookRepo->findByIdForUpdate($id);
 
             if (!$book) {
                 throw new Exception('ไม่พบหนังสือที่ต้องการลบ');
             }
 
-            // [DATA INTEGRITY] ตรวจ 3 เงื่อนไขก่อนลบ — CASCADE DELETE จะทำลายข้อมูลที่เกี่ยวข้อง
+            // 🛡️ Step 3: ตรวจ 3 เงื่อนไขก่อนลบ — CASCADE DELETE จะทำลายข้อมูลที่เกี่ยวข้อง
+            // Guard #1: มีคนยืมอยู่หรือไม่
             if ($this->isBeingBorrowed($id)) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้กำลังถูกยืมอยู่');
             }
 
+            // Guard #2: มีประวัติการยืมหรือไม่ (ลบแล้วสถิติหาย)
             if ($this->hasBorrowHistory($id)) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีประวัติการยืม');
             }
 
-            // pending reservation ถูกหัก stock ไปแล้ว — ลบจะทำให้ stock ไม่ถูกคืน
+            // Guard #3: มี pending reservation (หัก stock ไปแล้ว ลบจะทำให้ stock ไม่ถูกคืน)
             if ($this->reservationRepo->countPendingByBook($id) > 0) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีการจองที่รอดำเนินการอยู่');
             }
 
-            // Delete book
+            // 📝 Step 4: DELETE book จาก DB
             $this->bookRepo->delete($id);
 
             $this->pdo->commit();
 
-            // [CLEANUP] ลบรูปหลัง DB commit สำเร็จ — ป้องกัน orphan file ถ้า DB ล้มเหลว
+            // 🧹 Step 5: ลบรูปปกหลัง DB commit สำเร็จ
+            //    ลบหลัง commit เพราะถ้าลบรูปก่อนแล้ว DB rollback → orphan file
             if (!empty($book['cover_image'])) {
                 $this->deleteCoverImage($book['cover_image']);
             }
@@ -197,63 +232,85 @@ class BookService
             return true;
 
         } catch (Exception $e) {
+            // ❌ rollback → หนังสือยังอยู่
             $this->pdo->rollBack();
             throw $e;
         }
     }
 
     /**
-     * ตรวจสอบว่าหนังสือกำลังถูกยืมอยู่หรือไม่ (status='borrowing')
-     * 
-     * @param int $bookId ID หนังสือ
-     * @return bool true = มีคนยืมอยู่
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจว่าหนังสือกำลังถูกยืมอยู่หรือไม่
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return bool true = มีคนยืมอยู่
+     * ✅ Use case: deleteBook() guard #1
      */
     public function isBeingBorrowed(int $bookId): bool
     {
+        // 📝 นับ status='borrowing' ของหนังสือนี้ > 0 = มีคนยืมอยู่
         return $this->borrowRepo->countActiveByBook($bookId) > 0;
     }
 
     /**
-     * ตรวจสอบว่าหนังสือมีประวัติการยืมหรือไม่ (ทุก status รวมคืนแล้ว)
-     * 
-     * @param int $bookId ID หนังสือ
-     * @return bool true = มีประวัติ (ไม่ควรลบ)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจว่าหนังสือมีประวัติการยืมหรือไม่ (ทุก status)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return bool true = มีประวัติ (ไม่ควรลบ)
+     * ✅ Use case: deleteBook() guard #2
      */
     public function hasBorrowHistory(int $bookId): bool
     {
+        // 📝 นับทุก status ของหนังสือนี้ > 0 = มีประวัติ (ไม่ควรลบ)
         return $this->borrowRepo->countByBook($bookId) > 0;
     }
 
     /**
-     * ค้นหาหนังสือโดย ID หรือ ISBN (สำหรับ barcode scan)
-     * 
-     * @param string $identifier ID หรือ ISBN
-     * @return array|null { id, title, author, available } หรือ null
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ค้นหาหนังสือโดย ID หรือ ISBN (สำหรับ barcode scan)
+     * ==========================================================================
+     *
+     * 📥 Input: @param string $identifier (ID หรือ ISBN)
+     * 📤 Output: @return array|null {id, title, author, available} หรือ null
+     * ✅ Use case: admin/borrow_form.php → search book by barcode/ID
      */
     public function findByIdOrIsbn(string $identifier): ?array
     {
+        // 📝 Pass-through → ค้นหาตาม ID หรือ ISBN (สำหรับ barcode scan)
         return $this->bookRepo->findByIdOrIsbn($identifier);
     }
 
     /**
-     * ดึงสถิติหนังสือภาพรวม (สำหรับ dashboard)
-     * 
-     * @return array { total: int, available: int, borrowed: int, titles: int }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติหนังสือภาพรวม (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 📤 Output: @return array {total, available, borrowed, titles}
+     * ✅ Use case: DashboardService, HomeService
      */
     public function getStatistics(): array
     {
+        // 📝 Pass-through → {total, available, borrowed, titles}
         return $this->bookRepo->getStatistics();
     }
 
     /**
-     * ลบไฟล์รูปปกจาก disk (เรียกหลัง DB commit สำเร็จเท่านั้น)
-     * 
-     * @param string $filename ชื่อไฟล์ (ไม่รวม path)
-     * @sideeffect ลบไฟล์จาก uploads/covers/
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ลบไฟล์รูปปกจาก disk (เรียกหลัง DB commit)
+     * ==========================================================================
+     *
+     * 📥 Input: @param string $filename ชื่อไฟล์ (ไม่รวม path)
+     * 🧠 เหตุผล: เรียกหลัง commit — ป้องกัน orphan file ถ้า DB rollback
+     * ✅ Use case: deleteBook() ขั้นตอนสุดท้าย
      */
     private function deleteCoverImage(string $filename): void
     {
+        // 📝 สร้าง full path จาก project root + uploads/covers/
         $coverPath = dirname(__DIR__, 2) . '/uploads/covers/' . $filename;
+        // 🛡️ file_exists ป้องกัน error ถ้าไฟล์ถูกลบไปแล้ว
         if (file_exists($coverPath)) {
             unlink($coverPath);
         }

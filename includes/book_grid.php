@@ -1,4 +1,8 @@
+<?php // 📝 HTML partial: ถูก require จาก api/search_books.php + index.php
+//    ต้องมีตัวแปร $books (array) ก่อน require
+?>
 <?php if (empty($books)): ?>
+    <!-- 📝 Empty state: ไม่พบหนังสือ -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down">
         <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
             <i class="bi bi-search" style="font-size: 3rem;"></i>
@@ -7,12 +11,15 @@
         <p class="text-gray-500">ลองค้นหาด้วยคำอื่น หรือปรับเปลี่ยนตัวกรองของคุณใหม่</p>
     </div>
 <?php else: ?>
+    <!-- 📝 Grid: 1 col (mobile) → 2 col (tablet) → 4 col (desktop) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <?php foreach ($books as $index => $book): ?>
+            <?php // 📝 animation-delay ตาม index — card โผล่ทีละใบ ?>
             <div class="group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up" style="animation-delay: <?= $index * 50 ?>ms">
                 <!-- Cover Image -->
                 <div class="relative h-64 overflow-hidden bg-gray-100">
                     <?php if (!empty($book['cover_image'])): ?>
+                        <?php // 📝 แสดงรูปปกจาก uploads/covers/ + e() ป้องกัน XSS ?>
                         <img src="<?= APP_URL ?>/uploads/covers/<?= e($book['cover_image']) ?>" 
                              class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" 
                              alt="<?= e($book['title']) ?>">
@@ -23,7 +30,7 @@
                         </div>
                     <?php endif; ?>
                     
-                    <!-- Status Badge -->
+                    <!-- 📝 Status Badge: ว่าง/หมด (ตาม available) -->
                     <div class="absolute top-4 right-4">
                         <?php if ($book['available'] > 0): ?>
                             <span class="px-3 py-1 bg-green-500/90 backdrop-blur-sm text-white text-xs font-bold rounded-full shadow-lg flex items-center">

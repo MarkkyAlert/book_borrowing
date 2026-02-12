@@ -1,6 +1,6 @@
     </main>
     
-    <!-- Footer (ปิด <main> ที่เปิดจาก includes/header.php) -->
+    <!-- 📝 Footer: ปิด </main> ที่เปิดจาก includes/header.php -->
     <footer class="bg-white border-t border-gray-100 mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="md:flex md:items-center md:justify-between">
@@ -27,11 +27,12 @@
         </div>
     </footer>
     
-    <!-- Script to remove loading overlay if exists -->
+    <!-- 📝 Script: ลบ loading overlay หลัง page load เสร็จ (ถ้ามี) -->
     <script>
         window.addEventListener('load', function() {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
+                // 📝 fade out 500ms แล้วลบออกจาก DOM
                 overlay.style.opacity = '0';
                 setTimeout(() => {
                     overlay.remove();

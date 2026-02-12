@@ -1,15 +1,24 @@
 <?php
 /**
  * HomeService - Business Logic สำหรับหน้าแรก (public, ไม่ต้อง login)
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - Service นี้เป็น read-only — ดึงข้อมูลหนังสือ/หมวดหมู่สำหรับหน้า public
- * - ไม่มี write operation ใดๆ
- * - ใช้ BookRepository + CategoryRepository
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Service นี้เป็น read-only — ดึงข้อมูลหนังสือ/หมวดหมู่/สถิติ
+ * สำหรับหน้า public (ไม่ต้อง login)
+ * ไม่มี write operation ใดๆ
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * index.php → HomeService → BookRepository
+ *                          → CategoryRepository
+ *                          → UserRepository
+ *
  * 📍 Entrypoint:
- * - index.php → getBooks() (รายการหนังสือ + filter + categories)
- * 
+ * - index.php → getBooks(), getStats(), getCategories()
+ *
+ * 🛡️ Security: read-only — ไม่มี side effect
+ *
  * @package App\Services
  */
 
@@ -26,11 +35,13 @@ use PDO;
 
 class HomeService
 {
+    // 🗄️ PDO + Repositories (read-only — ไม่มี write)
     private PDO $pdo;
     private BookRepository $bookRepo;
     private CategoryRepository $categoryRepo;
     private UserRepository $userRepo;
     
+    // 🏗️ Constructor: สร้าง repo ทั้งหมด — read-only service ไม่ต้องการ transaction
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
@@ -40,17 +51,22 @@ class HomeService
     }
     
     /**
-     * ดึงรายการหนังสือพร้อม filters (สำหรับหน้าแรก)
-     * 
-     * @param array $filters {
-     *     search?: string,      // คำค้นหา (title, author)
-     *     category_id?: int,    // ID หมวดหมู่
-     *     status?: string       // 'available' = มีให้ยืม
-     * }
-     * @return array { books: array, categories: array }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงหนังสือ + categories สำหรับหน้าแรก
+     * ==========================================================================
+     *
+     * 📥 Input: @param array $filters {search?, category_id?, status?}
+     * 📤 Output: @return array {books: array, categories: array}
+     *
+     * 🧠 เหตุผล: คืนทั้ง books + categories ในครั้งเดียว
+     *   เพื่อลด round-trip (หน้าแรกต้องแสดงทั้ง dropdown กรอง + รายการ)
+     *
+     * ✅ Use case: index.php
      */
     public function getBooks(array $filters = []): array
     {
+        // 📝 แปลง request params เป็น repo filters
+        //    กรองเฉพาะค่าที่ไม่ว่างออก (ป้องกันส่งค่าว่างไป DB)
         $bookFilters = [];
         
         if (!empty($filters['search'])) {
@@ -65,6 +81,8 @@ class HomeService
             $bookFilters['available'] = true;
         }
         
+        // 📤 คืนทั้ง books + categories ในครั้งเดียว
+        //    ลด round-trip: หน้าแรกต้องใช้ทั้ง dropdown กรอง + รายการหนังสือ
         return [
             'books' => $this->bookRepo->findAll($bookFilters),
             'categories' => $this->categoryRepo->findAll()
@@ -72,29 +90,32 @@ class HomeService
     }
     
     /**
-     * ดึงสถิติสำหรับ Dashboard
-     * 
-     * @return array {
-     *     total_books: int,      // จำนวนหนังสือทั้งหมด (รวม quantity)
-     *     available_books: int,  // จำนวนหนังสือที่ยังมีให้ยืม
-     *     total_members: int     // จำนวนสมาชิก
-     * }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติหน้าแรก (public dashboard)
+     * ==========================================================================
+     *
+     * 📤 Output: @return array {total_books, available_books, total_members}
+     * ✅ Use case: index.php → stat cards
      */
     public function getStats(): array
     {
+        // 📝 รวมสถิติสำหรับแสดงหน้าแรก (public dashboard)
         $bookStats = $this->bookRepo->getStatistics();
         return [
-            'total_books' => $bookStats['total'],
-            'available_books' => $bookStats['available'],
-            'total_members' => $this->userRepo->countMembers()
+            'total_books' => $bookStats['total'],        // หนังสือทั้งหมด
+            'available_books' => $bookStats['available'],  // หนังสือว่าง
+            'total_members' => $this->userRepo->countMembers()  // สมาชิกทั้งหมด
         ];
     }
     
     /**
-     * ดึงหมวดหมู่ทั้งหมด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงหมวดหมู่ทั้งหมด (pass-through)
+     * ==========================================================================
      */
     public function getCategories(): array
     {
+        // 📝 Pass-through → หมวดหมู่ทั้งหมด (ORDER BY name)
         return $this->categoryRepo->findAll();
     }
 }

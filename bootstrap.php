@@ -1,22 +1,38 @@
 <?php
 /**
  * Bootstrap File - จุดเริ่มต้นของ Application
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - ไฟล์นี้ถูก require ที่บรรทัดแรกของทุกหน้า
- * - โหลด config, database, helper functions
- * - ตั้งค่า autoloader สำหรับ class ใน app/
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * ไฟล์นี้ถูก require ที่บรรทัดแรกของทุกหน้า ทำหน้าที่:
+ * 1. โหลด config (constants ทั้งหมด)
+ * 2. โหลด database connection (PDO singleton)
+ * 3. โหลด helper functions (ใช้ได้ทั่วระบบ)
+ * 4. ล้าง idempotency keys หมดอายุ
+ * 5. ตั้งค่า autoloader สำหรับ class ใน app/
+ * 6. ตั้งค่า error reporting ตาม APP_DEBUG
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * ทุกหน้า (.php) → require bootstrap.php → config + db + functions พร้อมใช้
+ *
  * 📂 โครงสร้างโปรเจค:
- * - *.php (root)     → หน้าเว็บสำหรับ user ทั่วไป
- * - admin/*.php      → หน้า admin/staff
- * - api/*.php        → JSON API endpoints
- * - app/Services/    → Business logic (ห้ามเข้าถึง DB โดยตรง)
- * - app/Repositories/→ Database access (SQL queries)
- * - includes/        → Config, DB connection, helper functions
- * 
- * การใช้งาน:
- * require_once __DIR__ . '/bootstrap.php';
+ * - *.php (root)      → หน้าเว็บ public
+ * - admin/*.php       → หน้า admin/staff
+ * - api/*.php         → JSON API endpoints
+ * - app/Services/     → Business logic
+ * - app/Repositories/ → Database access (SQL)
+ * - includes/         → Config, DB, helper functions
+ *
+ * 🛡️ Security:
+ * - ป้องกันเข้าถึงโดยตรง (basename check)
+ * - error reporting ตาม APP_DEBUG (production ซ่อน error)
+ *
+ * ⚠️ ห้ามแก้:
+ * - ลำดับ require (ต้อง config ก่อน db ก่อน functions)
+ * - autoloader map (ต้องตรงกับ namespace)
+ *
+ * การใช้งาน: require_once __DIR__ . '/bootstrap.php';
  */
 
 // Prevent direct access
@@ -41,8 +57,12 @@ require_once BASE_PATH . '/includes/functions.php';
 cleanupIdempotencyKeys();
 
 /**
- * Simple autoloader for app/ classes
- * รองรับ class ใน app/Services/, app/Repositories/, etc.
+ * ==========================================================================
+ * 🎯 Autoloader: โหลด class จาก app/ อัตโนมัติตาม namespace
+ * ==========================================================================
+ * 🧠 เหตุผล: map namespace prefix → directory
+ *   เช่น App\Services\BookService → app/Services/BookService.php
+ * ⚠️ ถ้าเพิ่ม namespace ใหม่ ต้องเพิ่มใน $map ด้วย
  */
 spl_autoload_register(function (string $class) {
     // Map namespace to directory
@@ -68,7 +88,10 @@ spl_autoload_register(function (string $class) {
 });
 
 /**
- * Error handler based on APP_DEBUG constant
+ * ==========================================================================
+ * 🎯 Error Reporting: ตั้งค่าตาม APP_DEBUG
+ * ==========================================================================
+ * 🛡️ production (APP_DEBUG=false): ซ่อน error ทั้งหมด
  */
 if (defined('APP_DEBUG') && APP_DEBUG) {
     error_reporting(E_ALL);

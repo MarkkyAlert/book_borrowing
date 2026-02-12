@@ -1,23 +1,37 @@
 <?php
 /**
  * AuthService - Authentication & Authorization Business Logic
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - ไฟล์นี้จัดการ Login/Register/Password Reset
- * - ห้ามแก้ไขโดยไม่เข้าใจ - กระทบความปลอดภัยทั้งระบบ
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Service นี้จัดการ Authentication (login/register) และ
+ * Account Management (profile update, password change/reset)
+ * เป็นไฟล์ที่สำคัญที่สุดด้าน security — ห้ามแก้โดยไม่เข้าใจ
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * Controller (login.php) → AuthService → UserRepository / PasswordResetRepository
+ *                                       → MemberService (สำหรับ register)
+ *
  * 📍 Entrypoints:
- * - login.php          → login()
- * - register.php       → register()
- * - forgot_password.php→ requestPasswordReset()
- * - reset_password.php → resetPassword()
- * - profile.php        → updateProfile(), changePassword()
- * 
- * ⚠️ ห้ามแก้ (Security Critical):
- * - login()     - ตรวจ password, ป้องกัน user enumeration
- * - register()  - delegate ไป MemberService::createMember()
- * - requestPasswordReset() - สร้าง token, ป้องกัน enumeration
- * 
+ * - login.php           → login()
+ * - register.php        → register()
+ * - forgot_password.php → requestPasswordReset()
+ * - reset_password.php  → resetPassword(), validateResetToken()
+ * - profile.php         → updateProfile(), changePassword()
+ *
+ * 🛡️ Security Design:
+ * - login(): ไม่แยกว่า "email ไม่พบ" หรือ "password ผิด" — ป้องกัน user enumeration
+ * - register(): delegate ไป MemberService (single source of truth)
+ * - requestPasswordReset(): return success แม้ email ไม่มีในระบบ
+ * - resetPassword(): transaction — เปลี่ยน password + mark token used พร้อมกัน
+ * - changePassword(): ยืนยันรหัสผ่านเดิมก่อน — ป้องกัน session hijack
+ * - updateProfile(): email ไม่เปลี่ยน — ป้องกัน account takeover
+ *
+ * ⚠️ ห้ามแก้:
+ * - login() ห้ามเปลี่ยน error message ให้แยกระหว่าง email/password
+ * - requestPasswordReset() ห้ามเปลี่ยนให้ return error เมื่อ email ไม่พบ
+ *
  * @package App\Services
  */
 
@@ -31,9 +45,13 @@ use PDO;
 
 class AuthService
 {
+    // 🗄️ PDO connection — ใช้สำหรับ transaction (reset password)
     private PDO $pdo;
+    // 🗄️ UserRepository — ดึง/แก้ไขข้อมูล user
     private UserRepository $userRepo;
     
+    // 🏗️ Constructor: สร้าง dependencies ทั้งหมด
+    // → PDO ใช้ร่วมกัน = transaction ทำงานถูกต้อง
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
@@ -45,27 +63,42 @@ class AuthService
     // =========================================================================
     
     /**
-     * ดำเนินการ Login
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดำเนินการ Login (email + password)
+     * ==========================================================================
+     *
+     * 🔄 Flow: findByEmail() → password_verify() → return user | null
+     *
+     * 📥 Input:
      * @param string $email    อีเมลผู้ใช้
      * @param string $password รหัสผ่าน (plaintext)
-     * @return array|null User data if success, null if failed
-     * 
-     * @security ไม่บอกว่า email หรือ password ผิด (ป้องกัน user enumeration)
+     *
+     * 📤 Output: @return array|null user data (รวม password hash) หรือ null
+     *
+     * 🛡️ Security:
+     * - ไม่แยกว่า "email ไม่พบ" หรือ "password ผิด" — return null เหมือนกัน
+     * - ป้องกัน user enumeration attack
+     *
+     * ✅ Use case: login.php POST
      */
     public function login(string $email, string $password): ?array
     {
+        // 📝 Step 1: ค้นหา user จาก email (คืน password hash ด้วย)
         $user = $this->userRepo->findByEmail($email);
         
-        // [SECURITY] ไม่แยกว่า "ไม่พบ email" หรือ "password ผิด" — return null เหมือนกัน
+        // 🛡️ [SECURITY] ไม่แยกว่า "ไม่พบ email" หรือ "password ผิด" — return null เหมือนกัน
+        //    ป้องกัน user enumeration attack (ผู้โจมตีไม่รู้ว่า email มีในระบบหรือไม่)
         if (!$user) {
             return null;
         }
         
+        // 📝 Step 2: เทียบ plaintext กับ hash ด้วย password_verify()
+        //    ⚠️ ห้ามใช้ == หรือ === เทียบ password! ต้องใช้ password_verify() เท่านั้น
         if (!password_verify($password, $user['password'])) {
             return null;
         }
         
+        // 📤 คืน user data (รวม hash) → Controller จะเก็บ id + role ใน session
         return $user;
     }
     
@@ -74,22 +107,28 @@ class AuthService
     // =========================================================================
     
     /**
-     * ลงทะเบียนผู้ใช้ใหม่
-     * 
-     * @param array $data {
-     *     name: string,     // ชื่อ-นามสกุล (required)
-     *     email: string,    // อีเมล (required, unique)
-     *     password: string, // รหัสผ่าน plaintext (required, min 6 chars)
-     *     phone?: string    // เบอร์โทร (optional)
-     * }
-     * @return array { success: bool, user_id?: int, error?: string }
-     * 
-     * @sideeffect INSERT ลง users table (ผ่าน MemberService)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ลงทะเบียนผู้ใช้ใหม่ (delegate ไป MemberService)
+     * ==========================================================================
+     *
+     * 🔄 Flow: validate → MemberService::createMember() → return result
+     *
+     * 📥 Input:
+     * @param array $data {name, email, password, phone?}
+     *
+     * 📤 Output: @return array {success: bool, user_id?: int, error?: string}
+     *
+     * 🧠 เหตุผล: delegate ไป MemberService เพื่อ single source of truth
+     *   (การสร้าง member ทั้งจาก register และ admin ใช้ logic เดียวกัน)
+     *
+     * ✅ Use case: register.php POST
      */
     public function register(array $data): array
     {
         try {
-            // Delegate ไปที่ MemberService (Single Source of Truth สำหรับสร้าง member)
+            // 🧠 Delegate ไปที่ MemberService (Single Source of Truth สำหรับสร้าง member)
+            //    ทั้ง register.php และ admin/member_form.php ใช้ logic เดียวกัน
+            //    → validate, check duplicate, hash password, INSERT
             $memberService = new MemberService($this->pdo);
             $result = $memberService->createMember([
                 'name' => $data['name'] ?? '',
@@ -98,8 +137,10 @@ class AuthService
                 'password' => $data['password'] ?? ''
             ]);
             
+            // 📤 สำเร็จ → คืน user_id ไปให้ Controller login อัตโนมัติ
             return ['success' => true, 'user_id' => $result['id']];
         } catch (\Exception $e) {
+            // ❌ MemberService throw Exception → ดักแล้วคืน error message
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -109,56 +150,82 @@ class AuthService
     // =========================================================================
     
     /**
-     * อัปเดตข้อมูลโปรไฟล์
-     * 
-     * @param int   $userId User ID
-     * @param array $data   { name: string, phone?: string }
-     * @return bool true = success
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อัปเดตข้อมูลโปรไฟล์ (name + phone เท่านั้น)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId, @param array $data {name, phone?}
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * 🛡️ Security: email ไม่เปลี่ยนผ่านหน้านี้ — ป้องกัน account takeover
+     * ✅ Use case: profile.php POST
      */
     public function updateProfile(int $userId, array $data): bool
     {
+        // 📝 Step 1: ดึง user ปัจจุบัน (ต้องมี email เดิม)
         $user = $this->userRepo->findById($userId);
         if (!$user) {
             return false;
         }
         
-        // [SECURITY] email ไม่เปลี่ยนผ่านหน้านี้ — ป้องกัน user แอบเปลี่ยน email ของตัวเอง (account takeover)
+        // 🛡️ [SECURITY] email ไม่เปลี่ยนผ่านหน้านี้ — ป้องกัน user แอบเปลี่ยน email ของตัวเอง
+        //    ⚠️ ใช้ $user['email'] (จาก DB) ไม่ใช่ $data['email'] (จาก POST)
+        //    ถ้า user ส่ง email ใหม่มาใน form → ถูกเขียนทับด้วย email เดิมจาก DB
         return $this->userRepo->update($userId, [
             'name' => $data['name'],
-            'email' => $user['email'],
+            'email' => $user['email'],       // 🔒 email เดิมจาก DB เสมอ
             'phone' => $data['phone'] ?? null
         ]);
     }
     
     /**
-     * เปลี่ยนรหัสผ่าน
-     * 
-     * @param int    $userId          User ID
-     * @param string $currentPassword รหัสผ่านปัจจุบัน (plaintext)
-     * @param string $newPassword     รหัสผ่านใหม่ (plaintext)
-     * @return array { success: bool, error?: string }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เปลี่ยนรหัสผ่าน (ต้องยืนยันรหัสเดิมก่อน)
+     * ==========================================================================
+     *
+     * 🔄 Flow: findById → findByEmail(ได้ hash) → password_verify → updatePassword
+     *
+     * 📥 Input:
+     * @param int    $userId
+     * @param string $currentPassword รหัสปัจจุบัน (plaintext)
+     * @param string $newPassword     รหัสใหม่ (plaintext)
+     *
+     * 📤 Output: @return array {success: bool, error?: string}
+     *
+     * 🛡️ Security:
+     * - ยืนยันรหัสเดิมก่อน — ป้องกัน session hijack เปลี่ยนรหัส
+     * - ห้ามใช้รหัสเดิมซ้ำ
+     *
+     * ✅ Use case: profile.php → แบบฟอร์มเปลี่ยนรหัสผ่าน
      */
     public function changePassword(int $userId, string $currentPassword, string $newPassword): array
     {
+        // 📝 Step 1: ดึง user (ไม่มี password) เพื่อเอา email
         $currentUser = $this->userRepo->findById($userId);
         if (!$currentUser) {
             return ['success' => false, 'error' => 'ไม่พบผู้ใช้'];
         }
         
+        // 📝 Step 2: ดึง user (รวม password hash) ผ่าน findByEmail
+        //    เพราะ findById ไม่คืน password (security by design)
         $user = $this->userRepo->findByEmail($currentUser['email']);
         if (!$user) {
             return ['success' => false, 'error' => 'ไม่พบผู้ใช้'];
         }
         
-        // [SECURITY] ต้องยืนยันรหัสผ่านเดิมก่อน — ป้องกันเปลี่ยนรหัสผ่านโดยคนที่ขโมย session
+        // 🛡️ [SECURITY] Step 3: ยืนยันรหัสผ่านเดิมก่อน
+        //    ป้องกัน session hijack → คนที่ขโมย session เปลี่ยนรหัสไม่ได้ถ้าไม่รู้รหัสเดิม
         if (!password_verify($currentPassword, $user['password'])) {
             return ['success' => false, 'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง'];
         }
         
+        // 🛡️ Step 4: ห้ามใช้รหัสเดิมซ้ำ
         if (password_verify($newPassword, $user['password'])) {
             return ['success' => false, 'error' => 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน'];
         }
         
+        // 📝 Step 5: hash + update
+        //    hashPassword() = password_hash() wrapper จาก functions.php
         $this->userRepo->updatePassword($userId, hashPassword($newPassword));
         
         return ['success' => true];
@@ -169,87 +236,118 @@ class AuthService
     // =========================================================================
     
     /**
-     * ขอ reset password link
-     * 
-     * @param string $email อีเมลผู้ใช้
-     * @return array { success: bool, token?: string, error?: string }
-     * 
-     * @security ถ้า email ไม่อยู่ในระบบ ยังคง return success (ป้องกัน enumeration)
-     * @sideeffect INSERT ลง password_resets table
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ขอ reset password link (สร้าง token)
+     * ==========================================================================
+     *
+     * 🔄 Flow: findByEmail → rate limit check → generate token → save
+     *
+     * 📥 Input: @param string $email
+     * 📤 Output: @return array {success: bool, token?: string, error?: string}
+     *
+     * 🛡️ Security:
+     * - email ไม่พบยัง return success (token=null) — ป้องกัน enumeration
+     * - rate limit: max 3 requests/hour
+     * - token = 64 hex chars (random_bytes(32))
+     * - token หมดอายุ 1 ชั่วโมง
+     *
+     * ✅ Use case: forgot_password.php POST
      */
     public function requestPasswordReset(string $email): array
     {
+        // 📝 Lazy require — โหลดเฉพาะเมื่อใช้งาน (ไม่โหลดทุก request)
         require_once __DIR__ . '/../Repositories/PasswordResetRepository.php';
         $resetRepo = new \App\Repositories\PasswordResetRepository($this->pdo);
         
-        // Check if user exists
+        // 📝 Step 1: ตรวจว่า email มีอยู่หรือไม่
         $user = $this->userRepo->findByEmail($email);
         if (!$user) {
-            // ไม่บอกว่า email ไม่อยู่ - ป้องกัน enumeration
+            // 🛡️ [SECURITY] ไม่บอกว่า email ไม่อยู่ในระบบ — ป้องกัน enumeration
+            //    คืน success=true แต่ token=null → Controller แสดง "ส่งลิงก์แล้ว" เหมือนกัน
             return ['success' => true, 'token' => null];
         }
         
-        // Rate limiting - max 3 requests per hour
+        // 🛡️ Step 2: Rate limiting — max 3 requests ต่อชั่วโมงต่อ email
+        //    ป้องกัน brute force + spam token
         $recentRequests = $resetRepo->countRecentByEmail($email, 1);
         if ($recentRequests >= 3) {
             return ['success' => false, 'error' => 'คุณขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 ชั่วโมง'];
         }
         
-        // Generate token
+        // 📝 Step 3: สร้าง token (64 hex chars = 32 bytes)
+        //    ใช้ random_bytes() — cryptographically secure
         $token = bin2hex(random_bytes(32));
+        // ⏰ หมดอายุใน 1 ชั่วโมง
         $expiresAt = date('Y-m-d H:i:s', strtotime('+1 hour'));
         
-        // Save token
+        // 📝 Step 4: บันทึก token ลง DB
         $resetRepo->create($email, $token, $expiresAt);
         
+        // 📤 คืน token → Controller สร้าง link reset_password.php?token=XXX
         return ['success' => true, 'token' => $token];
     }
     
     /**
-     * รีเซ็ตรหัสผ่านด้วย token
-     * 
-     * @param string $token       Token จาก URL
-     * @param string $newPassword รหัสผ่านใหม่ (plaintext)
-     * @return array { success: bool, error?: string }
-     * 
-     * @sideeffect UPDATE users.password + mark token as used
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รีเซ็ตรหัสผ่านด้วย token
+     * ==========================================================================
+     *
+     * 🔄 Flow: validate token → BEGIN TX → update password + mark used → COMMIT
+     *
+     * 📥 Input: @param string $token, @param string $newPassword
+     * 📤 Output: @return array {success: bool, error?: string}
+     *
+     * 🛡️ Security:
+     * - transaction: เปลี่ยน password + mark token used พร้อมกัน
+     * - token ใช้ได้ครั้งเดียว (mark as used)
+     *
+     * ✅ Use case: reset_password.php POST
      */
     public function resetPassword(string $token, string $newPassword): array
     {
         require_once __DIR__ . '/../Repositories/PasswordResetRepository.php';
         $resetRepo = new \App\Repositories\PasswordResetRepository($this->pdo);
         
-        // Validate token
+        // 📝 Step 1: ตรวจ token (3 เงื่อนไขใน query เดียว: ตรง + ไม่หมดอายุ + ยังไม่ใช้)
         $resetRequest = $resetRepo->findValidToken($token);
         if (!$resetRequest) {
             return ['success' => false, 'error' => 'ลิงก์ไม่ถูกต้องหรือหมดอายุ'];
         }
         
         try {
+            // 📝 Step 2: เปิด transaction — ต้อง update password + mark token ใน atomic operation
+            //    ถ้า update password สำเร็จแต่ mark token ล้มเหลว → rollback ทั้งหมด
             $this->pdo->beginTransaction();
             
-            // [WRITE] เปลี่ยนรหัสผ่าน + ทำลาย token ใน transaction เดียวกัน
+            // 🔒 [WRITE] เปลี่ยนรหัสผ่าน
             $this->userRepo->updatePassword($resetRequest['user_id'], hashPassword($newPassword));
             
-            // [SECURITY] Mark token as used — ป้องกันใช้ token ซ้ำ
+            // 🛡️ [SECURITY] Mark token ว่าใช้แล้ว — ป้องกันใช้ token ซ้ำ
+            //    ⚠️ ต้องเรียกเสมอ! ถ้าไม่ mark → token ใช้ซ้ำได้ (security hole)
             $resetRepo->markUsed($resetRequest['id']);
             
             $this->pdo->commit();
             return ['success' => true];
         } catch (\Exception $e) {
+            // ❌ rollback ทั้งหมด → password ไม่ถูกเปลี่ยน + token ยังใช้ได้
             $this->pdo->rollBack();
             return ['success' => false, 'error' => 'เกิดข้อผิดพลาด กรุณาลองใหม่'];
         }
     }
     
     /**
-     * ตรวจสอบ token ว่ายังใช้ได้ไหม
-     * 
-     * @param string $token Token จาก URL
-     * @return array|null Reset request data ถ้า valid
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจ token ว่ายังใช้ได้ไหม (ก่อนแสดงฟอร์ม)
+     * ==========================================================================
+     *
+     * 📥 Input: @param string $token
+     * 📤 Output: @return array|null reset request data หรือ null
+     * ✅ Use case: reset_password.php GET (แสดงฟอร์มถ้า token valid)
      */
     public function validateResetToken(string $token): ?array
     {
+        // 📝 ตรวจ token ว่ายังใช้ได้ไหม (ก่อนแสดง form)
+        //    null = token ไม่ valid → Controller แสดง error แทน form
         require_once __DIR__ . '/../Repositories/PasswordResetRepository.php';
         $resetRepo = new \App\Repositories\PasswordResetRepository($this->pdo);
         return $resetRepo->findValidToken($token);
@@ -260,10 +358,17 @@ class AuthService
     // =========================================================================
     
     /**
-     * ดึง User Repository (สำหรับ operations ที่ไม่ต้อง business logic)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึง UserRepository instance (สำหรับใช้งานที่ไม่ต้อง logic)
+     * ==========================================================================
+     *
+     * 📤 Output: @return UserRepository
+     * ✅ Use case: controller ที่ต้องการเข้าถึง repo โดยตรง (read-only)
      */
     public function getUserRepository(): UserRepository
     {
+        // 📤 คืน repo instance — ให้ Controller เข้าถึง repo โดยตรง (read-only)
+        //    เช่น profile.php ดึง user data โดยไม่ต้องเขียน service method ใหม่
         return $this->userRepo;
     }
 }

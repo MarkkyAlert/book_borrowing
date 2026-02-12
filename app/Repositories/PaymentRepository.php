@@ -1,7 +1,34 @@
 <?php
 /**
  * PaymentRepository - Database Access สำหรับการชำระเงิน
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Repository นี้จัดการตาราง payments (การชำระค่าปรับ)
+ * ค่าปรับเกิดจากการคืนหนังสือช้า — fine_amount คำนวณโดย BorrowService::returnBook()
+ *
+ * 📚 โครงสร้างตาราง payments:
+ * +-------------+------------------+----------------------------------------------+
+ * | Column      | Type             | อธิบาย                                       |
+ * +-------------+------------------+----------------------------------------------+
+ * | id          | INT AUTO PK      | Primary Key                                  |
+ * | borrow_id   | INT FK UNIQUE    | รายการยืมที่ชำระ (ชำระได้แค่ 1 ครั้ง)     |
+ * | amount      | DECIMAL          | จำนวนเงิน (บาท)                           |
+ * | recorded_by | INT FK NULL      | ID เจ้าหน้าที่ที่บันทึก                      |
+ * | created_at  | DATETIME DEFAULT | เวลาชำระ                                    |
+ * +-------------+------------------+----------------------------------------------+
+ * สำคัญ: borrow_id มี UNIQUE constraint — 1 borrow = 1 payment เท่านั้น
+ *
+ * 📍 Entrypoints:
+ * - admin/payments.php  → findAll(), findByBorrowId() (แสดงรายการ)
+ * - BorrowService::payFine() → create() (บันทึกการชำระ)
+ * - DashboardService   → getTotalCollected(), getUnpaidTotal(), getThisMonthTotal()
+ *
+ * ⚠️ ห้ามแก้:
+ * - create() ต้องเรียกภายใต้ transaction + row lock จาก BorrowService
+ * - ชำระซ้ำจะ error (UNIQUE constraint บน borrow_id)
+ *
  * @package App\Repositories
  */
 
@@ -11,69 +38,143 @@ use PDO;
 
 class PaymentRepository
 {
+    // 🗄️ PDO connection — inject ผ่าน constructor ใช้ร่วมกันทุกเมธอด
     private PDO $pdo;
 
+    // 🏗️ Constructor: รับ PDO จากภายนอก (Dependency Injection)
+    // → ใช้ connection เดียวกับ BorrowService ที่เรียก
+    // → ทำให้ transaction (lock borrow + create payment) ทำงานถูกต้อง
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
     }
 
     /**
-     * สร้างรายการชำระเงินใหม่
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างรายการชำระค่าปรับ
+     * ==========================================================================
+     * INSERT รายการชำระลงตาราง payments
+     *
+     * 🔄 Flow:
+     * Step 1 → INSERT INTO payments (borrow_id, amount, recorded_by)
+     * Step 2 → คืน payment ID
+     *
+     * 📥 Input:
      * @param int       $borrowId   ID รายการยืม (ต้องมี fine_amount > 0)
-     * @param float     $amount     จำนวนเงินที่ชำระ (บาท)
-     * @param int|null  $recordedBy ID เจ้าหน้าที่ที่บันทึก (null = ไม่ระบุ)
+     *                              - มาจาก: BorrowService::payFine()
+     * @param float     $amount     จำนวนเงิน (บาท) - คำนวณจาก fine_amount
+     * @param int|null  $recordedBy ID เจ้าหน้าที่ที่บันทึก (staff_id จาก session)
+     *
+     * 📤 Output:
      * @return int ID ของ payment ที่สร้าง
-     * 
-     * @sideeffect INSERT ลง payments table
-     * @security ต้องเรียกภายใต้ transaction + row lock จาก BorrowService
-     *           payments.borrow_id มี UNIQUE constraint — INSERT ซ้ำจะ throw PDOException
-     * @throws \PDOException ถ้าชำระซ้ำ (UNIQUE constraint violation)
+     *
+     * 🧠 เหตุผลเชิงออกแบบ:
+     * - ทำไม borrow_id เป็น UNIQUE? เพราะ 1 การยืม = 1 การชำระเท่านั้น
+     *   (ไม่รองรับการชำระบางส่วน หรือชำระซ้ำ)
+     *
+     * 🛡️ Security & Data Integrity:
+     * - ต้องเรียกภายใต้ transaction + row lock จาก BorrowService
+     * - UNIQUE constraint บน borrow_id ป้องกันชำระซ้ำ (DB level)
+     * - prepared statement ป้องกัน SQL Injection
+     *
+     * ⚠️ Edge cases:
+     * - ชำระซ้ำ → PDOException (UNIQUE violation) — BorrowService ดัก exception
+     * - borrow_id ไม่มีจริง → FK constraint error
+     *
+     * ✅ Use case:
+     * admin/payments.php POST action=pay_fine
+     *   → BorrowService::payFine($borrowId, $staffId)
+     *   → lock borrow row → ตรวจ fine > 0 → create($borrowId, $amount, $staffId)
      */
     public function create(int $borrowId, float $amount, ?int $recordedBy = null): int
     {
-        // [DB] payments.borrow_id มี UNIQUE constraint - INSERT ซ้ำจะ error
+        // 📝 SQL: INSERT รายการชำระค่าปรับ
+        // 🔴 borrow_id มี UNIQUE constraint — 1 borrow = 1 payment เท่านั้น
+        //    INSERT ซ้ำ → PDOException (UNIQUE violation) → BorrowService ดัก
+        // 🛡️ ต้องเรียกใน transaction + row lock จาก BorrowService
         $stmt = $this->pdo->prepare("
             INSERT INTO payments (borrow_id, amount, recorded_by) 
             VALUES (?, ?, ?)
         ");
+        // 🚀 bind: [$borrowId, $amount, $recordedBy]
+        //    $recordedBy = staff ID ที่บันทึก (อาจเป็น null ถ้าไม่ระบุ)
         $stmt->execute([$borrowId, $amount, $recordedBy]);
+        // 📤 คืน payment ID ที่สร้าง
         return (int) $this->pdo->lastInsertId();
     }
 
     /**
-     * ดึงยอดค่าปรับที่รับชำระแล้วทั้งหมดตลอดกาล
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงยอดค่าปรับที่รับชำระแล้วทั้งหมดตลอดกาล (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 🔄 Flow: SUM(amount) FROM payments
+     *
+     * 📤 Output:
      * @return float ยอดรวม (บาท) หรือ 0 ถ้ายังไม่มีรายการ
+     *         - ใช้ใน: DashboardService แสดงสถิติ "ยอดค่าปรับที่รับแล้ว"
+     *
+     * 🧠 เหตุผล: COALESCE(..., 0) ป้องกัน NULL กรณีไม่มี rows
+     * ✅ Use case: admin/index.php → DashboardService
      */
     public function getTotalCollected(): float
     {
+        // 📝 SQL: รวมยอดชำระค่าปรับทั้งหมดตลอดกาล
+        // 🧠 COALESCE(..., 0) = ถ้าไม่มีรายการเลย SUM = NULL → เปลี่ยนเป็น 0
         return (float) $this->pdo->query("SELECT COALESCE(SUM(amount), 0) FROM payments")->fetchColumn();
     }
 
     /**
-     * ดึงรายการ payment ตาม borrow_id (ตรวจว่าชำระแล้วหรือยัง)
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจว่ายืมรายการนี้ชำระค่าปรับแล้วหรือยัง
+     * ==========================================================================
+     *
+     * 📥 Input:
      * @param int $borrowId ID รายการยืม
-     * @return array|null payment record หรือ null ถ้ายังไม่ชำระ
-     * 
-     * @note borrow_id มี UNIQUE constraint — คืนได้สูงสุด 1 record
+     *                      - มาจาก: BorrowService::payFine() (ตรวจก่อนชำระ)
+     *
+     * 📤 Output:
+     * @return array|null payment record หรือ null
+     *         - คืนได้สูงสุด 1 record (UNIQUE constraint บน borrow_id)
+     *
+     * 🧠 เหตุผล: ใช้เป็น "guard" ตรวจก่อนชำระว่ายังไม่ได้จ่าย
+     * ✅ Use case: BorrowService::payFine() เช็คก่อนว่าชำระแล้วหรือยัง
      */
     public function findByBorrowId(int $borrowId): ?array
     {
+        // 📝 SQL: ดึงรายการชำระตาม borrow_id
+        // 🧠 ใช้เป็น "guard" ตรวจก่อนชำระว่าจ่ายแล้วหรือยัง
+        //    UNIQUE constraint รับประกันว่ามีได้สูงสุด 1 record ต่อ borrow
         $stmt = $this->pdo->prepare("SELECT * FROM payments WHERE borrow_id = ?");
         $stmt->execute([$borrowId]);
+        // 📤 คืน payment record หรือ null (ยังไม่ชำระ)
         return $stmt->fetch() ?: null;
     }
 
     /**
-     * ยอดค่าปรับค้างชำระทั้งหมด (borrows ที่มี fine แต่ยังไม่มี payment)
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดค่าปรับค้างชำระทั้งหมด (สำหรับ dashboard + payments page)
+     * ==========================================================================
+     * คำนวณยอด fine_amount จาก borrows ที่มีค่าปรับแต่ยังไม่มีรายการชำระ
+     *
+     * 🔄 Flow: SUM(fine_amount) FROM borrows LEFT JOIN payments WHERE fine > 0 AND payment = NULL
+     *
+     * 📤 Output:
      * @return float ยอดรวม (บาท) หรือ 0
+     *         - ใช้ใน: DashboardService + admin/payments.php
+     *
+     * 🧠 เหตุผล:
+     * - LEFT JOIN + p.id IS NULL = หา borrows ที่ยังไม่มี payment
+     * - fine_amount > 0 กรองเฉพาะที่มีค่าปรับ (ไม่ได้นับ borrows ที่ไม่มีค่าปรับ)
+     *
+     * ✅ Use case: admin/index.php → DashboardService → "ค่าปรับค้างชำระ"
      */
     public function getUnpaidTotal(): float
     {
+        // 📝 SQL: รวมยอดค่าปรับค้างชำระ (มีค่าปรับแต่ยังไม่มี payment)
+        // 🧠 LEFT JOIN payments + p.id IS NULL = หา borrows ที่ยังไม่มี payment
+        //    fine_amount > 0 = เฉพาะที่มีค่าปรับ
+        //    COALESCE(..., 0) = ป้องกัน NULL กรณีไม่มี rows
         return (float) $this->pdo->query("
             SELECT COALESCE(SUM(b.fine_amount), 0) 
             FROM borrows b
@@ -83,12 +184,23 @@ class PaymentRepository
     }
 
     /**
-     * ยอดค่าปรับที่รับชำระเดือนนี้ (ตาม payments.created_at)
-     * 
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดค่าปรับที่รับชำระเดือนนี้ (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 🔄 Flow: SUM(amount) FROM payments WHERE MONTH = เดือนปัจจุบัน
+     *
+     * 📤 Output:
      * @return float ยอดรวม (บาท) หรือ 0
+     *         - ใช้ใน: DashboardService แสดง "รายรับเดือนนี้"
+     *
+     * ✅ Use case: admin/index.php → DashboardService
      */
     public function getThisMonthTotal(): float
     {
+        // 📝 SQL: รวมยอดชำระเดือนนี้
+        // 🧠 MONTH(created_at) = MONTH(CURDATE()) + YEAR = YEAR
+        //    กรองทั้งเดือน+ปี ป้องกันดึงข้ามปี (มกราคมปีนี้ vs มกราคมปีก่อน)
         return (float) $this->pdo->query("
             SELECT COALESCE(SUM(amount), 0) FROM payments 
             WHERE MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())
@@ -96,19 +208,35 @@ class PaymentRepository
     }
 
     /**
-     * ดึงรายการ payment ทั้งหมด พร้อม join borrow/user/book/staff
-     * 
-     * @param array $filters {
-     *     search?: string  // ค้นหาใน member_name, book_title, staff_name
-     * }
-     * @return array[] แต่ละ element: {
-     *     id, borrow_id, amount, recorded_by, payment_date,
-     *     borrow_date, return_date,
-     *     member_name, book_title, staff_name
-     * }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการชำระทั้งหมด พร้อมข้อมูลสมาชิก/หนังสือ/เจ้าหน้าที่
+     * ==========================================================================
+     *
+     * 🔄 Flow: payments JOIN borrows JOIN users JOIN books LEFT JOIN users(staff)
+     *        + optional search filter + ORDER BY created_at DESC
+     *
+     * 📥 Input:
+     * @param array $filters {search?: string}
+     *              - search ค้นใน member_name, book_title, staff_name (LIKE %...%)
+     *              - มาจาก: admin/payments.php GET params
+     *
+     * 📤 Output:
+     * @return array[] แต่ละ element: {id, borrow_id, amount, recorded_by, payment_date,
+     *                  borrow_date, return_date, member_name, book_title, staff_name}
+     *         - ใช้ใน: admin/payments.php แสดงตารางประวัติการชำระ
+     *
+     * 🧠 เหตุผลเชิงออกแบบ:
+     * - LEFT JOIN users staff เพราะ recorded_by อาจเป็น NULL (ไม่ระบุเจ้าหน้าที่)
+     * - search ค้นใน 3 คอลัมน์พร้อมกัน (OR)
+     *
+     * 🛡️ Security: prepared statement + LIKE ใช้ parameterized
+     * ✅ Use case: admin/payments.php GET
      */
     public function findAll(array $filters = []): array
     {
+        // 📝 SQL: ดึงรายการชำระทั้งหมด พร้อมข้อมูลสมาชิก/หนังสือ/เจ้าหน้าที่
+        // 🧠 JOIN 3 ชั้น: payments → borrows → users + books
+        //    LEFT JOIN users staff เพราะ recorded_by อาจเป็น NULL (ไม่ระบุเจ้าหน้าที่)
         $sql = "
             SELECT p.*, p.created_at as payment_date, b.borrow_date, b.return_date, 
                    u.name as member_name, 
@@ -121,17 +249,21 @@ class PaymentRepository
             LEFT JOIN users staff ON p.recorded_by = staff.id
         ";
 
+        // 🔍 Filter: ค้นหาจากชื่อสมาชิก, ชื่อหนังสือ, ชื่อเจ้าหน้าที่ (LIKE)
         $params = [];
         if (!empty($filters['search'])) {
             $sql .= " WHERE (u.name LIKE ? OR bk.title LIKE ? OR staff.name LIKE ?)";
             $search = '%' . $filters['search'] . '%';
+            // 📌 ใส่ 3 ค่าเพราะมี ? 3 ตัว (member_name, book_title, staff_name)
             $params = [$search, $search, $search];
         }
 
+        // เรียงจากใหม่สุดก่อน
         $sql .= " ORDER BY p.created_at DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+        // 📤 คืน array ของรายการชำระ + ข้อมูลครบ
         return $stmt->fetchAll();
     }
 }

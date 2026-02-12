@@ -1,36 +1,48 @@
 <?php
 /**
  * ระบบยืมคืนหนังสือ - Configuration
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - ไฟล์นี้กำหนดค่าคงที่ทั้งระบบ (constants)
- * - ค่าจะถูกอ่านจาก .env ถ้ามี หรือใช้ default ถ้าไม่มี
- * - ลูกค้าแก้ค่าได้โดยสร้างไฟล์ .env จาก .env.example
- * 
- * ⚙️ ค่าที่ลูกค้ามักต้องการแก้:
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * กำหนดค่าคงที่ (PHP constants) ทั้งระบบ:
+ * - อ่านจาก .env ถ้ามี หรือใช้ default ถ้าไม่มี
+ * - ลูกค้าแก้ค่าได้โดยสร้าง .env จาก .env.example
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * bootstrap.php → require config.php (โหลดก่อนไฟล์อื่นทั้งหมด)
+ *
+ * 🔄 Flow: อ่าน .env → parse key=value → define() constants
+ *
+ * ⚙️ ค่าที่ลูกค้ามักต้องการแก้ (แก้ใน .env):
  * - DEFAULT_BORROW_DAYS  → จำนวนวันยืมเริ่มต้น (default: 7)
  * - MAX_BORROW_BOOKS     → ยืมได้สูงสุดกี่เล่ม (default: 3)
  * - FINE_PER_DAY         → ค่าปรับต่อวัน (default: 10 บาท)
  * - MIN_PASSWORD_LENGTH  → รหัสผ่านขั้นต่ำ (default: 6)
- * 
+ *
  * ⚠️ ห้ามแก้โดยไม่เข้าใจ:
- * - RATE_LIMIT_* → ป้องกัน brute force
- * - SESSION_LIFETIME → อายุ session
+ * - RATE_LIMIT_* → ป้องกัน brute force (login, register, forgot password)
+ * - SESSION_LIFETIME → อายุ session (ป้องกัน session ค้างบน shared PC)
+ * - DB_* → credentials ฐานข้อมูล
  */
 
-// Load .env parser
+// 📝 .env parser — อ่านไฟล์ .env แล้ว parse เป็น key=value
+//    ถ้าไม่มี .env → ใช้ default ทั้งหมด (ไม่พัง)
 $envFile = __DIR__ . '/../.env';
 $env = [];
 
 if (file_exists($envFile)) {
+    // 📝 อ่านทีละบรรทัด (ข้ามบรรทัดว่าง + ขึ้นบรรทัดใหม่)
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
+        // 📝 ข้าม comment (ขึ้นต้นด้วย #)
         if (str_starts_with(trim($line), '#')) continue;
         if (strpos($line, '=') !== false) {
+            // 📝 แยก key=value (ใช้ explode limit 2 เผื่อ value ที่มี = อยู่)
             [$key, $value] = explode('=', $line, 2);
             $key = trim($key);
             $value = trim($value);
-            // Remove quotes
+            // 📝 ลบ quotes ออก (เช่น 'value' หรือ "value")
             if (preg_match('/^(["\'])(.*)\\1$/', $value, $m)) {
                 $value = $m[2];
             }
@@ -39,39 +51,41 @@ if (file_exists($envFile)) {
     }
 }
 
-// Helper function to get env value with default
+// 📝 Helper: ดึงค่าจาก $env array หรือใช้ default
+//    ตัวอย่าง: env('DB_HOST', 'localhost') → ค่าจาก .env หรือ 'localhost'
 function env(string $key, mixed $default = null): mixed {
     global $env;
     return $env[$key] ?? $default;
 }
 
-// Database Configuration
+// 🗄️ Database Configuration — แก้ใน .env (ห้าม hardcode ใน code)
 define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_NAME', env('DB_NAME', 'book_borrowing'));
 define('DB_USER', env('DB_USER', 'root'));
 define('DB_PASS', env('DB_PASS', ''));
-define('DB_CHARSET', env('DB_CHARSET', 'utf8mb4'));
+define('DB_CHARSET', env('DB_CHARSET', 'utf8mb4'));  // 📝 utf8mb4 รองรับ emoji
 
-// Application Settings
+// 🌐 Application Settings — ชื่อแอป, URL หลัก, อีเมล admin
 define('APP_NAME', env('APP_NAME', 'ระบบยืมคืนหนังสือ'));
-define('APP_URL', env('APP_URL', 'http://localhost/book_borrowing'));
+define('APP_URL', env('APP_URL', 'http://localhost/book_borrowing'));  // 📝 ไม่ต้องลงท้ายด้วย /
 define('ADMIN_EMAIL', env('ADMIN_EMAIL', 'admin@library.com'));
 
-// Borrow Settings - ⭐ ลูกค้าสามารถแก้ไขใน .env ได้
-define('DEFAULT_BORROW_DAYS', (int) env('DEFAULT_BORROW_DAYS', 7));
-define('MAX_BORROW_BOOKS', (int) env('MAX_BORROW_BOOKS', 3));
-define('FINE_PER_DAY', (int) env('FINE_PER_DAY', 10));
+// ⭐ Borrow Settings — ลูกค้ามักต้องการแก้ (แก้ใน .env)
+define('DEFAULT_BORROW_DAYS', (int) env('DEFAULT_BORROW_DAYS', 7));   // 📝 จำนวนวันยืมเริ่มต้น
+define('MAX_BORROW_BOOKS', (int) env('MAX_BORROW_BOOKS', 3));         // 📝 ยืมได้สูงสุดกี่เล่มต่อคน
+define('FINE_PER_DAY', (int) env('FINE_PER_DAY', 10));                // 📝 ค่าปรับต่อวัน (บาท)
 
-// Security Settings
+// 🛡️ Security Settings — แก้ได้แต่ต้องเข้าใจผลกระทบ
+//    ⚠️ ลด rate limit เกินไป อาจโดน brute force ได้
 define('MIN_PASSWORD_LENGTH', (int) env('MIN_PASSWORD_LENGTH', 6));
-define('RATE_LIMIT_MAX_ATTEMPTS', (int) env('RATE_LIMIT_MAX_ATTEMPTS', 5));
-define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15));
+define('RATE_LIMIT_MAX_ATTEMPTS', (int) env('RATE_LIMIT_MAX_ATTEMPTS', 5));     // 📝 จำนวนครั้งสูงสุดต่อ window
+define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15)); // 📝 ช่วงเวลา rate limit (นาที)
 
-// Session Settings
-define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));
+// ⏰ Session Settings
+define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));  // 📝 อายุ session วินาที (ป้องกัน session ค้างบน shared PC)
 
-// Debug Mode
+// 🐛 Debug Mode — true = แสดง error ละเอียด (ห้ามเปิดบน production!)
 define('APP_DEBUG', env('APP_DEBUG', 'false') === 'true');
 
-// Timezone
+// 🌏 Timezone — ใช้กับ date(), strtotime() ทั้งระบบ
 date_default_timezone_set(env('TIMEZONE', 'Asia/Bangkok'));

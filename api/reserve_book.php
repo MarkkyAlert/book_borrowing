@@ -16,54 +16,57 @@ use App\Services\ReservationService;
 
 header('Content-Type: application/json');
 
-// ========== 1. ตรวจ Auth ==========
-// [AUTH] ต้อง login เท่านั้นถึงจองได้ - ป้องกัน anonymous reservation
+// 🛡️ [AUTH] ต้อง login ก่อน — ป้องกัน anonymous reservation
 if (!isLoggedIn()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'กรุณาเข้าสู่ระบบก่อนจองหนังสือ']);
     exit;
 }
 
-// ========== 2. ตรวจ Method ==========
-// [SECURITY] บังคับ POST - ป้องกัน CSRF via GET และป้องกัน request ถูก cache
+// 🛡️ [SECURITY] บังคับ POST — ป้องกัน CSRF via GET + ป้องกัน request ถูก cache
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
     exit;
 }
 
-// ========== 3. รับ & Validate Input ==========
+// 📝 รับ & Validate Input
 $bookId = (int) ($_POST['book_id'] ?? 0);
-// [AUTH] ใช้ user_id จาก session - ห้ามรับจาก POST (ป้องกัน impersonation)
+// 🛡️ [AUTH] ใช้ user_id จาก session เท่านั้น!
+//    ห้ามรับจาก POST — ป้องกัน impersonation (แอบส่ง user_id ของคนอื่น)
 $userId = $_SESSION['user_id'];
 
-// [SECURITY] CSRF ป้องกัน attacker หลอกให้ user จองโดยไม่รู้ตัว
+// 🛡️ [SECURITY] CSRF ป้องกัน attacker หลอกให้ user จองโดยไม่รู้ตัว
 if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Invalid token']);
     exit;
 }
 
+// 📝 ตรวจ book_id
 if ($bookId <= 0) {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'ข้อมูลไม่ถูกต้อง']);
     exit;
 }
 
-// ========== 4. เรียก Service ==========
+// 📝 เรียก Service (Single Source of Truth)
 try {
     $pdo = getDB();
     $reservationService = new ReservationService($pdo);
     
+    // 📝 Service จัดการทั้งหมด:
+    //    expire เก่า, lock book, check stock, check duplicate, insert, decrement stock
     $result = $reservationService->createReservation($userId, $bookId);
     
-    // ========== 5. ส่ง Response ==========
+    // 📤 คืน JSON สำเร็จ
     echo json_encode([
         'success' => true,
         'message' => $result['message']
     ]);
 
 } catch (Exception $e) {
+    // ❌ Service throw Exception → คืน 400 + error message
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }

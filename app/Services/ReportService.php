@@ -1,17 +1,27 @@
 <?php
 /**
  * ReportService - Business Logic สำหรับรายงานและสถิติ
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - Service นี้เป็น read-only aggregator สำหรับรายงาน
- * - คล้าย DashboardService แต่เน้นรายงานเชิงลึก (reports page)
- * - ข้อมูล report จริงอยู่ที่ ReportRepository — Service นี้เป็นตัวกลาง
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Service นี้เป็น read-only aggregator สำหรับรายงานเชิงลึก
+ * คล้าย DashboardService แต่เน้น report รายละเอียดมากกว่า
+ * ข้อมูลจริงอยู่ที่ ReportRepository — Service นี้เป็นตัวกลาง
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * Controller → ReportService → ReportRepository
+ *                             → BorrowRepository
+ *                             → BookRepository
+ *                             → UserRepository
+ *
  * 📍 Entrypoints:
  * - admin/reports.php     → ผ่าน ReportRepository โดยตรง (ไม่ผ่าน Service นี้)
  * - admin/export_pdf.php  → ผ่าน report_helper.php
- * - admin/index.php       → ผ่าน DashboardService (ไม่ผ่าน Service นี้)
- * 
+ * - admin/index.php       → ผ่าน DashboardService
+ *
+ * 🛡️ Security: read-only — ไม่มี side effect
+ *
  * @package App\Services
  */
 
@@ -30,12 +40,14 @@ use PDO;
 
 class ReportService
 {
+    // 🗄️ PDO + Repositories (read-only — ไม่มี write)
     private PDO $pdo;
     private ReportRepository $reportRepo;
     private BorrowRepository $borrowRepo;
     private BookRepository $bookRepo;
     private UserRepository $userRepo;
 
+    // 🏗️ Constructor: สร้าง repo ทั้งหมด — read-only service
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
@@ -46,106 +58,146 @@ class ReportService
     }
 
     /**
-     * ดึงสถิติรวมสำหรับ Dashboard
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติรวมสำหรับ Dashboard (books + members + borrows + fines)
+     * ==========================================================================
+     *
+     * 📤 Output: @return array {books, members, borrows, fines}
      */
     public function getDashboardStatistics(): array
     {
+        // 📝 รวมสถิติ 4 กลุ่มเป็น 1 array สำหรับ dashboard
         return [
-            'books' => $this->getBookStatistics(),
-            'members' => $this->getMemberStatistics(),
-            'borrows' => $this->getBorrowStatistics(),
-            'fines' => $this->getFineStatistics(),
+            'books' => $this->getBookStatistics(),      // หนังสือ
+            'members' => $this->getMemberStatistics(),    // สมาชิก
+            'borrows' => $this->getBorrowStatistics(),    // การยืม
+            'fines' => $this->getFineStatistics(),        // ค่าปรับ
         ];
     }
 
     /**
-     * สถิติหนังสือ (ใช้ BookRepository เป็น single source)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติหนังสือ (pass-through ไป BookRepository)
+     * ==========================================================================
      */
     public function getBookStatistics(): array
     {
+        // 📝 Pass-through → {total, available, borrowed, titles}
         return $this->bookRepo->getStatistics();
     }
 
     /**
-     * สถิติสมาชิก (ใช้ UserRepository เป็น single source)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติสมาชิก (total + new_this_month)
+     * ==========================================================================
      */
     public function getMemberStatistics(): array
     {
+        // 📝 รวม 2 ค่าจาก UserRepository
         return [
-            'total' => $this->userRepo->countMembers(),
-            'new_this_month' => $this->userRepo->countNewThisMonth()
+            'total' => $this->userRepo->countMembers(),            // สมาชิกทั้งหมด
+            'new_this_month' => $this->userRepo->countNewThisMonth() // สมัครเดือนนี้
         ];
     }
 
     /**
-     * สถิติการยืม
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติการยืม (pass-through ไป ReportRepository)
+     * ==========================================================================
      */
     public function getBorrowStatistics(): array
     {
+        // 📝 Pass-through → {total, active, returned, overdue}
         return $this->reportRepo->getBorrowStats();
     }
 
     /**
-     * สถิติค่าปรับ
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติค่าปรับ (pass-through ไป ReportRepository)
+     * ==========================================================================
      */
     public function getFineStatistics(): array
     {
+        // 📝 Pass-through → {total_fines, collected, unpaid}
         return $this->reportRepo->getFineStats();
     }
 
     /**
-     * รายงานการยืมรายเดือน (สำหรับ Chart)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายงานยืมรายเดือน (สำหรับ Chart)
+     * ==========================================================================
      */
     public function getMonthlyBorrowReport(int $months = 6): array
     {
+        // 📝 Pass-through → สถิติรายเดือน (สำหรับ Chart.js)
         return $this->reportRepo->getMonthlyReport($months);
     }
 
     /**
-     * รายงานหมวดหมู่ยอดนิยม (สำหรับ Chart)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายงานหมวดหมู่ยอดนิยม (สำหรับ Chart)
+     * ==========================================================================
      */
     public function getCategoryDistribution(int $limit = 6): array
     {
+        // 📝 Pass-through → หมวดหมู่ + สัดส่วนการยืม (สำหรับ pie chart)
         return $this->reportRepo->getCategoryDistribution($limit);
     }
 
     /**
-     * หนังสือยอดนิยม
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หนังสือยอดนิยม (pass-through)
+     * ==========================================================================
      */
     public function getPopularBooks(int $limit = 10): array
     {
+        // 📝 Pass-through → หนังสือยอดนิยม
         return $this->reportRepo->getPopularBooks($limit);
     }
 
     /**
-     * สมาชิกที่ยืมมากที่สุด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สมาชิกยืมมากที่สุด (pass-through)
+     * ==========================================================================
      */
     public function getTopBorrowers(int $limit = 10): array
     {
+        // 📝 Pass-through → สมาชิกยืมมากที่สุด
         return $this->reportRepo->getTopBorrowers($limit);
     }
 
     /**
-     * รายการยืมล่าสุด
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการยืมล่าสุด (pass-through)
+     * ==========================================================================
      */
     public function getRecentBorrows(int $limit = 5): array
     {
+        // 📝 Pass-through → borrows ล่าสุด
         return $this->borrowRepo->findRecent($limit);
     }
 
     /**
-     * รายการเกินกำหนดคืน
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการเกินกำหนดคืน (pass-through)
+     * ==========================================================================
      */
     public function getOverdueBorrows(int $limit = 10): array
     {
+        // 📝 Pass-through → borrows เกินกำหนด
         return $this->borrowRepo->findOverdue($limit);
     }
 
     /**
-     * รายงานรายวัน
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายงานรายวัน (pass-through)
+     * ==========================================================================
+     *
+     * 📥 Input: @param string|null $date (null = วันนี้)
      */
     public function getDailyReport(string $date = null): array
     {
+        // 📝 Pass-through → สถิติรายวัน (null = วันนี้)
         return $this->reportRepo->getDailyReport($date);
     }
 }

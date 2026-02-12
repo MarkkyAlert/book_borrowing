@@ -1,71 +1,91 @@
 <?php
 /**
  * Helper Functions - ฟังก์ชันช่วยเหลือทั่วไป
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - ไฟล์นี้ถูกโหลดอัตโนมัติผ่าน bootstrap.php
- * - ใช้ได้ทุกที่โดยไม่ต้อง require
- * 
- * 📌 ฟังก์ชันที่ใช้บ่อย:
- * - e($str)              → escape HTML (ป้องกัน XSS) ⚠️ ต้องใช้ทุกครั้งที่แสดงผล
- * - redirect($url)       → redirect + exit
- * - setFlash() / getFlash() → flash messages
- * - requireLogin/Staff/Admin() → access control
- * - generateCSRFToken() / validateCSRFToken() → CSRF protection
- * - checkRateLimit()     → brute force protection
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * รวม helper functions ทั้งหมดที่ใช้ได้ทั่วระบบ
+ * โหลดอัตโนมัติผ่าน bootstrap.php — ไม่ต้อง require เอง
+ *
+ * 🏗️ สถาปัตยกรรม:
+ * bootstrap.php → require functions.php → พร้อมใช้ทั่วระบบ
+ *
+ * 📌 หมวดหมู่ฟังก์ชัน:
+ * 🛡️ Security:
+ *   - e()                   → escape HTML (ป้องกัน XSS)
+ *   - generateCSRFToken()   → สร้าง CSRF token
+ *   - validateCSRFToken()   → ตรวจ CSRF token (hash_equals)
+ *   - startSession()        → secure session + inactivity timeout
+ *   - checkRateLimit()      → ป้องกัน brute force (DB-based)
+ * 🔒 Access Control:
+ *   - requireLogin/Staff/Admin() → redirect ถ้าไม่มีสิทธิ์
+ *   - requireStaffApi/AdminApi() → JSON 403
+ * 📦 Flash Messages:
+ *   - setFlash() / getFlash() / displayFlash()
+ * ✅ Validation (Single Source of Truth):
+ *   - validateMemberData() → ตรวจข้อมูลสมาชิก
+ *   - validatePassword()   → ตรวจรหัสผ่าน
+ *   - hashPassword()       → hash password
+ * 🌐 UI Helpers:
+ *   - formatDate(), formatFine(), daysDiff()
+ *   - getBookStatusLabel(), getBorrowStatusLabel(), getReservationStatusLabel()
+ *
  * ⚠️ ห้ามแก้:
- * - e() - ป้องกัน XSS ทั้งระบบ
- * - generateCSRFToken() / validateCSRFToken() - ป้องกัน CSRF
+ * - e() — ป้องกัน XSS ทั้งระบบ
+ * - generateCSRFToken() / validateCSRFToken() — ป้องกัน CSRF
+ * - hashPassword() — Single Source of Truth สำหรับ hash
  */
 
 require_once __DIR__ . '/config.php';
 
 /**
- * ป้องกัน XSS โดยแปลง HTML entities
- * 
- * ใช้ครอบทุกครั้งที่แสดงผลข้อมูลจาก user/database บนหน้าเว็บ
- * 
- * @param string|null $string ข้อความที่ต้องการ escape (รับ null ได้)
- * @return string ข้อความที่ผ่านการ escape แล้ว (ปลอดภัยสำหรับ HTML)
- * 
- * @example echo e($user['name']); // แสดงชื่อผู้ใช้อย่างปลอดภัย
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ป้องกัน XSS โดยแปลง HTML entities
+ * ==========================================================================
+ * ⚠️ ต้องใช้ทุกครั้งที่แสดงผลข้อมูลจาก user/database บน HTML
+ *
+ * 📥 Input: @param string|null $string
+ * 📤 Output: @return string escaped string
+ * ✅ Use case: echo e($user['name']);
  */
 function e(?string $string): string
 {
+    // 📝 แปลง < > " ' & เป็น HTML entities
+    //    ENT_QUOTES = แปลงทั้ง single + double quotes
+    //    null → '' (ป้องกัน error จาก DB null)
     return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
 }
 
 /**
- * เปลี่ยนเส้นทางไปยัง URL ที่กำหนด แล้วหยุดการทำงานทันที
- * 
- * @param string $url URL ปลายทาง (ควรใช้ APP_URL prefix)
- * @return never ฟังก์ชันนี้จะ exit() เสมอ ไม่มี return
- * 
- * @example redirect(APP_URL . '/login.php');
+ * ==========================================================================
+ * 🎯 จุดประสงค์: redirect + exit ทันที
+ * ==========================================================================
+ *
+ * 📥 Input: @param string $url (APP_URL prefix)
+ * @return never (exit เสมอ)
+ * ✅ Use case: redirect(APP_URL . '/login.php');
  */
 function redirect(string $url): void
 {
+    // 📝 ส่ง HTTP 302 redirect + exit ทันที
+    //    ⚠️ ต้อง exit เสมอ! ไม่งั้น code ด้านล่างยังทำงานต่อ
     header("Location: $url");
     exit;
 }
 
 /**
- * ตั้งค่าข้อความแจ้งเตือนชั่วคราว (แสดงครั้งเดียวแล้วหายไป)
- * 
- * ใช้คู่กับ redirect() เพื่อแจ้งผลการทำงานหลังจาก POST action
- * 
- * @param string $type    ประเภท: 'success', 'error', 'warning', 'info'
- * @param string $message ข้อความที่ต้องการแสดง
- * @param bool   $isHtml  true = แสดง HTML ตรงๆ (ระวัง XSS!), false = escape อัตโนมัติ
- * 
- * @sideeffect เขียนลง $_SESSION['flash']
- * 
- * @example setFlash('success', 'บันทึกสำเร็จ');
- *          redirect('list.php');
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตั้ง flash message (แสดงครั้งเดียวแล้วหายไป)
+ * ==========================================================================
+ *
+ * 📥 Input: @param string $type (success|error|warning|info), @param string $message, @param bool $isHtml
+ * ✅ Use case: setFlash('success', 'บันทึกสำเร็จ'); redirect('list.php');
  */
 function setFlash(string $type, string $message, bool $isHtml = false): void
 {
+    // 📝 เก็บใน session → ดึงออกครั้งเดียวโดย getFlash()
+    //    isHtml=true → ไม่ escape (ใช้เมื่อส่ง HTML จาก server โดยตรง)
     $_SESSION['flash'] = [
         'type' => $type,
         'message' => $message,
@@ -74,15 +94,16 @@ function setFlash(string $type, string $message, bool $isHtml = false): void
 }
 
 /**
- * ดึงข้อความ flash แล้วลบออกจาก session (แสดงได้ครั้งเดียว)
- * 
- * @return array|null ['type' => string, 'message' => string, 'isHtml' => bool] หรือ null ถ้าไม่มี
- * 
- * @sideeffect ลบ $_SESSION['flash'] หลังจากดึงค่า
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ดึง flash message + ลบออกจาก session (แสดงได้ครั้งเดียว)
+ * ==========================================================================
+ *
+ * 📤 Output: @return array|null {type, message, isHtml} หรือ null
  */
 function getFlash(): ?array
 {
     if (isset($_SESSION['flash'])) {
+        // 📝 ดึง + ลบ → แสดงได้ครั้งเดียว (refresh ไม่เห็นซ้ำ)
         $flash = $_SESSION['flash'];
         unset($_SESSION['flash']);
         return $flash;
@@ -91,14 +112,16 @@ function getFlash(): ?array
 }
 
 /**
- * Display flash message HTML (Tailwind)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: แสดง flash message เป็น HTML (Tailwind badge)
+ * ==========================================================================
  */
 function displayFlash(): void
 {
     $flash = getFlash();
     if ($flash) {
         $type = $flash['type'];
-        // Map types to colors
+        // 📝 Map type → Tailwind color class
         $colorClass = match($type) {
             'error', 'danger' => 'bg-red-50 text-red-700 border-red-200',
             'success' => 'bg-green-50 text-green-700 border-green-200',
@@ -106,6 +129,7 @@ function displayFlash(): void
             default => 'bg-blue-50 text-blue-700 border-blue-200'
         };
         
+        // 📝 Map type → Bootstrap Icons class
         $icon = match($type) {
             'error', 'danger' => 'bi-exclamation-circle-fill',
             'success' => 'bi-check-circle-fill',
@@ -116,6 +140,7 @@ function displayFlash(): void
         echo '<div class="' . $colorClass . ' border-l-4 p-3 sm:p-4 mb-4 sm:mb-6 rounded-r-lg shadow-sm flex items-start gap-2 sm:gap-3 relative z-30 overflow-hidden" role="alert">';
         echo '<div class="flex-shrink-0 mt-0.5"><i class="bi ' . $icon . '"></i></div>';
         
+        // 📝 isHtml=true → ไม่ escape (เชื่อ server), false → escape (เชื่อ user)
         $content = $flash['isHtml'] ? $flash['message'] : e($flash['message']);
         
         echo '<div class="flex-grow min-w-0 text-sm sm:text-base break-words">' . $content . '</div>';
@@ -128,55 +153,51 @@ function displayFlash(): void
 }
 
 /**
- * ตรวจสอบว่าผู้ใช้ login อยู่หรือไม่
- * 
- * @return bool true = login อยู่, false = ยังไม่ login
- * 
- * @security ตรวจจาก session เท่านั้น ไม่เชื่อ cookie/header อื่น
- *           session_id ถูก regenerate หลัง login แล้ว (ป้องกัน session fixation)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจสอบ login status
+ * ==========================================================================
+ *
+ * 📤 Output: @return bool
+ * 🛡️ Security: ตรวจจาก session เท่านั้น (ไม่เชื่อ cookie/header อื่น)
  */
 function isLoggedIn(): bool
 {
+    // 📝 เช็ค session เท่านั้น — ถ้ามี user_id = login แล้ว
     return isset($_SESSION['user_id']);
 }
 
 /**
- * ตรวจสอบว่าผู้ใช้เป็น admin หรือไม่
- * 
- * @return bool true = เป็น admin
- * 
- * @security role มาจาก DB ที่ set ตอน login ไม่ใช่จาก user input
- *           ปลอดภัยจากการปลอมแปลง
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจว่าเป็น admin
+ * ==========================================================================
+ * 🛡️ Security: role มาจาก DB ตอน login (ไม่ใช่ user input)
  */
 function isAdmin(): bool
 {
+    // 📝 role มาจาก DB ตอน login (เก็บใน session)
     return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 }
 
 /**
- * ตรวจสอบว่าผู้ใช้เป็นเจ้าหน้าที่หรือไม่ (admin หรือ staff)
- * 
- * @return bool true = เป็น admin หรือ staff
- * 
- * @note ใช้สำหรับหน้าที่ไม่ต้องการสิทธิ์ admin เต็ม เช่น จัดการหนังสือ, ยืม-คืน
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจว่าเป็นเจ้าหน้าที่ (admin หรือ staff)
+ * ==========================================================================
  */
 function isStaff(): bool
 {
+    // 📝 admin + staff = เจ้าหน้าที่ (admin ก็เป็น staff ด้วย)
     return isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'staff']);
 }
 
 /**
- * บังคับให้ login ก่อนเข้าหน้านี้ - ถ้ายังไม่ login จะ redirect ไป login.php
- * 
- * @return void ถ้า login อยู่แล้ว / never ถ้ายังไม่ login (redirect แล้ว exit)
- * 
- * @sideeffect redirect ไป /login.php พร้อม flash message ถ้ายังไม่ login
- * 
- * @example // ใส่ไว้บรรทัดแรกของหน้าที่ต้อง login
- *          requireLogin();
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บังคับ login (ถ้ายังไม่ login → redirect login.php)
+ * ==========================================================================
+ * ✅ Use case: ใส่บรรทัดแรกของหน้าที่ต้อง login
  */
 function requireLogin(): void
 {
+    // 📝 ถ้ายังไม่ login → flash error + redirect ไป login.php
     if (!isLoggedIn()) {
         setFlash('error', 'กรุณาเข้าสู่ระบบก่อน');
         redirect(APP_URL . '/login.php');
@@ -184,20 +205,14 @@ function requireLogin(): void
 }
 
 /**
- * บังคับให้เป็น admin ก่อนเข้าหน้านี้
- * 
- * ถ้ายังไม่ login → redirect ไป login.php
- * ถ้า login แล้วแต่ไม่ใช่ admin → redirect ไป index.php
- * 
- * @return void ถ้าเป็น admin / never ถ้าไม่ผ่าน (redirect แล้ว exit)
- * 
- * @sideeffect redirect พร้อม flash message ถ้าไม่มีสิทธิ์
- * 
- * @example // ใส่ไว้บรรทัดแรกของหน้า admin-only เช่น settings, reports
- *          requireAdmin();
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บังคับ admin (ไม่ใช่ admin → redirect index.php)
+ * ==========================================================================
+ * ✅ Use case: หน้า admin-only เช่น settings, reports
  */
 function requireAdmin(): void
 {
+    // 📝 chain: ตรวจ login ก่อน → ตรวจ admin
     requireLogin();
     if (!isAdmin()) {
         setFlash('error', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้ (สำหรับผู้ดูแลระบบเท่านั้น)');
@@ -206,20 +221,14 @@ function requireAdmin(): void
 }
 
 /**
- * บังคับให้เป็นเจ้าหน้าที่ (admin หรือ staff) ก่อนเข้าหน้านี้
- * 
- * ถ้ายังไม่ login → redirect ไป login.php
- * ถ้า login แล้วแต่ไม่ใช่ staff → redirect ไป index.php
- * 
- * @return void ถ้าเป็น staff / never ถ้าไม่ผ่าน (redirect แล้ว exit)
- * 
- * @sideeffect redirect พร้อม flash message ถ้าไม่มีสิทธิ์
- * 
- * @example // ใส่ไว้บรรทัดแรกของหน้า staff เช่น books, borrows
- *          requireStaff();
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บังคับ staff (ไม่ใช่ staff → redirect index.php)
+ * ==========================================================================
+ * ✅ Use case: หน้า staff เช่น books, borrows
  */
 function requireStaff(): void
 {
+    // 📝 chain: ตรวจ login ก่อน → ตรวจ staff
     requireLogin();
     if (!isStaff()) {
         setFlash('error', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้ (สำหรับเจ้าหน้าที่เท่านั้น)');
@@ -228,15 +237,13 @@ function requireStaff(): void
 }
 
 /**
- * บังคับ staff สำหรับ API endpoint (ตอบ JSON แทน redirect)
- * 
- * @return void ถ้าเป็น staff / never ถ้าไม่ผ่าน (JSON 403 แล้ว exit)
- * 
- * @example // ใส่ไว้บรรทัดแรกของ API ที่ต้องเป็น staff
- *          requireStaffApi();
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บังคับ staff สำหรับ API (JSON 403 แทน redirect)
+ * ==========================================================================
  */
 function requireStaffApi(): void
 {
+    // 📝 สำหรับ API: ไม่ redirect แต่คืน JSON 403 + exit
     if (!isLoggedIn() || !isStaff()) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Unauthorized']);
@@ -245,10 +252,13 @@ function requireStaffApi(): void
 }
 
 /**
- * บังคับ admin สำหรับ API endpoint (ตอบ JSON แทน redirect)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บังคับ admin สำหรับ API (JSON 403 แทน redirect)
+ * ==========================================================================
  */
 function requireAdminApi(): void
 {
+    // 📝 สำหรับ API: ไม่ redirect แต่คืน JSON 403 + exit
     if (!isLoggedIn() || !isAdmin()) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Unauthorized']);
@@ -257,12 +267,12 @@ function requireAdminApi(): void
 }
 
 /**
- * ดึงข้อมูลผู้ใช้ปัจจุบันจากฐานข้อมูล
- * 
- * @return array|null ['id', 'name', 'email', 'phone', 'role'] หรือ null ถ้าไม่ได้ login
- * 
- * @note Query DB ทุกครั้งที่เรียก (ไม่ cache) - เหมาะสำหรับข้อมูลที่อาจเปลี่ยน
- *       ถ้าต้องการแค่ user_id/role ใช้ $_SESSION แทนจะเร็วกว่า
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ดึงข้อมูลผู้ใช้ปัจจุบันจาก DB
+ * ==========================================================================
+ *
+ * 📤 Output: @return array|null {id, name, email, phone, role} หรือ null
+ * ⚠️ Query DB ทุกครั้ง (ไม่ cache) — ถ้าต้องการแค่ id/role ใช้ $_SESSION แทน
  */
 function getCurrentUser(): ?array
 {
@@ -270,6 +280,8 @@ function getCurrentUser(): ?array
         return null;
     }
     
+    // 📝 Query DB ทุกครั้งที่เรียก (ไม่ cache)
+    //    ⚠️ ถ้าต้องการแค่ id/role → ใช้ $_SESSION แทน (เร็วกว่า)
     require_once __DIR__ . '/db.php';
     require_once __DIR__ . '/../app/Repositories/UserRepository.php';
     
@@ -278,15 +290,13 @@ function getCurrentUser(): ?array
 }
 
 /**
- * ดึงค่า setting จากฐานข้อมูล
- * 
- * @param string $key     ชื่อ setting ที่ต้องการ
- * @param mixed  $default ค่าเริ่มต้นถ้าไม่พบ setting
- * @return mixed ค่า setting หรือค่าเริ่มต้น
- * 
- * @example $orgName = getSetting('org_name', 'ห้องสมุด');
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ดึงค่า setting จาก DB (pass-through ไป SettingsRepository)
+ * ==========================================================================
+ * ✅ Use case: getSetting('org_name', 'ห้องสมุด');
  */
 function getSetting($key, $default = '') {
+    // 📝 Pass-through → SettingsRepository::get() (key-value store)
     require_once __DIR__ . '/db.php';
     require_once __DIR__ . '/../app/Repositories/SettingsRepository.php';
     
@@ -295,15 +305,12 @@ function getSetting($key, $default = '') {
 }
 
 /**
- * บันทึกค่า setting ลงฐานข้อมูล (insert หรือ update ถ้ามีอยู่แล้ว)
- * 
- * @param string $key   ชื่อ setting
- * @param mixed  $value ค่าที่ต้องการบันทึก
- * @return bool true = สำเร็จ
- * 
- * @sideeffect INSERT หรือ UPDATE ตาราง settings
+ * ==========================================================================
+ * 🎯 จุดประสงค์: บันทึกค่า setting ลง DB (upsert ผ่าน SettingsRepository)
+ * ==========================================================================
  */
 function updateSetting($key, $value) {
+    // 📝 Pass-through → SettingsRepository::set() (upsert: ON DUPLICATE KEY UPDATE)
     require_once __DIR__ . '/db.php';
     require_once __DIR__ . '/../app/Repositories/SettingsRepository.php';
     
@@ -312,42 +319,40 @@ function updateSetting($key, $value) {
 }
 
 /**
- * จัดรูปแบบวันที่สำหรับแสดงผล
- * 
- * @param string|null $date   วันที่ในรูปแบบที่ strtotime() เข้าใจได้ (เช่น Y-m-d)
- * @param string      $format รูปแบบผลลัพธ์ (default: d/m/Y สำหรับไทย)
- * @return string วันที่ที่จัดรูปแบบแล้ว หรือ '-' ถ้าไม่มีค่า
- * 
- * @example formatDate('2024-01-15');         // "15/01/2024"
- *          formatDate('2024-01-15', 'Y-m-d'); // "2024-01-15"
+ * ==========================================================================
+ * 🎯 จุดประสงค์: จัดรูปแบบวันที่ (default: d/m/Y สำหรับไทย)
+ * ==========================================================================
+ * ✅ Use case: formatDate('2024-01-15') → "15/01/2024"
  */
 function formatDate(?string $date, string $format = 'd/m/Y'): string
 {
+    // 📝 null/empty → แสดง '-' แทน (ป้องกัน error)
     if (!$date) {
         return '-';
     }
+    // 📝 แปลง string → timestamp → format
     return date($format, strtotime($date));
 }
 
 /**
- * คำนวณจำนวนวันระหว่าง 2 วันที่
- * 
- * @param string $date1 วันที่เริ่มต้น (Y-m-d หรือรูปแบบที่ DateTime เข้าใจ)
- * @param string $date2 วันที่สิ้นสุด
- * @return int จำนวนวัน (บวก = date2 > date1, ลบ = date2 < date1)
- * 
- * @example daysDiff('2024-01-01', '2024-01-15'); // 14
- *          daysDiff('2024-01-15', '2024-01-01'); // -14
+ * ==========================================================================
+ * 🎯 จุดประสงค์: คำนวณจำนวนวันระหว่าง 2 วันที่
+ * ==========================================================================
+ * ✅ Use case: daysDiff('2024-01-01', '2024-01-15') → 14
  */
 function daysDiff(string $date1, string $date2): int
 {
     $d1 = new DateTime($date1);
     $d2 = new DateTime($date2);
+    // 📝 %r = เครื่องหมาย +/- , %a = จำนวนวัน
+    //    date2 > date1 → บวก, date2 < date1 → ลบ
     return (int) $d1->diff($d2)->format('%r%a');
 }
 
 /**
- * Get book status label (Tailwind)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: สร้าง badge สถานะหนังสือ (Tailwind HTML)
+ * ==========================================================================
  */
 function getBookStatusLabel(string $status): string
 {
@@ -359,7 +364,9 @@ function getBookStatusLabel(string $status): string
 }
 
 /**
- * Get borrow status label (Tailwind)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: สร้าง badge สถานะการยืม + เช็ค overdue (Tailwind HTML)
+ * ==========================================================================
  */
 function getBorrowStatusLabel(string $status, ?string $dueDate = null): string
 {
@@ -375,7 +382,9 @@ function getBorrowStatusLabel(string $status, ?string $dueDate = null): string
 }
 
 /**
- * Get reservation status label (Tailwind)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: สร้าง badge สถานะการจอง (Tailwind HTML)
+ * ==========================================================================
  */
 function getReservationStatusLabel(string $status): string
 {
@@ -389,45 +398,32 @@ function getReservationStatusLabel(string $status): string
 }
 
 /**
- * ตรวจสอบรูปแบบ email
- * 
- * @param string $email อีเมลที่ต้องการตรวจสอบ
- * @return bool true = รูปแบบถูกต้อง
- * 
- * @note ใช้ PHP FILTER_VALIDATE_EMAIL (RFC 5321)
- *       ไม่ได้ตรวจว่า email มีจริงหรือไม่ - ต้องส่ง verification email เอง
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจรูปแบบ email (FILTER_VALIDATE_EMAIL)
+ * ==========================================================================
  */
 function isValidEmail(string $email): bool
 {
+    // 📝 ใช้ PHP built-in filter (RFC 5322)
     return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
 /**
- * ตรวจสอบรูปแบบเบอร์โทรศัพท์ (ไทย)
- * 
- * @param string $phone เบอร์โทรที่ต้องการตรวจสอบ
- * @return bool true = รูปแบบถูกต้อง (ตัวเลข 9-10 หลัก)
- * 
- * @note รองรับเฉพาะเบอร์ไทย เช่น 0812345678
- *       ถ้าต้องการ international format (+66...) ต้องแก้ regex
- * 
- * @example isValidPhone('0812345678'); // true
- *          isValidPhone('081-234-5678'); // false (มีขีด)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจเบอร์โทรไทย (ตัวเลข 9-10 หลัก)
+ * ==========================================================================
  */
 function isValidPhone(string $phone): bool
 {
+    // 📝 เบอร์ไทย: 9-10 หลัก ตัวเลขล้วน (เช่น 0812345678)
     return preg_match('/^[0-9]{9,10}$/', $phone);
 }
 
 /**
- * ตรวจสอบความถูกต้องของชื่อ (Single Source of Truth)
- * 
- * @param string $name    ชื่อที่ต้องการตรวจสอบ
- * @param int    $maxLen  ความยาวสูงสุด (default: 100)
- * @return string|null    null = valid, string = error message
- * 
- * @example $error = validateName($name);
- *          if ($error) $errors[] = $error;
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจชื่อ (Single Source of Truth)
+ * ==========================================================================
+ * 📤 Output: @return string|null (null = valid)
  */
 function validateName(string $name, int $maxLen = 100): ?string
 {
@@ -441,15 +437,10 @@ function validateName(string $name, int $maxLen = 100): ?string
 }
 
 /**
- * ตรวจสอบความยาวสูงสุดของข้อความ (Single Source of Truth)
- * 
- * @param string $value     ค่าที่ต้องการตรวจสอบ
- * @param int    $max       ความยาวสูงสุดที่อนุญาต
- * @param string $fieldName ชื่อฟิลด์สำหรับแสดงใน error message
- * @return string|null      null = valid, string = error message
- * 
- * @example $error = validateMaxLength($name, 100, 'ชื่อ');
- *          if ($error) $errors[] = $error;
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจความยาวสูงสุด (Single Source of Truth)
+ * ==========================================================================
+ * 📤 Output: @return string|null (null = valid)
  */
 function validateMaxLength(string $value, int $max, string $fieldName): ?string
 {
@@ -460,14 +451,11 @@ function validateMaxLength(string $value, int $max, string $fieldName): ?string
 }
 
 /**
- * ตรวจสอบความถูกต้องของรหัสผ่าน (Single Source of Truth)
- * 
- * @param string $password   รหัสผ่านที่ต้องการตรวจสอบ
- * @param bool   $allowEmpty true = อนุญาตให้ว่างได้ (สำหรับ edit mode)
- * @return string|null       null = valid, string = error message
- * 
- * @example $error = validatePassword($password);
- *          if ($error) $errors[] = $error;
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจรหัสผ่าน (Single Source of Truth)
+ * ==========================================================================
+ * 📥 Input: @param string $password, @param bool $allowEmpty (edit mode)
+ * 📤 Output: @return string|null (null = valid)
  */
 function validatePassword(string $password, bool $allowEmpty = false): ?string
 {
@@ -481,17 +469,14 @@ function validatePassword(string $password, bool $allowEmpty = false): ?string
 }
 
 /**
- * ตรวจสอบข้อมูลสมาชิก (Single Source of Truth)
- * 
- * รวม validation rules สำหรับ name, email, phone, password ไว้ที่เดียว
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจข้อมูลสมาชิก (Single Source of Truth)
+ * ==========================================================================
+ * รวม validation: name, email, phone, password ไว้ที่เดียว
  * ใช้ร่วมกันทั้ง register.php, member_form.php, MemberService, AuthService
- * 
- * @param array $data       { name, email, phone?, password? }
- * @param bool  $isEdit     true = edit mode (password ว่างได้)
- * @return array             error messages (empty = valid)
- * 
- * @example $errors = validateMemberData($data);
- *          if (!empty($errors)) { ... }
+ *
+ * 📥 Input: @param array $data {name, email, phone?, password?}, @param bool $isEdit
+ * 📤 Output: @return array error messages (empty = valid)
  */
 function validateMemberData(array $data, bool $isEdit = false): array
 {
@@ -527,133 +512,135 @@ function validateMemberData(array $data, bool $isEdit = false): array
 }
 
 /**
- * Hash password ด้วย algorithm กลาง (Single Source of Truth)
- * 
- * @param string $plainPassword รหัสผ่าน plaintext
- * @return string hashed password
+ * ==========================================================================
+ * 🎯 จุดประสงค์: Hash password (Single Source of Truth)
+ * ==========================================================================
+ * ⚠️ ทุกที่ที่ต้อง hash ต้องเรียกผ่านฟังก์ชันนี้
  */
 function hashPassword(string $plainPassword): string
 {
+    // 📝 PASSWORD_DEFAULT = bcrypt (ปัจจุบัน)
+    //    PHP จะอัปเกรด algorithm เองเมื่อมีตัวใหม่ที่ดีกว่า
+    //    ⚠️ ทุกที่ที่ต้อง hash ต้องเรียกผ่านฟังก์ชันนี้ (Single Source of Truth)
     return password_hash($plainPassword, PASSWORD_DEFAULT);
 }
 
 /**
- * สร้าง CSRF token สำหรับป้องกันการโจมตี Cross-Site Request Forgery
- * 
- * @return string token 64 ตัวอักษร (hex)
- * 
- * @security - ใช้ random_bytes() ที่ cryptographically secure
- *           - Token เดียวต่อ session (สร้างครั้งเดียว ใช้ซ้ำได้จนกว่า session หมดอายุ)
- *           - ถ้าต้องการ per-request token ต้องแก้ logic
- * 
- * @sideeffect เขียน $_SESSION['csrf_token'] ถ้ายังไม่มี
- * 
- * @example <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+ * ==========================================================================
+ * 🎯 จุดประสงค์: สร้าง CSRF token (per-session, cryptographically secure)
+ * ==========================================================================
+ *
+ * 📤 Output: @return string 64 hex chars
+ * 🛡️ Security: random_bytes(32), per-session token
+ * ✅ Use case: <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
  */
 function generateCSRFToken(): string
 {
-    // Per-session token — ใช้ร่วมกันทุก form ในหน้าเดียวกัน
-    // SameSite=Lax cookie ป้องกัน cross-origin POST อยู่แล้ว
+    // 📝 Per-session token — สร้างครั้งเดียวต่อ session
+    //    ใช้ร่วมกันทุก form ในหน้าเดียวกัน (ไม่ต้อง per-form)
+    //    🛡️ SameSite=Lax cookie ป้องกัน cross-origin POST เพิ่มอีกชั้น
     if (!isset($_SESSION['csrf_token'])) {
+        // 📝 random_bytes(32) = 256-bit cryptographically secure random
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
     return $_SESSION['csrf_token'];
 }
 
 /**
- * ตรวจสอบ CSRF token จาก form submission
- * 
- * @param string $token token ที่ได้รับจาก $_POST['csrf_token']
- * @return bool true = token ถูกต้อง
- * 
- * @security ใช้ hash_equals() ป้องกัน timing attack
- *           ห้ามใช้ == หรือ === เปรียบเทียบ token
- * 
- * @example if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
- *              die('Invalid CSRF token');
- *          }
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจ CSRF token (hash_equals ป้องกัน timing attack)
+ * ==========================================================================
+ * ⚠️ ห้ามใช้ == หรือ === เปรียบเทียบ token
  */
 function validateCSRFToken(string $token): bool
 {
+    // 📝 hash_equals = timing-safe comparison
+    //    ⚠️ ห้ามใช้ == หรือ === (เสี่ยง timing attack)
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
 
 /**
- * Start secure session พร้อมตั้งค่า cookie flags
- * 
- * @security ตั้ง HttpOnly, SameSite=Lax, Secure (เมื่อใช้ HTTPS)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: Start secure session + inactivity timeout
+ * ==========================================================================
+ * 🛡️ Security: HttpOnly, SameSite=Lax, Secure (HTTPS), inactivity timeout
+ * ⚠️ ถูกเรียกอัตโนมัติท้าย functions.php (ไม่ต้องเรียกเอง)
  */
 function startSession(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
-        // [SECURITY] ตั้งค่า session cookie ให้ปลอดภัย
+        // 🛡️ [SECURITY] ตั้งค่า session cookie ให้ปลอดภัย
         session_set_cookie_params([
-            'lifetime' => 0, // Session cookie — ปิด browser = หมดอายุ
+            'lifetime' => 0, // 📝 Session cookie — ปิด browser = หมดอายุ
             'path' => '/',
             'domain' => '',
-            'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-            'httponly' => true,
-            'samesite' => 'Lax'
+            'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', // 📝 HTTPS เท่านั้น
+            'httponly' => true,   // 📝 JavaScript อ่าน cookie ไม่ได้ (ป้องกัน XSS ขโมย session)
+            'samesite' => 'Lax'  // 📝 ป้องกัน CSRF บางส่วน (cross-site POST ไม่ส่ง cookie)
         ]);
         session_start();
     }
     
-    // [SECURITY] Inactivity timeout — ป้องกัน session ค้างบน shared computer
+    // 🛡️ [SECURITY] Inactivity timeout
+    //    ป้องกัน session ค้างบน shared computer (เช่น คอมห้องสมุด)
     $timeout = defined('SESSION_LIFETIME') ? SESSION_LIFETIME : 3600;
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > $timeout)) {
+        // 📝 หมดอายุ → ล้าง session ทั้งหมด + เริ่มใหม่
         session_unset();
         session_destroy();
-        session_start(); // Start fresh session
+        session_start();
         return;
     }
+    // 📝 อัปเดต timestamp ทุก request
     $_SESSION['last_activity'] = time();
 }
 
 /**
- * ตรวจสอบ rate limit สำหรับป้องกัน brute force
- * 
- * @param string $key ชื่อ key สำหรับแยก limit แต่ละ action (เช่น 'login', 'register')
- * @param int $maxAttempts จำนวนครั้งสูงสุดที่อนุญาต (default: RATE_LIMIT_MAX_ATTEMPTS)
- * @param int $windowMinutes ช่วงเวลาที่นับ (นาที) (default: RATE_LIMIT_WINDOW_MINUTES)
- * @return bool true = ยังไม่เกิน limit, false = เกิน limit แล้ว
- * 
- * @example if (!checkRateLimit('login')) {
- *              $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
- *          }
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจ rate limit (DB-based, keyed by IP)
+ * ==========================================================================
+ *
+ * 📥 Input: @param string $key, @param int|null $maxAttempts, @param int|null $windowMinutes
+ * 📤 Output: @return bool true = ยังไม่เกิน limit
+ * 🧠 เหตุผล: DB fail → allow (best-effort — ไม่ lock out ทุกคน)
  */
 function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinutes = null): bool
 {
+    // 📝 ใช้ default จาก config.php ถ้าไม่ระบุ
     $maxAttempts = $maxAttempts ?? RATE_LIMIT_MAX_ATTEMPTS;
     $windowMinutes = $windowMinutes ?? RATE_LIMIT_WINDOW_MINUTES;
     
+    // 📝 ใช้ IP + key เป็นตัวระบุ (เช่น "login_192.168.1.1")
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $fullKey = $key . '_' . $ip;
     
     try {
         $pdo = getDB();
         
-        // Cleanup expired entries
+        // 📝 ลบรายการหมดอายุ (ทำความสะอาด table)
         $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE key_name = ? AND created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)");
         $stmt->execute([$fullKey, $windowMinutes]);
         
-        // Count recent attempts
+        // 📝 นับรายการใน window
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM rate_limits WHERE key_name = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)");
         $stmt->execute([$fullKey, $windowMinutes]);
         
+        // 📤 true = ยังไม่เกิน limit, false = เกินแล้ว (บล็อก)
         return (int) $stmt->fetchColumn() < $maxAttempts;
     } catch (\Exception $e) {
-        // Fallback: allow request if DB fails (avoid locking out everyone)
+        // 📝 Fallback: DB พัง → อนุญาตผ่าน (best-effort, ไม่ lock out ทุกคน)
         return true;
     }
 }
 
 /**
- * เพิ่มจำนวน attempt สำหรับ rate limit (DB-based, keyed by IP)
- * 
- * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
+ * ==========================================================================
+ * 🎯 จุดประสงค์: เพิ่ม attempt counter (DB-based)
+ * ==========================================================================
  */
 function incrementRateLimit(string $key): void
 {
+    // 📝 เพิ่ม 1 record ใน rate_limits (บันทึก attempt)
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $fullKey = $key . '_' . $ip;
     
@@ -662,17 +649,18 @@ function incrementRateLimit(string $key): void
         $stmt = $pdo->prepare("INSERT INTO rate_limits (key_name) VALUES (?)");
         $stmt->execute([$fullKey]);
     } catch (\Exception $e) {
-        // Silently fail — rate limit is best-effort
+        // 📝 Silently fail — best-effort (ไม่พังแอป)
     }
 }
 
 /**
- * Reset rate limit counter (เรียกหลัง success, DB-based)
- * 
- * @param string $key ชื่อ key เดียวกับที่ใช้กับ checkRateLimit()
+ * ==========================================================================
+ * 🎯 จุดประสงค์: Reset rate limit counter (เรียกหลัง success)
+ * ==========================================================================
  */
 function resetRateLimit(string $key): void
 {
+    // 📝 ลบ attempt ทั้งหมดของ key+IP (เรียกหลัง login สำเร็จ)
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $fullKey = $key . '_' . $ip;
     
@@ -681,22 +669,26 @@ function resetRateLimit(string $key): void
         $stmt = $pdo->prepare("DELETE FROM rate_limits WHERE key_name = ?");
         $stmt->execute([$fullKey]);
     } catch (\Exception $e) {
-        // Silently fail
+        // 📝 Silently fail — best-effort
     }
 }
 
 /**
- * ล้าง idempotency keys ที่หมดอายุ (เรียกตอนเริ่ม session)
- * 
- * @param int $maxAgeSeconds อายุสูงสุดของ key (default: 300 = 5 นาที)
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ล้าง idempotency keys หมดอายุ (session-based)
+ * ==========================================================================
+ * ✅ เรียกอัตโนมัติจาก bootstrap.php
  */
 function cleanupIdempotencyKeys(int $maxAgeSeconds = 300): void
 {
+    // 📝 สร้าง array ถ้ายังไม่มี
     if (!isset($_SESSION['processed_actions'])) {
         $_SESSION['processed_actions'] = [];
         return;
     }
     
+    // 📝 ลบ key ที่เกิน maxAge (default 5 นาที)
+    //    ป้องกัน session บวมจาก key สะสม
     $now = time();
     foreach ($_SESSION['processed_actions'] as $key => $timestamp) {
         if ($now - $timestamp > $maxAgeSeconds) {
@@ -706,18 +698,22 @@ function cleanupIdempotencyKeys(int $maxAgeSeconds = 300): void
 }
 
 /**
- * จัดรูปแบบจำนวนเงินค่าปรับ (บาท)
- * 
- * @param float $amount จำนวนเงิน
- * @return string เช่น "150 บาท" หรือ "-" ถ้าไม่มีค่าปรับ
+ * ==========================================================================
+ * 🎯 จุดประสงค์: จัดรูปแบบค่าปรับ (บาท)
+ * ==========================================================================
+ * ✅ Use case: formatFine(150) → "150 บาท"
  */
 function formatFine(float $amount): string
 {
+    // 📝 ไม่มีค่าปรับ → '-'
     if ($amount <= 0) {
         return '-';
     }
+    // 📝 format พร้อมหน่วยบาท
     return number_format($amount) . ' บาท';
 }
 
-// Auto-start session
+// 📝 Auto-start session — เรียกอัตโนมัติเมื่อ require functions.php
+//    ไม่ต้องเรียก startSession() เอง
+
 startSession();

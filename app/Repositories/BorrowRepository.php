@@ -1,22 +1,118 @@
 <?php
 /**
  * BorrowRepository - Database Access สำหรับการยืม-คืน
- * 
- * ⭐ สำหรับคนมาใหม่:
- * - ไฟล์นี้จัดการ SQL queries สำหรับตาราง borrows
- * - ห้ามเรียกจากหน้าเว็บโดยตรง ให้เรียกผ่าน BorrowService
- * - ทุก method ใช้ prepared statements (ป้องกัน SQL Injection)
- * 
- * 📌 Methods สำคัญ:
- * - create()            → INSERT borrow record
- * - markAsReturned()    → UPDATE status='returned'
- * - findByIdForUpdate() → SELECT ... FOR UPDATE (ป้องกัน race condition)
- * 
+ *
+ * ==========================================================================
+ * 🎯 ไฟล์นี้ทำอะไร?
+ * ==========================================================================
+ * Repository นี้จัดการ SQL queries สำหรับตาราง borrows (การยืม-คืนหนังสือ)
+ * เป็นตารางหลักของระบบ — เก็บประวัติการยืม-คืนทั้งหมด
+ *
+ * 📚 โครงสร้างตาราง borrows:
+ * +-------------+--------------+----------------------------------------------+
+ * | Column      | Type         | อธิบาย                                       |
+ * +-------------+--------------+----------------------------------------------+
+ * | id          | INT AUTO PK  | Primary Key                                  |
+ * | user_id     | INT FK       | ผู้ยืม → users.id                          |
+ * | book_id     | INT FK       | หนังสือ → books.id                         |
+ * | borrow_date | DATE         | วันยืม                                       |
+ * | due_date    | DATE         | กำหนดคืน                                    |
+ * | return_date | DATE NULL    | วันคืนจริง (NULL = ยังไม่คืน)              |
+ * | status      | ENUM         | 'borrowing', 'returned'                      |
+ * | fine_amount | DECIMAL NULL | ค่าปรับ (คำนวณตอนคืน)                    |
+ * | created_at  | DATETIME     | เวลาสร้าง record                           |
+ * +-------------+--------------+----------------------------------------------+
+ *
+ * � Entrypoints:
+ * - BorrowService      → create(), markAsReturned(), findByIdForUpdate(),
+ *                        countActiveBorrowsForUpdate(), isAlreadyBorrowing()
+ * - admin/borrows.php  → findAll() (แสดงรายการ)
+ * - my_borrows.php     → findByUserIdPaginated() (ประวัติสมาชิก)
+ * - DashboardService   → findOverdue(), findRecent(), countOverdue(), countActive()
+ * - BookService        → countByBook(), countActiveByBook()
+ * - MemberService      → countByUser()
+ * - profile.php        → getStatsByUser(), getUnpaidFinesByUser()
+ *
+ * 🛡️ Security Design:
+ * - findByIdForUpdate() / findByIdForUpdateAnyStatus() = row lock ป้องกัน race
+ * - countActiveBorrowsForUpdate() = lock + count ป้องกันยืมเกินโควต้า
+ * - ทุก method ใช้ prepared statements
+ *
  * ⚠️ ห้ามแก้:
- * - findByIdForUpdate() - มี FOR UPDATE lock ที่สำคัญ
- * - countActiveBorrowsForUpdate() - ป้องกันยืมเกินโควต้า
- * 
+ * - findByIdForUpdate() ต้องเรียกใน transaction
+ * - countActiveBorrowsForUpdate() ต้องเรียกใน transaction
+ *
  * @package App\Repositories
+ *
+ * ==========================================================================
+ * 🗺️ Quick Map — เมธอดไหนใช้กับ flow ไหน
+ * ==========================================================================
+ *
+ * 📖 ยืมหนังสือ (BorrowService::createBorrow):
+ *   create()                       → INSERT รายการยืมใหม่
+ *   countActiveBorrowsForUpdate()  → นับ + lock เช็คโควต้าก่อนยืม
+ *   isAlreadyBorrowing()           → เช็คยืมซ้ำ
+ *
+ * 🔄 คืนหนังสือ (BorrowService::returnBook):
+ *   findByIdForUpdate()            → lock + ดึง borrow ที่ยังยืมอยู่
+ *   markAsReturned()               → UPDATE status='returned'
+ *
+ * 💰 จ่ายค่าปรับ (BorrowService::payFine):
+ *   findByIdForUpdateAnyStatus()   → lock borrow (ทุก status)
+ *
+ * 📊 Dashboard (DashboardService):
+ *   findOverdue()                  → รายการเกินกำหนด
+ *   findRecent()                   → ยืมล่าสุด
+ *   countOverdue()                 → badge สีแดง
+ *   countActive()                  → การ์ดสถิติ
+ *
+ * 📝 หน้าแสดงรายการ (admin/borrows.php):
+ *   findAll()                      → ดึงทั้งหมด + filter
+ *   findById()                     → ดึงเฉพาะ ID
+ *
+ * 👤 สมาชิก (my_borrows.php / profile.php):
+ *   findByUserIdPaginated()        → ประวัติยืม + pagination
+ *   getStatsByUser()               → สถิติของสมาชิก
+ *   getUnpaidFinesByUser()         → ค่าปรับค้างชำระ
+ *
+ * 📕 หน้าหนังสือ (book.php):
+ *   findCurrentByBook()            → ใครยืมอยู่
+ *   findHistoryByBook()            → ประวัติการยืม
+ *
+ * 🚨 ตรวจก่อนลบ (BookService / MemberService):
+ *   countByBook()                  → เช็คก่อนลบหนังสือ
+ *   countActiveByBook()            → เช็คมีคนยืมอยู่ไหม
+ *   countByUser()                  → เช็คก่อนลบสมาชิก
+ *
+ * 💵 ค่าปรับ (admin/payments.php):
+ *   getUnpaidFinesList()           → รายการค้างชำระ
+ *   getTotalUnpaidFines()          → ยอดรวมค้างชำระ
+ *
+ * ==========================================================================
+ * ⚠️ Danger Zones — จุดเสี่ยงในไฟล์นี้
+ * ==========================================================================
+ *
+ * 1. 🔴 findByIdForUpdate() / findByIdForUpdateAnyStatus() / countActiveBorrowsForUpdate()
+ *    - ใช้ SELECT ... FOR UPDATE → ต้องเรียกใน transaction เท่านั้น
+ *    - ถ้าเรียกนอก transaction → lock จะไม่ทำงาน → race condition เกิดได้
+ *    - ห้ามลบ FOR UPDATE ออก!
+ *
+ * 2. 🔴 findAll() / findByUserIdPaginated() ต่อ SQL string ด้วย $where
+ *    - $where มาจาก code ภายใน (ไม่ใช่ user input ตรงๆ) → ปลอดภัย
+ *    - แต่ user input ถูก bind ผ่าน ? placeholder → ปลอดภัย
+ *    - ห้ามต่อ user input เข้า $where โดยตรง!
+ *
+ * 3. 🟡 getUnpaidFinesList() / getTotalUnpaidFines() / getUnpaidFinesByUser()
+ *    - ใช้ LEFT JOIN payments + IS NULL ตรวจว่ายังไม่จ่าย
+ *    - ถ้าเพิ่มระบบจ่ายบางส่วน → logic พัง (เหมือน ReportRepository)
+ *
+ * 4. 🟡 countOverdue() / countActive() ใช้ query() ไม่ใช่ prepare()
+ *    - ไม่มี user input → ปลอดภัย
+ *    - ถ้าเพิ่ม parameter → ต้องเปลี่ยนเป็น prepare()
+ *
+ * 5. 🟢 markAsReturned() ใช้ CURDATE() ของ MySQL
+ *    - return_date = CURDATE() → ไม่ส่งจาก PHP
+ *    - ถ้า timezone MySQL ≠ PHP → วันที่อาจคลาดเคลื่อน
  */
 
 namespace App\Repositories;
@@ -25,50 +121,94 @@ use PDO;
 
 class BorrowRepository
 {
+    // 🗄️ PDO connection — ใช้ร่วมกันทุกเมธอด (inject ผ่าน constructor)
     private PDO $pdo;
 
+    // 🏗️ Constructor: รับ PDO จากภายนอก (Dependency Injection)
+    // → ใช้ connection เดียวกับ BorrowService ที่เรียก
+    // → สำคัญมาก: ทำให้ transaction + FOR UPDATE lock ทำงานได้ถูกต้อง
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
     }
 
     /**
-     * ดึงรายการยืมทั้งหมด พร้อม user_name, book_title
-     * 
-     * @param array $filters { search?: string, status?: string, user_id?: int, overdue?: bool, due_today?: bool }
-     * @return array รายการยืมพร้อมข้อมูล user และ book
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการยืมทั้งหมด พร้อม user_name, book_title
+     * ==========================================================================
+     * เมธอดหลักสำหรับหน้า admin/borrows.php
+     *
+     * 🔄 Flow: borrows JOIN users JOIN books + WHERE filters + ORDER BY created_at DESC
+     *
+     * 📥 Input:
+     * @param array $filters {
+     *     search?: string  — ค้นใน user_name, email, book_title (LIKE)
+     *     status?: string  — 'borrowing' | 'returned'
+     *     user_id?: int    — กรองเฉพาะ user
+     *     overdue?: bool   — เฉพาะเกินกำหนด
+     *     due_today?: bool — เฉพาะครบกำหนดวันนี้
+     * }
+     *
+     * 📤 Output:
+     * @return array [{borrow row + user_name, user_email, user_phone, book_title, book_author}, ...]
+     *
+     * 🛡️ Security: prepared statement + LIKE parameterized
+     * ✅ Use case: admin/borrows.php GET
      */
     public function findAll(array $filters = []): array
     {
+        // 🔄 Flow: admin/borrows.php (GET) → findAll(filters)
+        // 🎯 ดึงรายการยืมทั้งหมด + JOIN user/book + filter ตามเงื่อนไข
+        //
+        // 📝 สร้าง WHERE clause แบบ dynamic จาก $filters
+        //    - แต่ละ filter ถูกเพิ่มเข้า array $where และ bind ผ่าน ?
+        //    - ⚠️ Danger Zone #2: $where ถูกต่อเข้า SQL แต่ค่ามาจาก code ภายใน
+        //      user input ทั้งหมด bind ผ่าน ? → ปลอดภัยจาก SQL Injection
         $where = [];
         $params = [];
 
+        // 🔍 filter: search → ค้นหาในชื่อสมาชิก, email, ชื่อหนังสือ
+        // SQL: LIKE ? → bind "%keyword%" (3 ค่า เพราะค้น 3 คอลัมน์)
+        // 🛡️ search ถูก bind ผ่าน ? → ปลอดภัยจาก SQL Injection
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $where[] = "(u.name LIKE ? OR u.email LIKE ? OR bk.title LIKE ?)";
             $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
         }
 
+        // 🔍 filter: status → กรองตามสถานะ ('borrowing' หรือ 'returned')
         if (!empty($filters['status'])) {
             $where[] = "b.status = ?";
             $params[] = $filters['status'];
         }
 
+        // 🔍 filter: user_id → กรองเฉพาะ user
         if (!empty($filters['user_id'])) {
             $where[] = "b.user_id = ?";
             $params[] = $filters['user_id'];
         }
 
+        // 🔍 filter: overdue → เฉพาะเกินกำหนด (borrowing + due_date < วันนี้)
         if (isset($filters['overdue']) && $filters['overdue']) {
             $where[] = "b.status = 'borrowing' AND b.due_date < CURDATE()";
         }
         
+        // 🔍 filter: due_today → เฉพาะครบกำหนดวันนี้
         if (isset($filters['due_today']) && $filters['due_today']) {
             $where[] = "b.status = 'borrowing' AND b.due_date = CURDATE()";
         }
 
+        // 📝 รวม WHERE clauses ด้วย AND → ถ้าไม่มี filter → $whereSQL = '' (ดึงทั้งหมด)
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        // 📝 SQL อธิบาย:
+        //    - SELECT b.* → ดึงทุกคอลัมน์จาก borrows
+        //    - JOIN users + books → เอาชื่อสมาชิก + ชื่อหนังสือมาแสดง
+        //    - {$whereSQL} → เงื่อนไขที่สร้างจาก filters
+        //    - ORDER BY created_at DESC → รายการล่าสุดขึ้นก่อน
+        //
+        // 📤 Output: [{borrow fields + user_name, user_email, user_phone, book_title, book_author}, ...]
+        // ⚠️ user_email + user_phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงใน HTML
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
                    bk.title as book_title, bk.author as book_author
@@ -83,10 +223,22 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมตาม ID พร้อม user_name, book_title
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการยืมตาม ID (พร้อม user_name, book_title)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id Borrow ID
+     * 📤 Output: @return array|null borrow row + user_name + book_title หรือ null
+     * ✅ Use case: admin/borrows.php?view=ID, BorrowService::returnBook()
      */
     public function findById(int $id): ?array
     {
+        // 🔄 Flow: admin/borrows.php?view=ID, BorrowService::returnBook()
+        // 🎯 ดึง borrow เดียวตาม ID พร้อมชื่อสมาชิก + ชื่อหนังสือ
+        //
+        // 📝 SQL: JOIN users + books → เอาชื่อมาแสดง / WHERE b.id = ?
+        // 📤 Output: borrow row + user_name + book_title หรือ null (ไม่พบ)
+        // 📝 fetch() ?: null → ถ้าไม่พบจะ return null (ไม่ใช่ false)
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as user_name, bk.title as book_title
             FROM borrows b
@@ -99,17 +251,34 @@ class BorrowRepository
     }
 
     /**
-     * Lock row สำหรับ transaction (เฉพาะ status='borrowing')
-     * 
-     * [CONCURRENCY] FOR UPDATE ป้องกัน:
-     * - คืนหนังสือซ้ำ (กดปุ่มคืน 2 ครั้ง)
-     * - Race condition ระหว่าง staff 2 คน
-     * 
-     * @note ต้องเรียกภายใน transaction เท่านั้น
-     * @note ใช้สำหรับ returnBook() - filter เฉพาะ borrowing
+     * ==========================================================================
+     * 🎯 จุดประสงค์: Lock borrow row (เฉพาะ status='borrowing') + SELECT FOR UPDATE
+     * ==========================================================================
+     * ใช้สำหรับ returnBook() — lock + กรองเฉพาะ borrowing
+     *
+     * 📥 Input: @param int $id Borrow ID
+     * 📤 Output: @return array|null borrow row (ถูก lock) หรือ null
+     *
+     * 🛡️ Security:
+     * - FOR UPDATE = row lock ป้องกันคืนซ้ำ / staff 2 คนกดพร้อมกัน
+     * - AND status='borrowing' กรองเฉพาะที่ยังยืมอยู่
+     * - ต้องเรียกใน transaction
+     *
+     * ✅ Use case: BorrowService::returnBook()
      */
     public function findByIdForUpdate(int $id): ?array
     {
+        // 🔄 Flow: BorrowService::returnBook() → findByIdForUpdate()
+        // 🎯 lock + ดึง borrow ที่ยังยืมอยู่ เพื่อดำเนินการคืน
+        //
+        // 📝 SQL: SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE
+        //    - AND status = 'borrowing' → กรองเฉพาะที่ยังยืมอยู่ (ถ้าคืนแล้ว → return null)
+        //    - FOR UPDATE → 🔒 lock แถวนี้ไว้ จนกว่า transaction จบ
+        //      ป้องกัน: staff 2 คนกดคืนพร้อมกัน → คนที่ 2 ต้องรอ
+        //
+        // ⚠️ Danger Zone #1: ต้องเรียกใน transaction เท่านั้น!
+        //    ถ้าเรียกนอก transaction → lock ไม่ทำงาน → race condition
+        //    🔴 ห้ามลบ FOR UPDATE ออก!
         $stmt = $this->pdo->prepare("
             SELECT * FROM borrows WHERE id = ? AND status = 'borrowing' FOR UPDATE
         ");
@@ -118,15 +287,34 @@ class BorrowRepository
     }
 
     /**
-     * Lock row สำหรับ transaction (ทุก status)
-     * 
-     * [CONCURRENCY] FOR UPDATE ป้องกัน race condition
-     * 
-     * @note ต้องเรียกภายใน transaction เท่านั้น
-     * @note ใช้สำหรับ payFine() - ต้องการหา borrow ที่ returned แล้ว
+     * ==========================================================================
+     * 🎯 จุดประสงค์: Lock borrow row (ทุก status) + SELECT FOR UPDATE
+     * ==========================================================================
+     * ใช้สำหรับ payFine() — ต้องการหา borrow ที่ returned แล้วด้วย
+     *
+     * 📥 Input: @param int $id Borrow ID
+     * 📤 Output: @return array|null borrow row (ถูก lock) หรือ null
+     *
+     * 🧠 เหตุผล:
+     * - ทำไมแยกจาก findByIdForUpdate()? เพราะไม่กรอง status
+     *   payFine() ต้องการ borrow ที่ returned แล้ว (ไม่ใช่ borrowing)
+     *
+     * ✅ Use case: BorrowService::payFine()
      */
     public function findByIdForUpdateAnyStatus(int $id): ?array
     {
+        // 🔄 Flow: BorrowService::payFine() → findByIdForUpdateAnyStatus()
+        // 🎯 lock borrow row โดยไม่กรอง status — ใช้กับการจ่ายค่าปรับ
+        //
+        // 🧠 ทำไมแยกจาก findByIdForUpdate()?
+        //    เพราะ payFine() ต้องการ borrow ที่ returned แล้ว (ไม่ใช่ borrowing)
+        //    findByIdForUpdate() กรอง status='borrowing' → จะไม่เจอ borrow ที่คืนแล้ว
+        //
+        // 📝 SQL: SELECT * FROM borrows WHERE id = ? FOR UPDATE
+        //    - ไม่มี AND status = ... → ดึงได้ทุก status
+        //    - FOR UPDATE → lock ป้องกันจ่ายซ้ำ
+        //
+        // ⚠️ ต้องเรียกใน transaction เหมือน findByIdForUpdate()
         $stmt = $this->pdo->prepare("
             SELECT * FROM borrows WHERE id = ? FOR UPDATE
         ");
@@ -135,14 +323,32 @@ class BorrowRepository
     }
 
     /**
-     * สร้างรายการยืม
-     * 
-     * @param array $data { user_id: int, book_id: int, borrow_date: string, due_date: string }
-     * @return int ID ของรายการที่สร้าง
-     * @sideeffect INSERT ลง borrows table (status = 'borrowing')
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างรายการยืม (status='borrowing' อัตโนมัติ)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param array $data {user_id, book_id, borrow_date, due_date}
+     *              - มาจาก: BorrowService::createBorrow()
+     *
+     * 📤 Output: @return int Borrow ID ที่สร้าง
+     *
+     * 🧠 เหตุผล: status='borrowing' hardcode ใน SQL (ไม่รับจาก input)
+     * 🛡️ Security: เรียกภายใต้ transaction จาก BorrowService
+     * ✅ Use case: BorrowService::createBorrow()
      */
     public function create(array $data): int
     {
+        // 🔄 Flow: BorrowService::createBorrow() → borrowSingleBook() → create()
+        // 🎯 INSERT รายการยืมใหม่ลงตาราง borrows
+        //
+        // 📝 SQL: INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
+        //    - status = 'borrowing' → hardcode ใน SQL (ไม่รับจาก input)
+        //      🛡️ ป้องกันการสร้าง borrow ที่เป็น 'returned' ตั้งแต่แรก
+        //    - ? placeholder 4 ตัว: [user_id, book_id, borrow_date, due_date]
+        //
+        // 📤 Output: Borrow ID ที่สร้าง (lastInsertId)
+        // 🛡️ เรียกภายใต้ transaction จาก BorrowService
         $stmt = $this->pdo->prepare("
             INSERT INTO borrows (user_id, book_id, borrow_date, due_date, status)
             VALUES (?, ?, ?, ?, 'borrowing')
@@ -155,16 +361,37 @@ class BorrowRepository
             $data['due_date']
         ]);
 
+        // 📝 lastInsertId() → ได้ AUTO_INCREMENT ID ที่เพิ่งสร้าง
         return (int) $this->pdo->lastInsertId();
     }
 
     /**
-     * อัปเดตเป็นคืนแล้ว
-     * 
-     * @sideeffect UPDATE borrows: status='returned', return_date, fine_amount
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อัปเดตเป็นคืนแล้ว (status='returned' + return_date + fine)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int   $id         Borrow ID
+     * @param float $fineAmount ค่าปรับ (0 = คืนตรงเวลา, > 0 = คืนช้า)
+     *
+     * 📤 Output: @return bool true = สำเร็จ
+     *
+     * 🧠 เหตุผล: return_date = CURDATE() — คำนวณโดย DB (ไม่ต้องส่งจาก PHP)
+     * ✅ Use case: BorrowService::returnBook() (inside transaction)
      */
     public function markAsReturned(int $id, float $fineAmount): bool
     {
+        // 🔄 Flow: BorrowService::returnBook() → markAsReturned()
+        // 🎯 UPDATE สถานะเป็น 'returned' + บันทึกวันคืน + ค่าปรับ
+        //
+        // 📝 SQL: UPDATE borrows SET status='returned', return_date=CURDATE(), fine_amount=?
+        //    - return_date = CURDATE() → ใช้วันที่ของ MySQL (ไม่ส่งจาก PHP)
+        //      ⚠️ Danger Zone #5: ถ้า timezone MySQL ≠ PHP → วันที่อาจคลาดเคลื่อน
+        //    - fine_amount = ? → $fineAmount (0 = คืนตรงเวลา, > 0 = คืนช้า)
+        //    - WHERE id = ? → $id
+        //    - ? ตำแหน่ง: [fineAmount, id]
+        //
+        // 🛡️ เรียกภายใต้ transaction จาก BorrowService (หลัง lock แล้ว)
         $stmt = $this->pdo->prepare("
             UPDATE borrows 
             SET status = 'returned', return_date = CURDATE(), fine_amount = ? 
@@ -174,10 +401,22 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนการยืมที่ active ของ user
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการยืม active ของ user (ไม่มี lock — read-only)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId
+     * 📤 Output: @return int จำนวนที่กำลังยืมอยู่
+     * ✅ Use case: แสดงใน UI, profile page (ไม่ต้องการ lock)
      */
     public function countActiveBorrows(int $userId): int
     {
+        // 🔄 Flow: แสดงใน UI / profile page (ไม่ต้องการ lock)
+        // 🎯 นับจำนวนหนังสือที่ user กำลังยืมอยู่ (read-only ไม่มี lock)
+        //
+        // 🧠 ต่างจาก countActiveBorrowsForUpdate():
+        //    - เมธอดนี้ ไม่มี FOR UPDATE → แค่อ่าน ไม่ได้ lock
+        //    - ใช้สำหรับแสดงผลเท่านั้น ไม่ใช่สำหรับตัดสินใจยืม
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM borrows 
             WHERE user_id = ? AND status = 'borrowing'
@@ -187,14 +426,34 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนการยืมที่ active ของ user (with lock)
-     * 
-     * @security FOR UPDATE ล็อคแถวที่ match ป้องกัน race condition:
-     *           2 requests พร้อมกันอาจทำให้ยืมเกินโควต้า (MAX_BORROW_BOOKS)
-     *           ต้องเรียกภายใน transaction เท่านั้น
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการยืม active + lock rows (ป้องกันยืมเกินโควต้า)
+     * ==========================================================================
+     * count + FOR UPDATE พร้อมกัน ป้องกัน 2 request ยืมพร้อมกันแล้วเกิน MAX_BORROW_BOOKS
+     *
+     * 📥 Input: @param int $userId
+     * 📤 Output: @return int จำนวน active borrows (ถูก lock)
+     *
+     * 🛡️ Security:
+     * - FOR UPDATE ล็อคแถวที่ match — request อื่นต้องรอ
+     * - ต้องเรียกใน transaction
+     *
+     * ⚠️ ห้ามแก้ FOR UPDATE — critical guard
+     * ✅ Use case: BorrowService::createBorrow() เช็คโควต้าก่อนยืม
      */
     public function countActiveBorrowsForUpdate(int $userId): int
     {
+        // 🔄 Flow: BorrowService::createBorrow() → countActiveBorrowsForUpdate()
+        // 🎯 นับจำนวนยืม active + lock rows ป้องกันยืมเกิน MAX_BORROW_BOOKS
+        //
+        // 🧠 ทำไมต้อง lock? สมมติว่า:
+        //    - user ยืมได้ 3 เล่ม (max = 3)
+        //    - 2 request เข้ามาพร้อมกัน → ทั้งคู่เห็น count = 3 → ทั้งคู่ยืมได้
+        //    - ผล: user ยืม 5 เล่ม (เกิน max!)
+        //    - FOR UPDATE แก้ไข: request ที่ 2 ต้องรอ lock → ปลอดภัย
+        //
+        // ⚠️ Danger Zone #1: ต้องเรียกใน transaction!
+        //    🔴 ห้ามลบ FOR UPDATE ออก!
         // [LOCK] ล็อคแถว borrows ของ user นี้ - ป้องกันยืมเกินโควต้า
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM borrows 
@@ -205,10 +464,22 @@ class BorrowRepository
     }
 
     /**
-     * ตรวจสอบว่า user ยืมหนังสือเล่มนี้อยู่หรือไม่
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ตรวจว่า user ยืมหนังสือเล่มนี้อยู่หรือไม่ (ป้องกันยืมซ้ำ)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId, @param int $bookId
+     * 📤 Output: @return bool true = กำลังยืมอยู่ (ห้ามยืมซ้ำ)
+     * ✅ Use case: BorrowService::createBorrow() เช็คก่อนยืม
      */
     public function isAlreadyBorrowing(int $userId, int $bookId): bool
     {
+        // 🔄 Flow: BorrowService::createBorrow() → borrowSingleBook() → isAlreadyBorrowing()
+        // 🎯 ตรวจว่า user กำลังยืมหนังสือเล่มนี้อยู่หรือไม่ (ป้องกันยืมซ้ำ)
+        //
+        // 📝 SQL: SELECT id FROM borrows WHERE user_id=? AND book_id=? AND status='borrowing'
+        //    - ถ้าเจอ (fetch ได้) → return true (ห้ามยืมซ้ำ)
+        //    - ถ้าไม่เจอ (fetch = false) → return false (ยืมได้)
         $stmt = $this->pdo->prepare("
             SELECT id FROM borrows 
             WHERE user_id = ? AND book_id = ? AND status = 'borrowing'
@@ -218,14 +489,23 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมที่เกินกำหนดคืน (สำหรับ dashboard และ notification)
-     * 
-     * @param int $limit จำนวนรายการสูงสุด (default: 10)
-     * @return array[] แต่ละ element: borrow row + user_name, phone, book_title
-     *                 เรียงตาม due_date ASC (เกินนานสุดขึ้นก่อน)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการเกินกำหนดคืน (สำหรับ dashboard + notification)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $limit (default: 10)
+     * 📤 Output: @return array[] [{borrow row + user_name, phone, book_title}, ...]
+     *         เรียง: due_date ASC (เกินนานสุดขึ้นก่อน)
+     * ✅ Use case: admin/index.php → DashboardService → "รายการเกินกำหนด"
      */
     public function findOverdue(int $limit = 10): array
     {
+        // 🔄 Flow: admin/index.php → DashboardService → findOverdue()
+        // 🎯 ดึงรายการเกินกำหนด Top N สำหรับแสดงบน dashboard
+        //
+        // 📝 SQL: borrowing + due_date < CURDATE() → เกินกำหนด
+        //    ORDER BY due_date ASC → เกินนานสุดขึ้นก่อน (ด่วนสุดอยู่บน)
+        // ⚠️ phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงผล
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as user_name, u.phone, bk.title as book_title
             FROM borrows b
@@ -240,13 +520,20 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการยืมล่าสุด (สำหรับ dashboard)
-     * 
-     * @param int $limit จำนวนรายการสูงสุด (default: 5)
-     * @return array[] แต่ละ element: borrow row + user_name, book_title
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการยืมล่าสุด (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $limit (default: 5)
+     * 📤 Output: @return array[] [{borrow row + user_name, book_title}, ...]
+     * ✅ Use case: admin/index.php → DashboardService → "ยืมล่าสุด"
      */
     public function findRecent(int $limit = 5): array
     {
+        // 🔄 Flow: admin/index.php → DashboardService → findRecent()
+        // 🎯 ดึงรายการยืมล่าสุด N รายการ สำหรับแสดงบน dashboard
+        //
+        // 📝 SQL: ORDER BY created_at DESC LIMIT ? → ล่าสุดขึ้นก่อน
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as user_name, bk.title as book_title
             FROM borrows b
@@ -260,14 +547,22 @@ class BorrowRepository
     }
 
     /**
-     * ดึงประวัติการยืมของ user (สำหรับ profile และ member history)
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @param int $limit  จำนวนรายการสูงสุด (default: 20)
-     * @return array[] แต่ละ element: borrow row + book_title, book_author
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงประวัติการยืมของ user (สำหรับ profile / member history)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId, @param int $limit (default: 20)
+     * 📤 Output: @return array[] [{borrow row + book_title, book_author}, ...]
+     * ✅ Use case: admin/member_detail.php, profile.php
      */
     public function findByUserId(int $userId, int $limit = 20): array
     {
+        // 🔄 Flow: admin/member_detail.php, profile.php
+        // 🎯 ดึงประวัติการยืมของ user (ไม่มี pagination แบบง่ายๆ)
+        //
+        // 📝 SQL: WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+        //    - ไม่กรอง status → ดึงทั้ง borrowing + returned
+        // 🧠 ต่างจาก findByUserIdPaginated(): เมธอดนี้ง่ายกว่า ไม่มี pagination
         $stmt = $this->pdo->prepare("
             SELECT b.*, bk.title as book_title, bk.author as book_author
             FROM borrows b
@@ -281,34 +576,52 @@ class BorrowRepository
     }
 
     /**
-     * ดึงประวัติการยืมของ user พร้อม pagination และ filter ตาม status
-     * 
-     * @param int $userId ID ของ user
-     * @param string|null $status สถานะ (borrowing/returned) หรือ null = ทั้งหมด
-     * @param int $page หน้าที่ต้องการ (1-indexed)
-     * @param int $perPage จำนวนต่อหน้า
-     * @return array ['data' => array, 'total' => int, 'page' => int, 'per_page' => int, 'total_pages' => int]
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ประวัติการยืมของ user + pagination + status filter
+     * ==========================================================================
+     * เมธอดหลักสำหรับหน้า my_borrows.php
+     *
+     * 📥 Input:
+     * @param int         $userId  ID user
+     * @param string|null $status  'borrowing' | 'returned' | null (ทั้งหมด)
+     * @param int         $page    หน้า (1-indexed)
+     * @param int         $perPage จำนวนต่อหน้า
+     *
+     * 📤 Output:
+     * @return array {data: array[], total, page, per_page, total_pages}
+     *
+     * 🧠 เหตุผล: 2 queries (COUNT + SELECT LIMIT OFFSET)
+     * ✅ Use case: my_borrows.php (ประวัติการยืมของสมาชิก)
      */
     public function findByUserIdPaginated(int $userId, ?string $status = null, int $page = 1, int $perPage = 10): array
     {
+        // 🔄 Flow: my_borrows.php → findByUserIdPaginated()
+        // 🎯 ดึงประวัติยืมของสมาชิก + pagination + กรอง status
+        //
+        // 📝 สร้าง WHERE clause แบบ dynamic (user_id + optional status)
+        // ⚠️ Danger Zone #2: $where ถูกต่อเข้า SQL string
+        //    แต่ค่ามาจาก code ภายใน + user input bind ผ่าน ? → ปลอดภัย
         $where = "b.user_id = ?";
         $params = [$userId];
         
+        // 🔍 ถ้ามี status filter → เพิ่มเงื่อนไข
         if ($status !== null) {
             $where .= " AND b.status = ?";
             $params[] = $status;
         }
         
-        // Count total
+        // 📊 Query 1: นับจำนวนทั้งหมด (สำหรับคำนวณ pagination)
         $countStmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows b WHERE $where");
         $countStmt->execute($params);
         $total = (int) $countStmt->fetchColumn();
         
-        // Calculate offset
+        // 📝 คำนวณ offset: (page - 1) * perPage
+        //    เช่น page=2, perPage=10 → offset=10 (ข้าม 10 รายการแรก)
         $offset = ($page - 1) * $perPage;
         $params[] = $perPage;
         $params[] = $offset;
         
+        // 📊 Query 2: ดึงข้อมูลจริง (LIMIT + OFFSET)
         $stmt = $this->pdo->prepare("
             SELECT b.*, bk.title as book_title, bk.author as book_author
             FROM borrows b
@@ -319,6 +632,8 @@ class BorrowRepository
         ");
         $stmt->execute($params);
         
+        // 📤 Output: {data, total, page, per_page, total_pages}
+        //    total_pages = ceil(total / perPage) → ปัดเศษขึ้น
         return [
             'data' => $stmt->fetchAll(),
             'total' => $total,
@@ -329,13 +644,21 @@ class BorrowRepository
     }
     
     /**
-     * ดึงรายการยืมปัจจุบันของหนังสือ (ยังไม่คืน)
-     * 
-     * @param int $bookId ID หนังสือ
-     * @return array รายการ borrow พร้อมชื่อ borrower
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการยืมปัจจุบันของหนังสือ (ยังไม่คืน)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return array [{borrow row + borrower_name}, ...]
+     * ✅ Use case: book.php → แสดงว่าใครยืมอยู่
      */
     public function findCurrentByBook(int $bookId): array
     {
+        // 🔄 Flow: book.php → findCurrentByBook()
+        // 🎯 ดึงรายการยืมปัจจุบันของหนังสือเล่มนี้ (ใครยืมอยู่)
+        //
+        // 📝 SQL: WHERE book_id = ? AND status = 'borrowing'
+        //    → เฉพาะที่ยังไม่คืน + JOIN users เอาชื่อผู้ยืม
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as borrower_name
             FROM borrows b
@@ -348,14 +671,21 @@ class BorrowRepository
     }
     
     /**
-     * ดึงประวัติการยืมของหนังสือ
-     * 
-     * @param int $bookId ID หนังสือ
-     * @param int $limit  จำนวนรายการ
-     * @return array รายการ borrow พร้อมชื่อ borrower
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงประวัติการยืมของหนังสือ (ทุก status)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId, @param int $limit (default: 5)
+     * 📤 Output: @return array [{borrow row + borrower_name}, ...]
+     * ✅ Use case: book.php → แสดงประวัติการยืมของหนังสือ
      */
     public function findHistoryByBook(int $bookId, int $limit = 5): array
     {
+        // 🔄 Flow: book.php → findHistoryByBook()
+        // 🎯 ดึงประวัติการยืมของหนังสือ (ทุก status) ล่าสุด N รายการ
+        //
+        // 📝 SQL: WHERE book_id = ? ORDER BY created_at DESC LIMIT ?
+        //    → ไม่กรอง status → แสดงทั้งยืมอยู่ + คืนแล้ว
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as borrower_name
             FROM borrows b
@@ -369,12 +699,20 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนรายการที่เกินกำหนดคืน (สำหรับ badge notification)
-     * 
-     * @return int จำนวนรายการที่ status='borrowing' AND due_date < today
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนเกินกำหนด (สำหรับ badge notification)
+     * ==========================================================================
+     *
+     * 📤 Output: @return int จำนวน overdue
+     * ✅ Use case: admin/header.php → badge สีแดง, DashboardService
      */
     public function countOverdue(): int
     {
+        // 🔄 Flow: admin/header.php → badge สีแดง, DashboardService
+        // 🎯 นับจำนวนเกินกำหนดทั้งระบบ
+        //
+        // 📝 ใช้ query() ไม่ใช่ prepare() เพราะไม่มี user input
+        // ⚠️ Danger Zone #4: ถ้าเพิ่ม parameter → ต้องเปลี่ยนเป็น prepare()
         return (int) $this->pdo->query("
             SELECT COUNT(*) FROM borrows 
             WHERE status = 'borrowing' AND due_date < CURDATE()
@@ -382,12 +720,19 @@ class BorrowRepository
     }
 
     /**
-     * นับจำนวนการยืมที่ active ทั้งระบบ (สำหรับ dashboard)
-     * 
-     * @return int จำนวนรายการที่ status='borrowing'
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนการยืม active ทั้งระบบ (สำหรับ dashboard)
+     * ==========================================================================
+     *
+     * 📤 Output: @return int จำนวน status='borrowing'
+     * ✅ Use case: admin/index.php → DashboardService
      */
     public function countActive(): int
     {
+        // 🔄 Flow: admin/index.php → DashboardService
+        // 🎯 นับการยืม active ทั้งระบบ สำหรับการ์ดสถิติบน dashboard
+        //
+        // 📝 ใช้ query() ไม่ใช่ prepare() เพราะไม่มี user input
         return (int) $this->pdo->query("
             SELECT COUNT(*) FROM borrows WHERE status = 'borrowing'
         ")->fetchColumn();
@@ -397,44 +742,67 @@ class BorrowRepository
     // เหตุผล: ReportRepository เป็น owner ของ report logic
 
     /**
-     * นับจำนวนการยืมทั้งหมดของหนังสือ (ใช้ตรวจก่อนลบหนังสือ)
-     * 
-     * @param int $bookId ID หนังสือ
-     * @return int จำนวนครั้งที่ถูกยืม (ทุก status)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการยืมทั้งหมดของหนังสือ (ตรวจก่อนลบ)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return int จำนวนครั้งที่ถูกยืม (ทุก status)
+     * ✅ Use case: BookService::deleteBook() เช็คก่อนลบ
      */
     public function countByBook(int $bookId): int
     {
+        // 🔄 Flow: BookService::deleteBook() → hasBorrowHistory() → countByBook()
+        // 🎯 นับการยืมทั้งหมดของหนังสือ (ตรวจก่อนลบ)
+        //    ถ้า > 0 → หนังสือเคยถูกยืม → ป้องกันการลบ (data integrity)
         $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ?");
         $stmt->execute([$bookId]);
         return (int) $stmt->fetchColumn();
     }
 
     /**
-     * นับจำนวนการยืมทั้งหมดของ user (ใช้ตรวจก่อนลบสมาชิก)
-     * 
-     * @param int $userId ID สมาชิก
-     * @return int จำนวนครั้งที่ยืม (ทุก status)
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการยืมทั้งหมดของ user (ตรวจก่อนลบสมาชิก)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId
+     * 📤 Output: @return int จำนวนครั้ง (ทุก status)
+     * ✅ Use case: MemberService::deleteMember() เช็คก่อนลบ
      */
     public function countByUser(int $userId): int
     {
+        // 🔄 Flow: MemberService::deleteMember() → countByUser()
+        // 🎯 นับการยืมทั้งหมดของ user (ตรวจก่อนลบสมาชิก)
+        //    ถ้า > 0 → สมาชิกเคยยืม → ป้องกันการลบ (data integrity)
         $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE user_id = ?");
         $stmt->execute([$userId]);
         return (int) $stmt->fetchColumn();
     }
 
     /**
-     * ดึงสถิติการยืมของ user (สำหรับ profile page)
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @return array {
-     *     total_borrows: int,     // ยืมทั้งหมด
-     *     active_borrows: int,   // ยังไม่คืน
-     *     returned: int,         // คืนแล้ว
-     *     total_fines: float     // ค่าปรับสะสม (บาท)
-     * }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สถิติการยืมของ user (สำหรับ profile page)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId
+     * 📤 Output:
+     * @return array {total_borrows, active_borrows, returned, total_fines}
+     *
+     * 🧠 เหตุผล: SUM(CASE) ใน query เดียว — ไม่ต้อง query หลายครั้ง
+     * ✅ Use case: profile.php, admin/member_detail.php
      */
     public function getStatsByUser(int $userId): array
     {
+        // 🔄 Flow: profile.php, admin/member_detail.php
+        // 🎯 ดึงสถิติการยืมของ user ใน query เดียว (ไม่ต้อง query หลายครั้ง)
+        //
+        // 📝 SQL อธิบาย:
+        //    - COUNT(*) → ยอดยืมทั้งหมด
+        //    - SUM(CASE WHEN status='borrowing') → กำลังยืมอยู่
+        //    - SUM(CASE WHEN status='returned') → คืนแล้ว
+        //    - COALESCE(SUM(fine_amount), 0) → ค่าปรับรวม (0 ถ้าไม่มี)
+        //
+        // 📤 Output: {total_borrows, active_borrows, returned, total_fines}
         $stmt = $this->pdo->prepare("
             SELECT 
                 COUNT(*) as total_borrows,
@@ -449,26 +817,48 @@ class BorrowRepository
     }
 
     /**
-     * นับการยืมที่ active ของหนังสือ (ใช้ตรวจก่อนลบ — isBeingBorrowed)
-     * 
-     * @param int $bookId ID หนังสือ
-     * @return int จำนวนคนที่กำลังยืมอยู่
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการยืม active ของหนังสือ (ตรวจก่อนลบ isBeingBorrowed)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return int จำนวนคนที่กำลังยืมอยู่
+     * ✅ Use case: BookService::deleteBook() เช็คว่ามีคนยืมอยู่หรือไม่
      */
     public function countActiveByBook(int $bookId): int
     {
+        // 🔄 Flow: BookService::deleteBook() → isBeingBorrowed() → countActiveByBook()
+        // 🎯 นับจำนวนคนที่กำลังยืมหนังสือเล่มนี้อยู่
+        //    ถ้า > 0 → มีคนยืมอยู่ → ห้ามลบหนังสือ!
         $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM borrows WHERE book_id = ? AND status = 'borrowing'");
         $stmt->execute([$bookId]);
         return (int) $stmt->fetchColumn();
     }
 
     /**
-     * ดึงรายการยืมที่มีค่าปรับค้างชำระ (fine_amount > 0 และยังไม่มี payment)
-     * 
-     * @param int $limit จำนวนรายการที่ต้องการ
-     * @return array รายการยืมพร้อมข้อมูล user และ book
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายการค่าปรับค้างชำระ (สำหรับ admin/payments.php)
+     * ==========================================================================
+     * ดึง borrows ที่มี fine > 0 แต่ยังไม่มี payment record
+     *
+     * 📥 Input: @param int $limit (default: 50)
+     * 📤 Output: @return array [{borrow fields + user info + book_title}, ...]
+     *
+     * 🧠 เหตุผล: LEFT JOIN payments + p.id IS NULL = ยังไม่จ่าย
+     * ✅ Use case: admin/payments.php → แสดงรายการค้างชำระ
      */
     public function getUnpaidFinesList(int $limit = 50): array
     {
+        // 🔄 Flow: admin/payments.php → getUnpaidFinesList()
+        // 🎯 ดึงรายการค่าปรับค้างชำระ พร้อมข้อมูล user + book
+        //
+        // 📝 SQL อธิบาย:
+        //    - JOIN users + books → เอาชื่อมาแสดง
+        //    - LEFT JOIN payments → ตรวจว่ายังไม่จ่าย
+        //    - WHERE fine_amount > 0 AND p.id IS NULL → มีค่าปรับ + ยังไม่จ่าย
+        //
+        // ⚠️ Danger Zone #3: ถ้าเพิ่มระบบจ่ายบางส่วน → logic พัง
+        // ⚠️ user_email + user_phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงผล
         $stmt = $this->pdo->prepare("
             SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
                    u.id as user_id, u.name as user_name, u.email as user_email, u.phone as user_phone,
@@ -486,12 +876,24 @@ class BorrowRepository
     }
 
     /**
-     * ยอดค่าปรับค้างชำระทั้งระบบ (fine > 0 และยังไม่มี payment)
-     * 
-     * @return float ยอดรวม (บาท) หรือ 0
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดค่าปรับค้างชำระทั้งระบบ (สำหรับ dashboard/payments)
+     * ==========================================================================
+     *
+     * 📤 Output: @return float ยอดรวม (บาท) หรือ 0
+     * ✅ Use case: admin/payments.php, DashboardService
      */
     public function getTotalUnpaidFines(): float
     {
+        // 🔄 Flow: admin/payments.php, DashboardService
+        // 🎯 ยอดรวมค่าปรับค้างชำระทั้งระบบ (บาท)
+        //
+        // 📝 SQL: COALESCE(SUM(fine_amount), 0) + LEFT JOIN payments + IS NULL
+        //    → เหมือน getFineStats().unpaid ใน ReportRepository
+        //    แต่เมธอดนี้ใช้ใน payments page โดยเฉพาะ
+        //
+        // 📝 ใช้ query() เพราะไม่มี user input
+        // ⚠️ Danger Zone #3: ถ้าเพิ่มระบบจ่ายบางส่วน → logic พัง
         return (float) $this->pdo->query("
             SELECT COALESCE(SUM(b.fine_amount), 0) 
             FROM borrows b
@@ -501,20 +903,27 @@ class BorrowRepository
     }
 
     /**
-     * ดึงรายการค่าปรับค้างชำระของ user (สำหรับ profile page)
-     * 
-     * @param int $userId ID ผู้ใช้
-     * @return array[] แต่ละ element: {
-     *     id: int,              // borrow ID
-     *     fine_amount: float,   // ค่าปรับ (บาท)
-     *     borrow_date: string,  // วันยืม
-     *     due_date: string,     // กำหนดคืน
-     *     return_date: string,  // วันคืนจริง
-     *     book_title: string    // ชื่อหนังสือ
-     * }
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ค่าปรับค้างชำระของ user (สำหรับ profile page)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId
+     * 📤 Output:
+     * @return array[] [{id, fine_amount, borrow_date, due_date, return_date, book_title}, ...]
+     *
+     * 🧠 เหตุผล: LEFT JOIN payments + p.id IS NULL = หาเฉพาะที่ยังไม่จ่าย
+     * ✅ Use case: profile.php → แสดงค่าปรับค้างชำระของสมาชิก
      */
     public function getUnpaidFinesByUser(int $userId): array
     {
+        // 🔄 Flow: profile.php → getUnpaidFinesByUser()
+        // 🎯 ดึงค่าปรับค้างชำระของสมาชิกคนนี้
+        //
+        // 📝 SQL: WHERE user_id = ? AND fine_amount > 0
+        //    + LEFT JOIN payments + p.id IS NULL → เฉพาะยังไม่จ่าย
+        //    + JOIN books → เอาชื่อหนังสือมาแสดง
+        //
+        // ⚠️ Danger Zone #3: ถ้าเพิ่มระบบจ่ายบางส่วน → logic พัง
         $stmt = $this->pdo->prepare("
             SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date,
                    bk.title as book_title

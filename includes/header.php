@@ -10,7 +10,9 @@
  */
 require_once __DIR__ . '/functions.php';
 
+// 📝 ดึงชื่อไฟล์ปัจจุบัน (สำหรับ highlight active menu)
 $currentPage = basename($_SERVER['PHP_SELF']);
+// 📝 ดึง user จาก DB (ถ้า login) สำหรับแสดงชื่อบน navbar
 $user = isLoggedIn() ? getCurrentUser() : null;
 ?>
 <!DOCTYPE html>
@@ -18,6 +20,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->
     <title><?= isset($pageTitle) ? e($pageTitle) . ' - ' : '' ?><?= APP_NAME ?></title>
     
     <!-- Google Fonts -->
@@ -207,11 +210,12 @@ $user = isLoggedIn() ? getCurrentUser() : null;
     </nav>
     
     <?php if (isLoggedIn()): ?>
+    <!-- 🛡️ Logout form: POST + CSRF token (ป้องกัน logout ผ่าน GET link) -->
     <form id="logout-form" method="POST" action="<?= APP_URL ?>/logout.php" class="hidden">
         <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
     </form>
     <?php endif; ?>
     
-    <!-- Main Content -->
+    <!-- 📝 Main Content: เปิดที่นี่, ปิดที่ footer.php (</main>) -->
     <main class="flex-grow">
 

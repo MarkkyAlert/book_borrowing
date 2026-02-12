@@ -14,19 +14,21 @@ require_once __DIR__ . '/../bootstrap.php';
 
 use App\Services\MemberService;
 
+// 📝 บังคับตอบเป็น JSON เสมอ (ไม่ใช่ HTML)
 header('Content-Type: application/json');
 
-// [SECURITY] Method check
+// 🛡️ [SECURITY] บังคับ POST เท่านั้น — ป้องกัน GET request ถูก cache / bookmark
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);
     exit;
 }
 
-// [AUTHORIZATION] Staff ขึ้นไปสามารถเพิ่มสมาชิกได้
+// 🛡️ [AUTHORIZATION] Staff ขึ้นไปเท่านั้นจึงเพิ่มสมาชิกได้
+//    requireStaffApi() อยู่ใน bootstrap.php — คืน JSON error ถ้าไม่ใช่ staff/admin
 requireStaffApi();
 
-// [SECURITY] CSRF check
+// 🛡️ [SECURITY] CSRF check — ป้องกัน attacker หลอกให้ staff เพิ่มสมาชิกโดยไม่รู้ตัว
 if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Invalid token']);
@@ -34,16 +36,20 @@ if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
 }
 
 try {
+    // 📝 สร้าง PDO + Service
     $pdo = getDB();
     $memberService = new MemberService($pdo);
     
-    // MemberService handles: validation, duplicate check, password generation
+    // 📝 เรียก Service (Single Source of Truth)
+    //    MemberService จัดการ: validate, duplicate check, password generation, hash, INSERT
+    //    Controller ไม่ต้องทำอะไรเพิ่มเติม
     $result = $memberService->createMember([
         'name' => trim($_POST['name'] ?? ''),
         'email' => trim($_POST['email'] ?? ''),
         'phone' => trim($_POST['phone'] ?? '')
     ]);
     
+    // 📤 คืน JSON สำเร็จ (ไม่คืน password — เพราะ quick add ไม่ต้องแสดง)
     echo json_encode([
         'success' => true,
         'message' => 'เพิ่มสมาชิกสำเร็จ',
@@ -55,6 +61,7 @@ try {
         ]
     ]);
 } catch (Exception $e) {
+    // ❌ Service throw Exception → คืน 400 + error message
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
