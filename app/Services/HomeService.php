@@ -27,27 +27,31 @@ namespace App\Services;
 require_once __DIR__ . '/../Repositories/BookRepository.php';
 require_once __DIR__ . '/../Repositories/CategoryRepository.php';
 require_once __DIR__ . '/../Repositories/UserRepository.php';
+require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\CategoryRepository;
 use App\Repositories\UserRepository;
+use App\Repositories\ReservationRepository;
 use PDO;
 
 class HomeService
 {
-    // 🗄️ PDO + Repositories (read-only — ไม่มี write)
+    // 🗄️ PDO + Repositories
     private PDO $pdo;
     private BookRepository $bookRepo;
     private CategoryRepository $categoryRepo;
     private UserRepository $userRepo;
+    private ReservationRepository $reservationRepo;
     
-    // 🏗️ Constructor: สร้าง repo ทั้งหมด — read-only service ไม่ต้องการ transaction
+    // 🏗️ Constructor: สร้าง repo ทั้งหมด
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->bookRepo = new BookRepository($pdo);
         $this->categoryRepo = new CategoryRepository($pdo);
         $this->userRepo = new UserRepository($pdo);
+        $this->reservationRepo = new ReservationRepository($pdo);
     }
     
     /**
@@ -65,7 +69,11 @@ class HomeService
      */
     public function getBooks(array $filters = []): array
     {
-        // 📝 แปลง request params เป็น repo filters
+        // � [LAZY EXPIRE] คืน stock จาก reservation ที่หมดอายุก่อนดึงข้อมูล
+        //    ถ้าไม่ทำ → หนังสือที่จองหมดอายุแล้วจะยังแสดงว่า "หมด" อยู่
+        $this->reservationRepo->markExpiredReservations();
+
+        // �📝 แปลง request params เป็น repo filters
         //    กรองเฉพาะค่าที่ไม่ว่างออก (ป้องกันส่งค่าว่างไป DB)
         $bookFilters = [];
         
@@ -99,6 +107,9 @@ class HomeService
      */
     public function getStats(): array
     {
+        // 🔄 [LAZY EXPIRE] คืน stock ก่อนนับสถิติ (ให้ตัวเลข available ถูกต้อง)
+        $this->reservationRepo->markExpiredReservations();
+
         // 📝 รวมสถิติสำหรับแสดงหน้าแรก (public dashboard)
         $bookStats = $this->bookRepo->getStatistics();
         return [

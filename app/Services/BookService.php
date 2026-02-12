@@ -87,7 +87,11 @@ class BookService
      */
     public function getBookById(int $id): ?array
     {
-        // 📝 Pass-through → findById (JOIN category_name)
+        // � [LAZY EXPIRE] คืน stock จาก reservation ที่หมดอายุก่อนดึงข้อมูล
+        //    ถ้าไม่ทำ → book.php จะแสดง available ผิด (จองหมดอายุแล้วแต่ stock ยังไม่คืน)
+        $this->reservationRepo->markExpiredReservations();
+
+        // �📝 Pass-through → findById (JOIN category_name)
         return $this->bookRepo->findById($id);
     }
 
