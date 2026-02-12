@@ -119,7 +119,23 @@ class ReservationService
                 throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
             }
 
-            // 📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
+            // 🛡️ Step 4.1: ตรวจว่ายืมเล่มนี้อยู่แล้วหรือไม่
+            //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้ (เสีย stock ฟรี)
+            //    แจ้ง user ทันทีแทนที่จะรอ admin เจอ error ตอน approve
+            if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
+                throw new Exception('คุณกำลังยืมหนังสือเล่มนี้อยู่แล้ว ไม่สามารถจองซ้ำได้');
+            }
+
+            // �️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
+            //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้เพราะเกินโควต้า
+            //    ⚠️ ต้องนับ pending reservations ด้วย เพราะจะกลายเป็น borrow เมื่อ approve
+            $activeBorrows = $this->borrowRepo->countActiveBorrows($userId);
+            $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
+            if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
+                throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+            }
+
+            // �📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
             $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
             $this->reservationRepo->create($userId, $bookId, $expiresAt);
 
