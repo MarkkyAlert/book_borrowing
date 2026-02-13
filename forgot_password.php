@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Forgot Password - ลืมรหัสผ่าน (ขอ reset link)
  * 
@@ -33,34 +34,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
-    
+
     $email = trim($_POST['email'] ?? '');
-    
+
     // 🛡️ [SECURITY] Rate limiting ป้องกัน spam + การใช้หน้านี้เพื่อ enumerate email
     $rateLimitKey = 'forgot_password';
     if (!checkRateLimit($rateLimitKey)) {
         $errors[] = 'ลองหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
     }
     incrementRateLimit($rateLimitKey);
-    
+
     // Validation
     if (empty($errors) && empty($email)) {
         $errors[] = 'กรุณากรอกอีเมล';
     } elseif (empty($errors) && !isValidEmail($email)) {
         $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
-    
+
     if (empty($errors)) {
         // 🚀 [WRITE] สร้าง reset token (hash เก็บใน DB, หมดอายุ 1 ชั่วโมง)
         $authService = new \App\Services\AuthService(getDB());
-        
+
         $result = $authService->requestPasswordReset($email);
-        
+
         if (!$result['success']) {
             $errors[] = $result['error'];
         } else {
             $success = true;
-            
+
             // 🧠 Demo mode: แสดง reset link เฉพาะ localhost + APP_DEBUG=true
             //    production จะส่งทาง email แทน (ยังไม่ได้ตั้งค่า mail server)
             if ($result['token'] && defined('APP_DEBUG') && APP_DEBUG) {
@@ -80,7 +81,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50 bg-pattern">
     <div class="max-w-md w-full space-y-8 relative z-10">
         <!-- Card -->
-        <div class="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 sm:p-10 border border-white/50">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 sm:p-10 border border-gray-200">
             <div class="text-center mb-8">
                 <div class="mx-auto h-16 w-16 bg-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/30 transform -rotate-3 hover:rotate-0 transition-all duration-300">
                     <i class="bi bi-key text-3xl text-white"></i>
@@ -92,9 +93,9 @@ require_once __DIR__ . '/includes/header.php';
                     กรอกอีเมลที่ใช้สมัครสมาชิก เพื่อรับลิงก์รีเซ็ตรหัสผ่าน
                 </p>
             </div>
-            
+
             <?php displayFlash(); ?>
-            
+
             <?php if ($success): ?>
                 <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-6 rounded-r-lg">
                     <div class="flex">
@@ -108,20 +109,20 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
                 </div>
-                
+
                 <?php if ($resetLink): ?>
-                <!-- Demo Mode: แสดง link (ในโหมด production จะส่งทาง email) -->
-                <div class="bg-blue-50 border border-blue-200 p-4 mb-6 rounded-xl">
-                    <p class="text-xs text-blue-600 font-medium mb-2">
-                        <i class="bi bi-info-circle mr-1"></i>
-                        Demo Mode: ลิงก์รีเซ็ตรหัสผ่าน (ปกติจะส่งทาง email)
-                    </p>
-                    <a href="<?= e($resetLink) ?>" class="text-sm text-blue-700 hover:text-blue-800 break-all underline">
-                        <?= e($resetLink) ?>
-                    </a>
-                </div>
+                    <!-- Demo Mode: แสดง link (ในโหมด production จะส่งทาง email) -->
+                    <div class="bg-blue-50 border border-blue-200 p-4 mb-6 rounded-xl">
+                        <p class="text-xs text-blue-600 font-medium mb-2">
+                            <i class="bi bi-info-circle mr-1"></i>
+                            Demo Mode: ลิงก์รีเซ็ตรหัสผ่าน (ปกติจะส่งทาง email)
+                        </p>
+                        <a href="<?= e($resetLink) ?>" class="text-sm text-blue-700 hover:text-blue-800 break-all underline">
+                            <?= e($resetLink) ?>
+                        </a>
+                    </div>
                 <?php endif; ?>
-                
+
                 <div class="text-center">
                     <a href="login.php" class="inline-flex items-center text-primary-600 hover:text-primary-500 font-medium">
                         <i class="bi bi-arrow-left mr-2"></i>
@@ -145,7 +146,7 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
                 <?php endif; ?>
-                
+
                 <form class="space-y-6" method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                     <div>
@@ -156,8 +157,8 @@ require_once __DIR__ . '/includes/header.php';
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <i class="bi bi-envelope text-gray-400"></i>
                             </div>
-                            <input id="email" name="email" type="email" autocomplete="email" required 
-                                class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors" 
+                            <input id="email" name="email" type="email" autocomplete="email" required
+                                class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors"
                                 placeholder="example@email.com" value="<?= e($email) ?>">
                         </div>
                     </div>
@@ -171,7 +172,7 @@ require_once __DIR__ . '/includes/header.php';
                         </button>
                     </div>
                 </form>
-                
+
                 <div class="mt-8 pt-6 border-t border-gray-100">
                     <div class="text-center">
                         <a href="login.php" class="text-sm text-gray-600 hover:text-primary-600 transition-colors">
@@ -186,26 +187,28 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <style>
-.bg-pattern {
-    background-color: #f9fafb;
-    background-image: radial-gradient(#6366f1 0.5px, transparent 0.5px), radial-gradient(#6366f1 0.5px, #f9fafb 0.5px);
-    background-size: 20px 20px;
-    background-position: 0 0, 10px 10px;
-    background-attachment: fixed;
-}
-.animate-fade-in-down {
-    animation: fadeInDown 0.5s ease-out;
-}
-@keyframes fadeInDown {
-    from {
-        opacity: 0;
-        transform: translate3d(0, -20px, 0);
+    .bg-pattern {
+        background-color: #f9fafb;
+        background-image: radial-gradient(#6366f1 0.5px, transparent 0.5px), radial-gradient(#6366f1 0.5px, #f9fafb 0.5px);
+        background-size: 20px 20px;
+        background-position: 0 0, 10px 10px;
     }
-    to {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
+
+    .animate-fade-in-down {
+        animation: fadeInDown 0.5s ease-out;
     }
-}
+
+    @keyframes fadeInDown {
+        from {
+            opacity: 0;
+            transform: translate3d(0, -20px, 0);
+        }
+
+        to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+        }
+    }
 </style>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Public Header Template - layout wrapper สำหรับหน้า public (root/*.php)
  * 
@@ -17,20 +18,21 @@ $user = isLoggedIn() ? getCurrentUser() : null;
 ?>
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->
     <title><?= isset($pageTitle) ? e($pageTitle) . ' - ' : '' ?><?= APP_NAME ?></title>
-    
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <!-- Bootstrap Icons (Keep for icons compatibility) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -65,24 +67,28 @@ $user = isLoggedIn() ? getCurrentUser() : null;
         ::-webkit-scrollbar {
             width: 8px;
         }
+
         ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
+            background: #f1f1f1;
         }
+
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
+            background: #cbd5e1;
             border-radius: 4px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
+            background: #94a3b8;
         }
     </style>
     <!-- Modal Component -->
     <script src="<?= APP_URL ?>/includes/modal.js"></script>
 </head>
+
 <body class="bg-gray-50 text-gray-800 font-sans antialiased flex flex-col min-h-screen">
-    
+
     <!-- Navbar -->
-    <nav class="bg-white shadow-sm sticky top-0 z-50 transition-all duration-300 backdrop-blur-md bg-opacity-90 border-b border-gray-100">
+    <nav class="bg-white shadow-sm sticky top-0 z-50 border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <!-- Logo -->
@@ -95,13 +101,13 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                             <?= APP_NAME ?>
                         </span>
                     </a>
-                    
+
                     <!-- Desktop Menu -->
                     <div class="hidden md:ml-10 md:flex md:space-x-1">
-                        <a href="<?= APP_URL ?>" 
-                           class="<?= $currentPage === 'index.php' 
-                                ? 'text-primary-600 bg-primary-50' 
-                                : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50' ?> 
+                        <a href="<?= APP_URL ?>"
+                            class="<?= $currentPage === 'index.php'
+                                        ? 'text-primary-600 bg-primary-50'
+                                        : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50' ?> 
                                 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center">
                             <i class="bi bi-house mr-2"></i>หน้าแรก
                         </a>
@@ -116,7 +122,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <i class="bi bi-gear mr-1.5"></i>จัดการระบบ
                             </a>
                         <?php endif; ?>
-                        
+
                         <!-- Profile Dropdown -->
                         <div class="relative group ml-3">
                             <button type="button" class="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-primary-600 focus:outline-none transition-colors">
@@ -126,28 +132,28 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <span><?= e($user['name'] ?? 'ผู้ใช้') ?></span>
                                 <i class="bi bi-chevron-down text-xs text-gray-400 group-hover:text-primary-500 transition-colors"></i>
                             </button>
-                            
+
                             <!-- Dropdown Menu — outer div has pt-2 as hover bridge (replaces mt-2 gap) -->
                             <div class="absolute right-0 pt-2 w-48 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                              <div class="bg-white rounded-xl shadow-lg py-1 border border-gray-100 transform group-hover:translate-y-0 translate-y-2 transition-transform duration-200">
-                                <div class="px-4 py-3 border-b border-gray-50">
-                                    <p class="text-sm text-gray-500">สวัสดี,</p>
-                                    <p class="text-sm font-medium text-gray-900 truncate"><?= e($user['name'] ?? '') ?></p>
+                                <div class="bg-white rounded-xl shadow-lg py-1 border border-gray-100 transform group-hover:translate-y-0 translate-y-2 transition-transform duration-200">
+                                    <div class="px-4 py-3 border-b border-gray-50">
+                                        <p class="text-sm text-gray-500">สวัสดี,</p>
+                                        <p class="text-sm font-medium text-gray-900 truncate"><?= e($user['name'] ?? '') ?></p>
+                                    </div>
+                                    <a href="<?= APP_URL ?>/profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
+                                        <i class="bi bi-person mr-2 text-gray-400"></i>โปรไฟล์
+                                    </a>
+                                    <a href="<?= APP_URL ?>/my_borrows.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
+                                        <i class="bi bi-book mr-2 text-gray-400"></i>รายการยืมของฉัน
+                                    </a>
+                                    <a href="<?= APP_URL ?>/my_reservations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
+                                        <i class="bi bi-bookmark-check mr-2 text-gray-400"></i>รายการจองของฉัน
+                                    </a>
+                                    <div class="border-t border-gray-50 my-1"></div>
+                                    <button type="button" onclick="document.getElementById('logout-form').submit()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                        <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
+                                    </button>
                                 </div>
-                                <a href="<?= APP_URL ?>/profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
-                                    <i class="bi bi-person mr-2 text-gray-400"></i>โปรไฟล์
-                                </a>
-                                <a href="<?= APP_URL ?>/my_borrows.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
-                                    <i class="bi bi-book mr-2 text-gray-400"></i>รายการยืมของฉัน
-                                </a>
-                                <a href="<?= APP_URL ?>/my_reservations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors">
-                                    <i class="bi bi-bookmark-check mr-2 text-gray-400"></i>รายการจองของฉัน
-                                </a>
-                                <div class="border-t border-gray-50 my-1"></div>
-                                <button type="button" onclick="document.getElementById('logout-form').submit()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                                    <i class="bi bi-box-arrow-right mr-2"></i>ออกจากระบบ
-                                </button>
-                              </div>
                             </div>
                         </div>
                     <?php else: ?>
@@ -178,7 +184,7 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                 <a href="<?= APP_URL ?>" class="block px-3 py-2 rounded-md text-base font-medium text-primary-700 bg-primary-50">
                     <i class="bi bi-house mr-2"></i>หน้าแรก
                 </a>
-                
+
                 <?php if (isLoggedIn()): ?>
                     <?php if (isAdmin() || isStaff()): ?>
                         <a href="<?= APP_URL ?>/admin/" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50">
@@ -208,14 +214,13 @@ $user = isLoggedIn() ? getCurrentUser() : null;
             </div>
         </div>
     </nav>
-    
+
     <?php if (isLoggedIn()): ?>
-    <!-- 🛡️ Logout form: POST + CSRF token (ป้องกัน logout ผ่าน GET link) -->
-    <form id="logout-form" method="POST" action="<?= APP_URL ?>/logout.php" class="hidden">
-        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
-    </form>
+        <!-- 🛡️ Logout form: POST + CSRF token (ป้องกัน logout ผ่าน GET link) -->
+        <form id="logout-form" method="POST" action="<?= APP_URL ?>/logout.php" class="hidden">
+            <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+        </form>
     <?php endif; ?>
-    
+
     <!-- 📝 Main Content: เปิดที่นี่, ปิดที่ footer.php (</main>) -->
     <main class="flex-grow">
-

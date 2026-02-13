@@ -80,7 +80,6 @@
 body {
     font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
-    background-attachment: fixed;
     color: var(--gray-800);
     min-height: 100vh;
     line-height: 1.6;

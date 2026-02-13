@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Login Page - เข้าสู่ระบบ
  * 
@@ -35,10 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $errors[] = 'คำขอไม่ถูกต้อง กรุณาลองใหม่';
     }
-    
+
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    
+
     // Validation
     if (empty($email)) {
         $errors[] = 'กรุณากรอกอีเมล';
@@ -46,34 +47,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($password)) {
         $errors[] = 'กรุณากรอกรหัสผ่าน';
     }
-    
+
     if (empty($errors)) {
         // 🛡️ [SECURITY] Rate limiting ป้องกัน brute force attack
         //    ใช้ md5(email) เป็น key — นับแยกตาม email (ไม่ใช่ IP เพราะ shared IP จะโดน block ทั้งองค์กร)
         $rateLimitKey = 'login_' . md5($email);
-        
+
         if (!checkRateLimit($rateLimitKey)) {
             $errors[] = 'ลองผิดหลายครั้งเกินไป กรุณารอ ' . RATE_LIMIT_WINDOW_MINUTES . ' นาที';
         } else {
             $authService = new \App\Services\AuthService(getDB());
             $user = $authService->login($email, $password);
-            
+
             if ($user) {
                 // ✅ Login สำเร็จ — reset counter + สร้าง session ใหม่
                 resetRateLimit($rateLimitKey);
-                
+
                 // 🛡️ [SECURITY] regenerate session ID ป้องกัน session fixation attack
                 //    attacker รู้ session ID เก่า → หลัง login จะได้ ID ใหม่ → attacker ใช้ ID เก่าไม่ได้
                 session_regenerate_id(true);
-                
+
                 // 🔑 [AUTH] เก็บข้อมูล user ใน session
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_email'] = $user['email'];
                 $_SESSION['role'] = $user['role'];
-                
+
                 setFlash('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' . $user['name']);
-                
+
                 // 🔀 Redirect ตาม role: admin/staff → admin panel, member → homepage
                 if ($user['role'] === 'admin' || $user['role'] === 'staff') {
                     redirect(APP_URL . '/admin/');
@@ -97,7 +98,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50 bg-pattern">
     <div class="max-w-md w-full space-y-8 relative z-10">
         <!-- Card -->
-        <div class="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 sm:p-10 border border-white/50">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 sm:p-10 border border-gray-200">
             <div class="text-center mb-8">
                 <div class="mx-auto h-16 w-16 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/30 transform rotate-3 hover:rotate-0 transition-all duration-300">
                     <i class="bi bi-book-half text-3xl text-white"></i>
@@ -109,9 +110,9 @@ require_once __DIR__ . '/includes/header.php';
                     เข้าใช้งานระบบห้องสมุดออนไลน์
                 </p>
             </div>
-            
+
             <?php displayFlash(); ?>
-            
+
             <?php if (!empty($errors)): ?>
                 <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg animate-fade-in-down">
                     <div class="flex">
@@ -128,7 +129,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 </div>
             <?php endif; ?>
-            
+
             <form class="space-y-6" method="POST" novalidate>
                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <div>
@@ -139,8 +140,8 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="bi bi-envelope text-gray-400"></i>
                         </div>
-                        <input id="email" name="email" type="email" autocomplete="email" required 
-                            class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors" 
+                        <input id="email" name="email" type="email" autocomplete="email" required
+                            class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors"
                             placeholder="example@email.com" value="<?= e($email) ?>">
                     </div>
                 </div>
@@ -153,8 +154,8 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="bi bi-lock text-gray-400"></i>
                         </div>
-                        <input id="password" name="password" type="password" autocomplete="current-password" required 
-                            class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors" 
+                        <input id="password" name="password" type="password" autocomplete="current-password" required
+                            class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-xl py-3 transition-colors"
                             placeholder="••••••••">
                     </div>
                 </div>
@@ -168,18 +169,18 @@ require_once __DIR__ . '/includes/header.php';
                     </button>
                 </div>
             </form>
-            
+
             <div class="mt-6 text-center">
                 <a href="forgot_password.php" class="text-sm text-gray-500 hover:text-primary-600 transition-colors">
                     <i class="bi bi-key mr-1"></i>
                     ลืมรหัสผ่าน?
                 </a>
             </div>
-            
+
             <div class="mt-6 pt-6 border-t border-gray-100">
                 <div class="text-center">
                     <p class="text-sm text-gray-600">
-                        ยังไม่มีบัญชีสมาชิก? 
+                        ยังไม่มีบัญชีสมาชิก?
                         <a href="register.php" class="font-bold text-primary-600 hover:text-primary-500 transition-colors">
                             สมัครสมาชิกใหม่
                         </a>
@@ -187,39 +188,41 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <?php if (defined('APP_DEBUG') && APP_DEBUG): ?>
-        <!-- แสดง Demo Credentials เฉพาะ Debug Mode -->
-        <div class="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 text-center backdrop-blur-sm">
-            <p class="text-xs text-blue-600 font-medium">
-                <span class="font-bold">Demo Admin:</span> <?= e(getenv('ADMIN_EMAIL') ?: 'admin@library.com') ?> / <?= e(getenv('ADMIN_DEFAULT_PASSWORD') ?: '123456') ?>
-            </p>
-        </div>
+            <!-- แสดง Demo Credentials เฉพาะ Debug Mode -->
+            <div class="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-center">
+                <p class="text-xs text-blue-600 font-medium">
+                    <span class="font-bold">Demo Admin:</span> <?= e(getenv('ADMIN_EMAIL') ?: 'admin@library.com') ?> / <?= e(getenv('ADMIN_DEFAULT_PASSWORD') ?: '123456') ?>
+                </p>
+            </div>
         <?php endif; ?>
     </div>
 </div>
 
 <style>
-.bg-pattern {
-    background-color: #f9fafb;
-    background-image: radial-gradient(#6366f1 0.5px, transparent 0.5px), radial-gradient(#6366f1 0.5px, #f9fafb 0.5px);
-    background-size: 20px 20px;
-    background-position: 0 0, 10px 10px;
-    background-attachment: fixed;
-}
-.animate-fade-in-down {
-    animation: fadeInDown 0.5s ease-out;
-}
-@keyframes fadeInDown {
-    from {
-        opacity: 0;
-        transform: translate3d(0, -20px, 0);
+    .bg-pattern {
+        background-color: #f9fafb;
+        background-image: radial-gradient(#6366f1 0.5px, transparent 0.5px), radial-gradient(#6366f1 0.5px, #f9fafb 0.5px);
+        background-size: 20px 20px;
+        background-position: 0 0, 10px 10px;
     }
-    to {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
+
+    .animate-fade-in-down {
+        animation: fadeInDown 0.5s ease-out;
     }
-}
+
+    @keyframes fadeInDown {
+        from {
+            opacity: 0;
+            transform: translate3d(0, -20px, 0);
+        }
+
+        to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+        }
+    }
 </style>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
