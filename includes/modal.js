@@ -37,7 +37,7 @@
  *   <form onsubmit="return confirmSubmit(this, 'ยืนยัน?', {confirmClass:'danger'})">
  */
 
-(function() {
+(function () {
     'use strict';
 
     // Create modal container on DOM ready
@@ -52,11 +52,11 @@
      */
     function ensureContainer() {
         if (modalContainer) return modalContainer;
-        
+
         modalContainer = document.createElement('div');
         modalContainer.id = 'app-modal-container';
         modalContainer.innerHTML = `
-            <div id="app-modal-backdrop" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998] hidden opacity-0 transition-opacity duration-200"></div>
+            <div id="app-modal-backdrop" class="fixed inset-0 bg-black/50 z-[9998] hidden opacity-0 transition-opacity duration-200"></div>
             <div id="app-modal" class="fixed inset-0 z-[9999] hidden items-center justify-center p-4">
                 <div id="app-modal-dialog" class="bg-white rounded-2xl shadow-2xl max-w-md w-full transform scale-95 opacity-0 transition-all duration-200">
                     <div class="p-6">
@@ -77,19 +77,19 @@
             </div>
         `;
         document.body.appendChild(modalContainer);
-        
+
         // Close on backdrop click
-        document.getElementById('app-modal-backdrop').addEventListener('click', function() {
+        document.getElementById('app-modal-backdrop').addEventListener('click', function () {
             closeModal(false);
         });
-        
+
         // Close on ESC key
-        document.addEventListener('keydown', function(e) {
+        document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && isModalOpen()) {
                 closeModal(false);
             }
         });
-        
+
         return modalContainer;
     }
 
@@ -120,7 +120,7 @@
      */
     function showModal(options) {
         ensureContainer();
-        
+
         const backdrop = document.getElementById('app-modal-backdrop');
         const modal = document.getElementById('app-modal');
         const dialog = document.getElementById('app-modal-dialog');
@@ -150,7 +150,7 @@
                       <i class="bi bi-x-lg text-2xl text-red-600"></i>
                     </div>`
         };
-        
+
         iconContainer.innerHTML = icons[options.type] || icons.confirm;
         title.textContent = options.title || (options.type === 'alert' ? 'แจ้งเตือน' : 'ยืนยัน');
         message.textContent = options.message || '';
@@ -164,7 +164,7 @@
         };
 
         let buttonsHtml = '';
-        
+
         if (options.type === 'alert' || options.alertOnly) {
             // Alert: only OK button
             const btnClass = btnClasses[options.confirmClass] || btnClasses.primary;
@@ -177,14 +177,14 @@
                 <button id="app-modal-ok" class="${confirmClass}">${options.confirmText || 'ยืนยัน'}</button>
             `;
         }
-        
+
         footer.innerHTML = buttonsHtml;
 
         // Show modal with animation
         backdrop.classList.remove('hidden');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        
+
         // Trigger animation
         requestAnimationFrame(() => {
             backdrop.classList.remove('opacity-0');
@@ -199,14 +199,14 @@
         // Return promise
         return new Promise((resolve) => {
             currentResolve = resolve;
-            
-            document.getElementById('app-modal-ok').addEventListener('click', function() {
+
+            document.getElementById('app-modal-ok').addEventListener('click', function () {
                 closeModal(true);
             });
-            
+
             const cancelBtn = document.getElementById('app-modal-cancel');
             if (cancelBtn) {
-                cancelBtn.addEventListener('click', function() {
+                cancelBtn.addEventListener('click', function () {
                     closeModal(false);
                 });
             }
@@ -236,7 +236,7 @@
             backdrop.classList.add('hidden');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-            
+
             if (currentResolve) {
                 currentResolve(result);
                 currentResolve = null;
@@ -251,7 +251,7 @@
      * 📤 Output: @returns {Promise<boolean>} true = ยืนยัน, false = ยกเลิก
      * ✅ Use case: modalConfirm('ยืนยันการลบ?', { confirmClass: 'danger' }).then(ok => { ... });
      */
-    window.modalConfirm = function(message, options = {}) {
+    window.modalConfirm = function (message, options = {}) {
         return showModal({
             type: options.type || 'confirm',
             title: options.title || 'ยืนยันการดำเนินการ',
@@ -268,7 +268,7 @@
      * ==========================================================================
      * ✅ Use case: modalAlert('บันทึกสำเร็จ!');
      */
-    window.modalAlert = function(message, options = {}) {
+    window.modalAlert = function (message, options = {}) {
         return showModal({
             type: options.type || 'alert',
             title: options.title || 'แจ้งเตือน',
@@ -285,7 +285,7 @@
      * ==========================================================================
      * ✅ Use case: modalSuccess('บันทึกเรียบร้อย');
      */
-    window.modalSuccess = function(message, options = {}) {
+    window.modalSuccess = function (message, options = {}) {
         return showModal({
             type: 'success',
             title: options.title || 'สำเร็จ',
@@ -302,7 +302,7 @@
      * ==========================================================================
      * ✅ Use case: modalError('เกิดข้อผิดพลาด กรุณาลองใหม่');
      */
-    window.modalError = function(message, options = {}) {
+    window.modalError = function (message, options = {}) {
         return showModal({
             type: 'error',
             title: options.title || 'เกิดข้อผิดพลาด',
@@ -320,8 +320,8 @@
      * 🔄 Flow: return false (prevent default) → modalConfirm → form.submit() ถ้ายืนยัน
      * ✅ Use case: <form onsubmit="return confirmSubmit(this, 'ยืนยัน?', {confirmClass:'danger'})">
      */
-    window.confirmSubmit = function(form, message, options = {}) {
-        modalConfirm(message, options).then(function(confirmed) {
+    window.confirmSubmit = function (form, message, options = {}) {
+        modalConfirm(message, options).then(function (confirmed) {
             if (confirmed) {
                 form.submit();
             }
