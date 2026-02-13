@@ -1,8 +1,8 @@
-# 🏛️ ARCHITECTURE — สถาปัตยกรรมระบบยืมคืนหนังสือ
+# 🏗️ ARCHITECTURE.md — สถาปัตยกรรมระบบยืมคืนหนังสือ
 
-> เอกสารนี้อธิบาย "ระบบออกแบบมายังไง" และ "ทำไมถึงออกแบบแบบนี้"
-> ไม่ต้องอ่านโค้ด ไม่ต้องเข้าใจ PHP ก็อ่านเข้าใจได้
-> เหมาะสำหรับ: เรียนรู้แนวคิดสถาปัตยกรรม, สอน, อธิบายให้ลูกค้าฟัง
+> เอกสารนี้อธิบาย **"ระบบออกแบบยังไง"** และ **"ทำไมถึงออกแบบแบบนี้"**
+> ไม่ต้องอ่านโค้ด ก็เข้าใจโครงสร้างได้
+> เหมาะสำหรับ: สอนนักเรียน, อธิบายให้ลูกค้า, ลดคำถามเชิงโครงสร้าง
 
 ---
 
@@ -10,522 +10,550 @@
 
 ### ระบบนี้ใช้สถาปัตยกรรมแบบไหน?
 
-ใช้ **Layered Architecture** (สถาปัตยกรรมแบบแบ่งชั้น)
+ระบบนี้ใช้ **Layered Architecture (สถาปัตยกรรมแบบแบ่งชั้น)** ที่ได้แรงบันดาลใจจาก MVC
+
+แต่แทนที่จะใช้ MVC แบบ framework สำเร็จรูป (เช่น Laravel, CodeIgniter) ระบบนี้ **เขียนเอง (vanilla PHP)** เพื่อให้เห็นกลไกภายในชัดเจน ไม่มี "เวทมนตร์" ที่ซ่อนอยู่
 
 ```
-┌─────────────────────────────────────────┐
-│  👤 ผู้ใช้งาน (Browser)                  │
-└────────────────┬────────────────────────┘
-                 │
-┌────────────────▼────────────────────────┐
-│  📋 Controller Layer                     │
-│  (ไฟล์ .php ที่ root / admin / api)      │
-│  รับ request → ตรวจสิทธิ์ → ส่งต่อ        │
-└────────────────┬────────────────────────┘
-                 │
-┌────────────────▼────────────────────────┐
-│  🧠 Service Layer                        │
-│  (app/Services/)                         │
-│  กฎธุรกิจ → ตัดสินใจ → ควบคุม transaction │
-└────────────────┬────────────────────────┘
-                 │
-┌────────────────▼────────────────────────┐
-│  🗄️ Repository Layer                     │
-│  (app/Repositories/)                     │
-│  แปลงเป็น SQL → ดึง/บันทึกข้อมูล         │
-└────────────────┬────────────────────────┘
-                 │
-┌────────────────▼────────────────────────┐
-│  💾 Database Layer                       │
-│  (MySQL)                                 │
-│  เก็บข้อมูลทั้งหมด                       │
-└─────────────────────────────────────────┘
+สถาปัตยกรรม 4 ชั้น:
+
+┌─────────────────────────────────────────────────────┐
+│  📋 Controller Layer                                │
+│  (ไฟล์ .php ที่ root/, admin/, api/)                │
+│  รับ request → ตรวจสิทธิ์ → ส่งต่อ → แสดงผล         │
+├─────────────────────────────────────────────────────┤
+│  🧠 Service Layer                                   │
+│  (app/Services/)                                    │
+│  กฎธุรกิจ → ตัดสินใจ → จัดการ transaction            │
+├─────────────────────────────────────────────────────┤
+│  🗄️ Repository Layer                                │
+│  (app/Repositories/)                                │
+│  เขียน SQL → ดึง/บันทึกข้อมูล → ไม่มีกฎธุรกิจ       │
+├─────────────────────────────────────────────────────┤
+│  💾 Database Layer                                   │
+│  (MySQL / InnoDB)                                   │
+│  เก็บข้อมูลถาวร → บังคับ constraint                  │
+└─────────────────────────────────────────────────────┘
 ```
 
-นอกจากนี้ยังมี **Utility Layer** ที่ตัดขวาง (ใช้ได้ทุกชั้น):
+นอกจาก 4 ชั้นหลัก ยังมี:
 
 ```
-┌─────────────────────────────────────────┐
-│  🔧 Utility / Helper Layer               │
-│  (includes/)                              │
-│  config, db connection, functions         │
-│  ← ทุกชั้นเรียกใช้ได้                     │
-└─────────────────────────────────────────┘
+🔧 Utility / Helper Layer
+├── includes/config.php      → ค่าคงที่ทั้งระบบ
+├── includes/db.php          → สร้าง PDO connection
+├── includes/functions.php   → ฟังก์ชันพื้นฐาน (auth, CSRF, validation, ...)
+└── bootstrap.php            → โหลดทุกอย่างเข้าด้วยกัน
 ```
 
 ### ทำไมถึงเลือกแนวนี้?
 
 | เหตุผล | คำอธิบาย |
 |--------|---------|
-| **เข้าใจง่าย** | แต่ละชั้นมีหน้าที่ชัด ไม่ปนกัน มือใหม่อ่านตามได้ |
-| **แก้ไขง่าย** | อยากแก้กฎธุรกิจ → แก้แค่ Service, อยากแก้ SQL → แก้แค่ Repository |
-| **ไม่ต้องใช้ framework** | ใช้ PHP ล้วน เห็นทุกขั้นตอนชัดเจน ไม่มี "เวทมนตร์" ซ่อน |
-| **เรียนรู้ได้จริง** | แนวคิดเดียวกับ Laravel, Spring Boot, Django แต่ง่ายกว่า |
-| **Deploy ง่าย** | แค่ copy ไฟล์ไปวาง ไม่ต้อง `composer install` หรือ build |
+| **เห็นกลไกชัด** | ไม่มี framework ซ่อน — เห็นทุกขั้นตอนตั้งแต่ request เข้ามาจนถึง database |
+| **แยกหน้าที่ชัด** | แต่ละไฟล์มีหน้าที่เดียว ไม่ปนกัน → อ่านง่าย แก้ง่าย |
+| **เรียนรู้ได้จริง** | เหมาะสำหรับเข้าใจว่า "framework ทำอะไรให้เราบ้าง" ก่อนไปใช้ framework จริง |
+| **ไม่ต้องติดตั้ง framework** | รันบน XAMPP/WAMP ได้เลย ไม่ต้อง composer install |
+| **ต่อยอดง่าย** | เพิ่ม Service/Repository ใหม่ได้ทันที ไม่ต้องเรียนรู้โครงสร้าง framework |
 
 ### เหมาะกับระบบประเภทไหน?
 
-- ✅ ระบบ CRUD ขนาดเล็ก-กลาง (สร้าง, อ่าน, แก้ไข, ลบข้อมูล)
-- ✅ ระบบที่มีกฎธุรกิจชัดเจน (เช่น ยืมได้กี่เล่ม, ค่าปรับเท่าไหร่)
-- ✅ ระบบที่ต้องการ concurrency control (เช่น stock หนังสือ)
-- ✅ ระบบที่ทีมเล็ก (1-3 คน) ดูแล
-- ❌ ไม่เหมาะกับระบบ microservices หรือ event-driven ขนาดใหญ่
+- ระบบ CRUD ขนาดเล็ก-กลาง (ไม่เกิน 10-20 ตาราง)
+- ระบบที่ต้องการ transaction + concurrency control
+- โปรเจคที่ต้อง **อธิบายให้คนอื่นเข้าใจ** (ส่งงาน, สอน, เดโม)
+- Prototype/MVP ก่อนย้ายไป framework
 
 ---
 
 ## 🧱 2. แนวคิดหลักที่ใช้ในการออกแบบ
 
-### 📐 Separation of Concerns — "แยกหน้าที่ให้ชัด"
+### 2.1 Separation of Concerns — "แยกหน้าที่ให้ชัด"
 
-**แนวคิด:** แต่ละส่วนของระบบควรรับผิดชอบเรื่องเดียว ไม่ปนกัน
+**แนวคิด:** แต่ละส่วนมีหน้าที่เดียว ไม่ทำเกินหน้าที่ตัวเอง
 
-เปรียบเทียบกับร้านอาหาร:
-- พนักงานเสิร์ฟ → รับออเดอร์ ไม่ใช่ทำอาหาร
-- พ่อครัว → ทำอาหาร ไม่ใช่เก็บเงิน
-- แคชเชียร์ → เก็บเงิน ไม่ใช่ล้างจาน
+**เปรียบเทียบ:** ร้านอาหาร
+- **พนักงานรับออเดอร์** (Controller) ไม่เข้าครัวทำอาหารเอง
+- **พ่อครัว** (Service) ไม่ออกไปรับออเดอร์จากลูกค้า
+- **พนักงานคลัง** (Repository) ไม่ตัดสินใจว่าจะปรุงอะไร แค่หยิบวัตถุดิบตามที่สั่ง
 
-ในระบบนี้:
-- **Controller** → รับ request + ตรวจสิทธิ์ (ไม่มีกฎธุรกิจ ไม่มี SQL)
-- **Service** → กฎธุรกิจ + ตัดสินใจ (ไม่รู้จัก HTTP, ไม่รู้จัก HTML)
-- **Repository** → ดึง/บันทึกข้อมูล (ไม่มีกฎธุรกิจ ไม่ตัดสินใจ)
+**ในระบบนี้:**
 
-**ข้อดี:** ถ้าอยากเปลี่ยน "ยืมได้ 5 เล่ม แทน 3 เล่ม" → แก้แค่ config/Service ไม่กระทบ Controller หรือ Repository เลย
+| ส่วน | ทำ | ไม่ทำ |
+|-----|---|----|
+| **Controller** | รับ request, ตรวจ CSRF, เรียก Service, แสดงผล | ❌ เขียน SQL, ❌ ตัดสินใจกฎธุรกิจ |
+| **Service** | ตัดสินใจตามกฎ, ใช้ transaction, เรียก Repository | ❌ แสดงผล HTML, ❌ เขียน SQL ตรง |
+| **Repository** | เขียน SQL, ดึง/บันทึกข้อมูล | ❌ ตัดสินใจกฎธุรกิจ, ❌ ใช้ $_POST/$_SESSION |
 
----
+### 2.2 Single Source of Truth (SSoT) — "กฎอยู่ที่เดียว"
 
-### 🎯 Single Source of Truth — "แหล่งเดียวของความจริง"
+**แนวคิด:** ข้อมูลหรือกฎแต่ละอย่างควรถูก define ไว้ที่เดียว ถ้าต้องแก้ แก้จุดเดียวมีผลทั้งระบบ
 
-**แนวคิด:** กฎสำคัญควรอยู่ที่เดียว ไม่กระจาย ถ้าจะแก้ แก้จุดเดียวมีผลทั้งระบบ
+**ตัวอย่างในระบบ:**
 
-ตัวอย่างในโค้ดนี้:
-
-| กฎ/ค่า | อยู่ที่ไหน (แหล่งเดียว) |
-|--------|----------------------|
-| ค่าตั้งค่าระบบ (วันยืม, ค่าปรับ) | `includes/config.php` (อ่านจาก `.env`) |
-| การ hash password | `hashPassword()` ใน `functions.php` |
-| การ validate ข้อมูลสมาชิก | `validateMemberData()` ใน `functions.php` |
-| การสร้าง user | `MemberService::createMember()` |
-| กฎการยืม (โควต้า, stock) | `BorrowService::createBorrow()` |
-| กฎการจอง (state transition) | `ReservationService` |
-| การตั้งค่ารายงาน | `includes/report_helper.php` |
+| กฎ/ค่า | อยู่ที่ไหน | ใช้ที่ไหนบ้าง |
+|--------|----------|-------------|
+| **MAX_BORROW_BOOKS = 3** | `config.php` (อ่านจาก `.env`) | BorrowService, ReservationService |
+| **FINE_PER_DAY = 10** | `config.php` (อ่านจาก `.env`) | BorrowService::calculateFine() |
+| **validateMemberData()** | `functions.php` | MemberService, AuthService, import |
+| **validateBookData()** | `functions.php` | book_form, import_books |
+| **hashPassword()** | `functions.php` | ทุกจุดที่สร้าง/เปลี่ยน password |
+| **emailExists()** | `MemberService` → `UserRepository` | register, create member, update member |
 
 **ทำไมสำคัญ?**
+ถ้า "ยืมได้สูงสุดกี่เล่ม" กระจายอยู่ 5 ไฟล์ เวลาแก้จะต้องไล่แก้ทั้ง 5 → พลาดจุดเดียว = บัค
+แต่ถ้าอยู่ใน `.env` จุดเดียว → แก้ทีเดียว ทุกจุดได้ค่าใหม่
 
-สมมติระบบสร้าง user ได้ 4 ทาง (register, admin เพิ่ม, import CSV, AJAX เพิ่มเร็ว)
-ถ้าทุกทางเขียน validate email ซ้ำกันเอง → ถ้าอยากเปลี่ยนกฎ ต้องแก้ 4 จุด อาจลืมจุดใดจุดหนึ่ง
+### 2.3 Thin Controller / Fat Service — "Controller ผอม Service อ้วน"
 
-ในระบบนี้ ทั้ง 4 ทาง **ไปจบที่ MemberService จุดเดียว** → แก้ที่เดียวมีผลทุกทาง
+**แนวคิด:** Controller ไม่ควรมี logic เยอะ ควร "ส่งต่อ" ให้ Service ทำงานหนัก
 
----
-
-### 🧱 Boundary / Responsibility — "ขอบเขตความรับผิดชอบ"
-
-**แนวคิด:** แต่ละชั้นมีกฎว่า "ทำอะไรได้" และ "ทำอะไรไม่ได้"
+**ตัวอย่าง:**
 
 ```
-📋 Controller
-├── ✅ ได้: รับ request, ตรวจสิทธิ์, ตรวจ CSRF, เรียก Service, แสดงผล
-├── ❌ ไม่ได้: เขียน SQL, คำนวณค่าปรับ, ตัดสินใจว่ายืมได้ไหม
+❌ Controller อ้วน (ไม่ดี):
+login.php:
+├── query database หา user
+├── เทียบ password เอง
+├── ตรวจ rate limit เอง
+├── สร้าง session เอง
+└── HTML ทั้งหมด
 
-🧠 Service
-├── ✅ ได้: ตรวจกฎธุรกิจ, คำนวณ, เปิด transaction, เรียก Repository
-├── ❌ ไม่ได้: อ่าน $_POST, สร้าง HTML, redirect
-
-🗄️ Repository
-├── ✅ ได้: เขียน SQL, ดึงข้อมูล, บันทึกข้อมูล
-├── ❌ ไม่ได้: ตัดสินใจว่ายืมได้ไหม, ตรวจโควต้า, คำนวณค่าปรับ
-```
-
-**เปรียบเทียบ:** เหมือนระบบราชการ — แต่ละแผนกมีหน้าที่ชัด ไม่ก้าวก่ายกัน ถ้าทุกคนทำทุกอย่าง จะวุ่นวายและเกิดข้อผิดพลาด
-
----
-
-### 📋 Thin Controller / Fat Service — "Controller บาง Service หนา"
-
-**แนวคิด:** Controller ควรทำน้อยที่สุด — แค่ "รับ" และ "ส่งต่อ" ส่วนงานจริงทั้งหมดอยู่ใน Service
-
-ตัวอย่าง: "คืนหนังสือ" ใน `admin/borrows.php`
-
-```
-Controller ทำแค่:
-├── ตรวจว่า login + เป็น staff
-├── ตรวจ CSRF token
-├── ตรวจ idempotency key (ป้องกันกดซ้ำ)
-├── เรียก BorrowService::returnBook(borrowId, staffId, payNow)
-├── แสดงผลสำเร็จ/ล้มเหลว
-└── จบ
-
-Service ทำงานจริง:
-├── เปิด transaction
-├── ล็อคข้อมูลรายการยืม
-├── ตรวจว่าคืนไปแล้วหรือยัง
-├── คำนวณค่าปรับ
-├── อัปเดตสถานะ
-├── คืน stock
-├── บันทึก payment (ถ้าจ่ายทันที)
-└── commit / rollback
-```
-
-**ทำไมต้องแบบนี้?**
-- ถ้าวันหนึ่งอยากเพิ่ม "คืนผ่าน API" → สร้าง Controller ใหม่ เรียก Service เดิมได้เลย ไม่ต้องเขียนกฎธุรกิจซ้ำ
-- ถ้ากฎธุรกิจอยู่ใน Controller → ต้อง copy-paste ไปทุก Controller = ผิดหลัก Single Source of Truth
-
----
-
-### 🗃️ Repository Pattern — "แยกการคุยกับ database ออกมา"
-
-**แนวคิด:** คำสั่ง SQL ทั้งหมดควรอยู่ใน Repository ไม่กระจายทั่วระบบ
-
-```
-❌ แบบที่ไม่ดี (SQL อยู่ใน Controller):
-Controller → เขียน SQL → ได้ข้อมูล → ตรวจกฎ → เขียน SQL อีก → แสดงผล
-(ทุกอย่างปนกัน แก้ยาก test ยาก)
-
-✅ แบบที่ระบบนี้ใช้:
-Controller → Service → Repository → SQL → Database
-(แต่ละชั้นแยกชัด แก้ SQL ก็แก้แค่ Repository)
+✅ Controller ผอม (ระบบนี้):
+login.php:
+├── ตรวจ CSRF
+├── ตรวจ rate limit
+├── เรียก AuthService::login()  ← 1 บรรทัด
+├── เก็บ session
+└── redirect
 ```
 
 **ข้อดี:**
-- ถ้าวันหนึ่งเปลี่ยนจาก MySQL เป็น PostgreSQL → แก้แค่ Repository ไม่ต้องแก้ Service หรือ Controller
-- SQL อยู่รวมกันที่เดียว ง่ายต่อการ review และ optimize
-- Service ไม่ต้องรู้เรื่อง SQL เลย แค่สั่ง "ขอข้อมูล" หรือ "บันทึกข้อมูล"
+- Controller อ่านง่าย (เห็นภาพรวมทันที)
+- กฎธุรกิจอยู่ที่ Service → ทดสอบง่าย เปลี่ยนง่าย
+- ถ้าต้องสร้าง API endpoint ใหม่ → เรียก Service เดิมได้เลย ไม่ต้อง copy logic
+
+### 2.4 Repository Pattern — "แยก SQL ออกจากกฎธุรกิจ"
+
+**แนวคิด:** SQL ทั้งหมดอยู่ใน Repository เท่านั้น Service ไม่รู้จัก SQL
+
+**เปรียบเทียบ:**
+- Service บอก Repository ว่า "ขอข้อมูลหนังสือ ID 5" — ไม่สนว่า Repository ไปหามาจาก MySQL, PostgreSQL หรือ file
+- Repository จัดการ SQL เอง แล้วคืน array ให้ Service
+
+**ข้อดีหลัก:**
+- ถ้าวันหนึ่งเปลี่ยน database → แก้แค่ Repository (Service ไม่ต้องแก้)
+- SQL อยู่รวมกัน → หา/แก้ง่าย ไม่กระจายทั่วโค้ด
+- ป้องกัน SQL Injection ง่ายกว่า (ดูแลจุดเดียว)
+
+### 2.5 Boundary / Responsibility — "ใครเรียกใคร"
+
+```
+ทิศทางการเรียก (→ หมายถึง "เรียกได้"):
+
+Controller → Service → Repository → Database
+     │                      ↑
+     └──────────────────────┘
+     (Controller ไม่ควรเรียก Repository ตรง)
+
+Helper / Functions
+     └── ใช้ได้ทุกชั้น (เป็น utility กลาง)
+```
+
+**กฎสำคัญ:**
+- Controller **ไม่ควร**เรียก Repository ตรง → ต้องผ่าน Service
+- Repository **ไม่ควร**เรียก Service → ทิศทางเดียว
+- Service เรียก Repository ได้หลายตัว (เช่น BorrowService เรียก BookRepository + BorrowRepository + ReservationRepository)
 
 ---
 
 ## 🗂️ 3. โครงสร้างโฟลเดอร์
 
-### แต่ละโฟลเดอร์มีหน้าที่อะไร?
+### ภาพรวม
 
 ```
 book_borrowing/
 │
-├── *.php (root)        📋 Controller Layer (Public)
-│                       หน้าเว็บสำหรับผู้ใช้ทั่วไป + สมาชิก
-│                       เช่น login, register, ดูหนังสือ, ดูประวัติยืม
+├── 📋 Controller Layer (หน้าเว็บ + API)
+│   ├── *.php (root)          → หน้า public (index, login, register, book, ...)
+│   ├── admin/*.php           → หน้า admin/staff (books, borrows, members, ...)
+│   └── api/*.php             → JSON API endpoints (reserve, cancel, search, ...)
 │
-├── admin/              📋 Controller Layer (Admin/Staff)
-│                       หน้าเว็บสำหรับเจ้าหน้าที่ + ผู้ดูแล
-│                       เช่น จัดการหนังสือ, ยืม-คืน, รายงาน
+├── 🧠 Service Layer (กฎธุรกิจ)
+│   └── app/Services/         → 8 Service classes
+│       ├── AuthService           → Login, Register, Profile, Password Reset
+│       ├── BorrowService         → ยืม, คืน, ค่าปรับ
+│       ├── ReservationService    → จอง, อนุมัติ, ยกเลิก, หมดอายุ
+│       ├── BookService           → CRUD หนังสือ
+│       ├── MemberService         → CRUD สมาชิก + import
+│       ├── HomeService           → หน้าแรก (public)
+│       ├── DashboardService      → สถิติ admin
+│       └── ReportService         → รายงานเชิงลึก
 │
-├── api/                📋 Controller Layer (API)
-│                       Endpoint สำหรับ AJAX (JavaScript เรียกใช้)
-│                       เช่น จองหนังสือ, ค้นหา, เพิ่มสมาชิกเร็ว
+├── 🗄️ Repository Layer (SQL)
+│   └── app/Repositories/     → 9 Repository classes
+│       ├── UserRepository        → ตาราง users
+│       ├── BookRepository        → ตาราง books
+│       ├── BorrowRepository      → ตาราง borrows
+│       ├── ReservationRepository → ตาราง reservations
+│       ├── CategoryRepository    → ตาราง categories
+│       ├── PaymentRepository     → ตาราง payments
+│       ├── PasswordResetRepository → ตาราง password_resets
+│       ├── ReportRepository      → หลายตาราง (JOIN สำหรับรายงาน)
+│       └── SettingsRepository    → ตาราง settings
 │
-├── app/
-│   ├── Services/       🧠 Service Layer
-│   │                   กฎธุรกิจ, transaction, validation
+├── 🔧 Utility / Config / Helpers
+│   ├── bootstrap.php         → จุดเริ่มต้น (โหลด config + db + functions)
+│   ├── includes/
+│   │   ├── config.php        → ค่าคงที่ (อ่านจาก .env)
+│   │   ├── db.php            → สร้าง PDO connection (singleton)
+│   │   ├── functions.php     → helper functions (auth, CSRF, validation, ...)
+│   │   ├── header.php        → HTML header (public)
+│   │   ├── footer.php        → HTML footer (public)
+│   │   ├── book_grid.php     → component แสดงหนังสือ
+│   │   ├── modal.js          → JavaScript สำหรับ modal
+│   │   └── report_helper.php → ช่วยสร้างรายงาน PDF
 │   │
-│   └── Repositories/   🗄️ Repository Layer
-│                       SQL queries, data access, row locking
+│   ├── admin/header.php      → HTML header (admin)
+│   └── admin/footer.php      → HTML footer (admin)
 │
-├── includes/           🔧 Utility / Helper Layer
-│                       config, db, functions, UI components
-│
-├── database/           💾 Database Schema
-│                       โครงสร้างตาราง, ข้อมูลตัวอย่าง, migrations
-│
-├── uploads/            📁 ไฟล์ที่ user upload (รูปปกหนังสือ)
-├── logs/               📁 ไฟล์ log ข้อผิดพลาด
-├── css/                📁 Stylesheet เพิ่มเติม
-├── cron/               📁 งาน schedule (ล้าง token, expire การจอง)
-├── docs/               📁 เอกสารประกอบ
-└── .env                ⚙️ ค่าตั้งค่าระบบ
+├── 📁 อื่นๆ
+│   ├── .env / .env.example   → ค่า config (database, borrow settings, ...)
+│   ├── install.php           → ติดตั้งระบบ (สร้างตาราง + ข้อมูลเริ่มต้น)
+│   ├── css/                  → Stylesheet
+│   ├── uploads/covers/       → รูปปกหนังสือ
+│   ├── cron/                 → script สำหรับ cron job (optional)
+│   ├── database/             → SQL schema + migration
+│   ├── tests/                → ไฟล์ทดสอบ
+│   ├── logs/                 → log files
+│   └── docs/                 → เอกสารเพิ่มเติม
 ```
 
-### ใครควรเรียกใคร? (ทิศทางที่ถูกต้อง)
+### ใครเรียกใคร? (Dependency Map)
 
 ```
-✅ ทิศทางที่ถูกต้อง (บนลงล่าง):
+📋 login.php
+   └── 🧠 AuthService
+       └── 🗄️ UserRepository
+           └── 💾 users table
 
-Controller  →  Service  →  Repository  →  Database
-                 ↑
-              Utility (ใช้ได้ทุกชั้น)
+📋 admin/borrow_form.php
+   └── 🧠 BorrowService
+       ├── 🗄️ BorrowRepository    → borrows table
+       ├── 🗄️ BookRepository      → books table
+       └── 🗄️ ReservationRepository → reservations table
+
+📋 api/reserve_book.php
+   └── 🧠 ReservationService
+       ├── 🗄️ ReservationRepository → reservations table
+       ├── 🗄️ BookRepository        → books table
+       └── 🗄️ BorrowRepository      → borrows table
 ```
 
-```
-❌ ทิศทางที่ห้าม (ล่างขึ้นบน):
+### ใครไม่ควรเรียกใคร?
 
-Repository  ✗→  Service     (Repository ไม่ควรเรียก Service)
-Service     ✗→  Controller  (Service ไม่ควรเรียก Controller)
-Repository  ✗→  $_POST      (Repository ไม่ควรอ่าน request โดยตรง)
-Controller  ✗→  SQL         (Controller ไม่ควรเขียน SQL โดยตรง)
-```
-
-### ตัวอย่างที่เห็นในโค้ดจริง
-
-```
-admin/borrows.php (Controller)
-  └── เรียก BorrowService::returnBook()
-
-BorrowService (Service)
-  ├── เรียก BorrowRepository::findByIdForUpdate()
-  ├── เรียก BookRepository::incrementAvailable()
-  └── เรียก PaymentRepository::create()
-
-BorrowRepository (Repository)
-  └── เขียน SQL: UPDATE borrows SET status = 'returned' ...
-```
-
-สังเกต: **Controller ไม่เคยเรียก Repository โดยตรงสำหรับ write operations**
-(ยกเว้นบางกรณี read-only ที่ไม่มี business logic เช่น ดึงรายการแสดงผล)
+| กฎ | เหตุผล |
+|-----|--------|
+| ❌ Controller ไม่ควรเขียน SQL ตรง | SQL ต้องอยู่ใน Repository เท่านั้น |
+| ❌ Controller ไม่ควรเรียก Repository ตรง | ต้องผ่าน Service (ยกเว้น read-only ง่ายๆ) |
+| ❌ Repository ไม่ควรใช้ `$_POST` / `$_SESSION` | Repository ไม่ควรรู้เรื่อง HTTP |
+| ❌ Service ไม่ควร echo HTML | Service ไม่ควรรู้เรื่อง UI |
+| ❌ Repository ไม่ควรเรียก Service | ทิศทางเดียว: Service → Repository |
 
 ---
 
 ## 🧠 4. หน้าที่ของแต่ละ Layer
 
-### 📋 Controller Layer
+### 4.1 📋 Controller Layer
 
-**ตำแหน่ง:** ไฟล์ .php ที่ root, `admin/`, `api/`
+**ไฟล์:** `*.php` (root), `admin/*.php`, `api/*.php`
+
+**เปรียบเทียบ:** พนักงานต้อนรับ — รับลูกค้า ตรวจบัตร ส่งต่อให้ผู้จัดการ
 
 **หน้าที่:**
-- รับ HTTP request จากผู้ใช้ (GET/POST)
-- ตรวจว่า login แล้วหรือยัง + มีสิทธิ์ไหม
-- ตรวจ CSRF token
-- ตรวจ idempotency key (ป้องกันกดซ้ำ)
-- ดึงข้อมูลจาก `$_POST` / `$_GET` แล้วส่งต่อให้ Service
-- รับผลจาก Service แล้วแสดงผล (HTML หรือ JSON)
+- รับ HTTP request (GET/POST)
+- ตรวจสิทธิ์ (`requireLogin()`, `requireStaff()`, `requireAdmin()`)
+- ตรวจ CSRF token (`validateCSRFToken()`)
+- ดึงข้อมูลจาก `$_POST` / `$_GET`
+- เรียก Service ให้ทำงาน
+- จัดการผลลัพธ์ (redirect, แสดง HTML, คืน JSON)
+- แสดง flash message
 
 **ควรมี logic ระดับไหน?**
-น้อยที่สุดเท่าที่จะทำได้ แค่ "รับ" "ส่งต่อ" "แสดงผล"
+น้อยที่สุด — แค่ "รับ → ส่งต่อ → แสดงผล"
 
-| ✅ ควรอยู่ใน Controller | ❌ ไม่ควรอยู่ใน Controller |
-|----------------------|------------------------|
-| `requireStaff()` | คำนวณค่าปรับ |
-| `validateCSRFToken()` | ตรวจว่ายืมเกินโควต้าไหม |
-| `$_POST['book_id']` | เขียน SQL |
-| `redirect()` / `echo json` | เปิด transaction |
-| เรียก `$service->method()` | ล็อคข้อมูลด้วย FOR UPDATE |
+**ตัวอย่างสิ่งที่ควรอยู่:**
+- `if ($_SERVER['REQUEST_METHOD'] === 'POST')` — ตรวจว่าเป็น POST ไหม
+- `validateCSRFToken()` — ตรวจ CSRF
+- `$authService->login($email, $password)` — เรียก Service
+- `redirect(APP_URL . '/index.php')` — redirect
 
----
+**ตัวอย่างสิ่งที่ไม่ควรอยู่:**
+- ❌ SQL query ตรงๆ (`$pdo->query("SELECT * FROM users")`)
+- ❌ การคำนวณค่าปรับ
+- ❌ การตรวจโควต้ายืม
+- ❌ การ hash password
 
-### 🧠 Service Layer
+### 4.2 🧠 Service Layer
 
-**ตำแหน่ง:** `app/Services/`
+**ไฟล์:** `app/Services/*.php` (8 Service classes)
+
+**เปรียบเทียบ:** ผู้จัดการ / สมอง — คิด ตัดสินใจ บังคับกฎ
 
 **หน้าที่:**
-- ตัดสินใจว่า "ทำได้" หรือ "ทำไม่ได้" ตามกฎธุรกิจ
-- validate ข้อมูลเชิงธุรกิจ (เช่น stock พอไหม, ซ้ำไหม)
-- เปิด/ปิด transaction (ทำครบหรือไม่ทำเลย)
-- เรียก Repository หลายตัวเพื่อทำงานร่วมกัน
-- คำนวณค่าต่างๆ (ค่าปรับ, วันกำหนดคืน)
+- ใช้กฎธุรกิจทั้งหมด (business logic)
+- จัดการ transaction (BEGIN → COMMIT/ROLLBACK)
+- ประสานงานระหว่าง Repository หลายตัว
+- validate ข้อมูลเชิงธุรกิจ (โควต้า, stock, ยืมซ้ำ)
+- throw Exception เมื่อกฎไม่ผ่าน
 
 **ควรมี logic ระดับไหน?**
-มากที่สุด — นี่คือ "สมอง" ของระบบ
+เยอะที่สุด — กฎทุกอย่างอยู่ที่นี่
 
-| ✅ ควรอยู่ใน Service | ❌ ไม่ควรอยู่ใน Service |
-|--------------------|----------------------|
-| ตรวจโควต้ายืม | อ่าน `$_POST` |
-| คำนวณค่าปรับ | สร้าง HTML |
-| เปิด transaction | redirect |
-| เรียก Repository | เช็ค CSRF token |
-| ล็อคข้อมูล (ผ่าน Repository) | แสดง flash message |
+**ตัวอย่างสิ่งที่ควรอยู่:**
+- ตรวจโควต้า: `if ($activeBorrows + $pendingReservations >= MAX_BORROW_BOOKS)`
+- คำนวณค่าปรับ: `$daysOverdue × FINE_PER_DAY`
+- เปิด/ปิด transaction: `$pdo->beginTransaction()` → `$pdo->commit()`
+- เรียก Repository: `$this->bookRepo->decrementAvailable($bookId)`
 
-**Service ที่มีในระบบ:**
+**ตัวอย่างสิ่งที่ไม่ควรอยู่:**
+- ❌ `$_POST['email']` — ไม่ควรรู้เรื่อง HTTP
+- ❌ `echo "<h1>..."` — ไม่ควรแสดงผล HTML
+- ❌ SQL query ตรงๆ — ต้องผ่าน Repository
+- ❌ `header("Location: ...")` — ไม่ควร redirect
 
-| Service | รับผิดชอบ |
-|---------|----------|
-| `AuthService` | login, register, password reset, profile |
-| `BorrowService` | ยืม, คืน, จ่ายค่าปรับ |
-| `ReservationService` | จอง, อนุมัติ, ยกเลิก, expire |
-| `BookService` | เพิ่ม, แก้, ลบหนังสือ |
-| `MemberService` | เพิ่ม, แก้, ลบสมาชิก |
-| `DashboardService` | รวมสถิติสำหรับ dashboard |
-| `ReportService` | รวมข้อมูลสำหรับรายงาน |
-| `HomeService` | ข้อมูลหน้าแรก (หนังสือ, หมวดหมู่) |
+### 4.3 🗄️ Repository Layer
 
----
+**ไฟล์:** `app/Repositories/*.php` (9 Repository classes)
 
-### 🗄️ Repository Layer
-
-**ตำแหน่ง:** `app/Repositories/`
+**เปรียบเทียบ:** พนักงานคลัง — ไม่ตัดสินใจ แค่หยิบของตามที่สั่ง
 
 **หน้าที่:**
-- แปลงคำสั่งจาก Service ให้เป็น SQL
-- ดึงข้อมูลจาก database
-- บันทึก/อัปเดต/ลบข้อมูลใน database
-- ล็อคข้อมูลด้วย `SELECT ... FOR UPDATE` (ตามคำสั่ง Service)
+- เขียน SQL (SELECT, INSERT, UPDATE, DELETE)
+- ใช้ prepared statements ป้องกัน SQL injection
+- คืนข้อมูลเป็น array ให้ Service
+- จัดการ pagination, sorting, filtering ใน SQL
+- ใช้ `FOR UPDATE` เมื่อ Service ต้องการ lock
 
 **ควรมี logic ระดับไหน?**
-น้อยมาก — แค่ "ไปหยิบของ" หรือ "ไปเก็บของ" ตามที่ถูกสั่ง
+แค่ logic ของ SQL — ไม่มีกฎธุรกิจ
 
-| ✅ ควรอยู่ใน Repository | ❌ ไม่ควรอยู่ใน Repository |
-|----------------------|------------------------|
-| `SELECT * FROM books WHERE id = ?` | ตรวจว่ายืมเกินโควต้าไหม |
-| `UPDATE books SET available = available - 1` | คำนวณค่าปรับ |
-| `INSERT INTO borrows (...)` | เปิด/ปิด transaction |
-| `SELECT ... FOR UPDATE` | ตัดสินใจว่าลบได้ไหม |
-| `JOIN`, `WHERE`, `ORDER BY` | อ่าน `$_POST` |
+**ตัวอย่างสิ่งที่ควรอยู่:**
+- `SELECT * FROM books WHERE id = ? FOR UPDATE`
+- `UPDATE books SET available = available - 1 WHERE id = ? AND available > 0`
+- `INSERT INTO borrows (user_id, book_id, ...) VALUES (?, ?, ...)`
 
-**Repository ที่มีในระบบ:**
+**ตัวอย่างสิ่งที่ไม่ควรอยู่:**
+- ❌ ตรวจโควต้า (`if count >= MAX_BORROW_BOOKS`)
+- ❌ คำนวณค่าปรับ
+- ❌ ใช้ `$_SESSION` หรือ `$_POST`
+- ❌ เรียก Service อื่น
 
-| Repository | จัดการตาราง |
-|-----------|------------|
-| `UserRepository` | `users` |
-| `BookRepository` | `books` |
-| `BorrowRepository` | `borrows` |
-| `ReservationRepository` | `reservations` |
-| `CategoryRepository` | `categories` |
-| `PaymentRepository` | `payments` |
-| `ReportRepository` | อ่านข้อมูลหลายตาราง (read-only) |
-| `SettingsRepository` | `settings` |
-| `PasswordResetRepository` | `password_resets` |
+**จุดเด่นของ Repository ในระบบนี้:**
 
----
+| เทคนิค | คำอธิบาย |
+|--------|---------|
+| **Prepared Statements** | ทุก query ใช้ `?` placeholder — ป้องกัน SQL injection |
+| **FOR UPDATE** | ล็อคแถวระหว่าง transaction — ป้องกัน race condition |
+| **WHERE guard** | `WHERE available > 0` ใน decrement — ป้องกัน stock ติดลบ |
+| **EMULATE_PREPARES = false** | ใช้ native prepared statements จริงๆ — ปลอดภัยกว่า |
 
-### 💾 Database Layer
+### 4.4 💾 Database Layer
 
-**ตำแหน่ง:** MySQL + `database/schema.sql`
+**เทคโนโลยี:** MySQL + InnoDB engine
 
 **หน้าที่:**
-- เก็บข้อมูลทั้งหมดอย่างถาวร
-- บังคับ constraint (เช่น `available >= 0`, `UNIQUE email`)
-- จัดการ index เพื่อให้ค้นหาเร็ว
-- รองรับ transaction + row locking
+- เก็บข้อมูลถาวร
+- บังคับ constraint (UNIQUE, FOREIGN KEY, NOT NULL)
+- รองรับ transaction (InnoDB)
+- รองรับ row-level locking (FOR UPDATE)
 
-ระบบนี้มี 9 ตาราง: `users`, `books`, `categories`, `borrows`, `reservations`, `payments`, `password_resets`, `settings`, `rate_limits`
+**ระบบนี้มี 9 ตาราง:**
 
----
+| ตาราง | หน้าที่ | ความสัมพันธ์ |
+|-------|--------|------------|
+| **users** | ผู้ใช้ทุก role | → borrows, reservations, payments |
+| **books** | หนังสือ | → borrows, reservations, categories |
+| **categories** | หมวดหมู่ | ← books |
+| **borrows** | การยืม-คืน | → users, books, payments |
+| **reservations** | การจอง | → users, books, borrows |
+| **payments** | การชำระค่าปรับ | → borrows, users (staff) |
+| **rate_limits** | ป้องกัน brute force | standalone |
+| **password_resets** | token รีเซ็ตรหัสผ่าน | → users |
+| **settings** | ค่าตั้งค่าระบบ | standalone (key-value) |
 
-### 🔧 Utility / Helper Layer
+### 4.5 🔧 Utility / Helper Layer
 
-**ตำแหน่ง:** `includes/`
+**ไฟล์:** `includes/functions.php`, `includes/config.php`, `includes/db.php`, `bootstrap.php`
 
-**หน้าที่:**
-ฟังก์ชันที่ **ทุกชั้นใช้ร่วมกัน** ไม่จัดอยู่ในชั้นใดชั้นหนึ่ง
+**เปรียบเทียบ:** กล่องเครื่องมือ — ใช้ได้ทุกชั้น
 
-| ไฟล์ | หน้าที่ |
-|------|---------|
-| `config.php` | โหลดค่าตั้งค่าจาก `.env` → define เป็น constants |
-| `db.php` | สร้าง PDO connection (singleton) |
-| `functions.php` | ฟังก์ชันช่วยเหลือทั้งหมด |
-| `header.php` / `footer.php` | UI template สำหรับหน้า public |
-| `book_grid.php` | UI component แสดงตารางหนังสือ (ใช้ซ้ำ) |
-| `modal.js` | กล่อง popup ยืนยัน (ใช้แทน `confirm()`) |
-| `report_helper.php` | ตั้งค่ารายงาน (map ชื่อ, หัวตาราง, filename) |
+**แบ่งตามหน้าที่:**
 
-**ฟังก์ชันสำคัญใน `functions.php`:**
+| ไฟล์ | หน้าที่ | ตัวอย่างฟังก์ชัน |
+|------|--------|---------------|
+| **config.php** | อ่าน `.env` → define constants | `MAX_BORROW_BOOKS`, `FINE_PER_DAY` |
+| **db.php** | สร้าง PDO connection (singleton) | `getDB()` |
+| **functions.php** | helper ทุกประเภท | `e()`, `requireStaff()`, `validateCSRFToken()`, `validateMemberData()` |
+| **bootstrap.php** | โหลดทุกอย่าง + autoloader | ทุกหน้าเรียก `require bootstrap.php` |
+
+**functions.php แบ่งเป็นหมวด:**
 
 | หมวด | ฟังก์ชัน | หน้าที่ |
-|------|---------|---------|
-| 🛡️ Security | `e()` | escape HTML ป้องกัน XSS |
-| 🛡️ Security | `generateCSRFToken()` / `validateCSRFToken()` | ป้องกัน CSRF |
-| 🛡️ Security | `checkRateLimit()` / `incrementRateLimit()` | ป้องกัน brute force |
-| 🛡️ Security | `hashPassword()` | hash password ด้วย bcrypt |
-| 🔒 Access | `requireLogin()` / `requireStaff()` / `requireAdmin()` | ตรวจสิทธิ์ |
-| 📦 Flash | `setFlash()` / `getFlash()` / `displayFlash()` | ข้อความแจ้งเตือนครั้งเดียว |
-| ✅ Validate | `validateMemberData()` / `validatePassword()` | ตรวจข้อมูล |
-| 🌐 UI | `formatDate()` / `formatFine()` / `daysDiff()` | จัดรูปแบบแสดงผล |
-
----
-
-### 🔗 Bootstrap — จุดเชื่อมทุกชั้นเข้าด้วยกัน
-
-**ตำแหน่ง:** `bootstrap.php`
-
-ทุกหน้าของระบบเริ่มต้นด้วย `require_once bootstrap.php` ซึ่งทำหน้าที่:
-
-```
-bootstrap.php
-├── 1. โหลด config.php    → ค่าตั้งค่าทั้งหมดพร้อมใช้
-├── 2. โหลด db.php        → database connection พร้อมใช้
-├── 3. โหลด functions.php → helper functions พร้อมใช้
-├── 4. ล้าง idempotency keys ที่หมดอายุ
-├── 5. ตั้ง autoloader     → โหลด class ใน app/ อัตโนมัติ
-└── 6. ตั้ง error reporting → ตาม APP_DEBUG
-```
-
-> ⚠️ **ห้ามแก้ลำดับ require** ใน bootstrap.php — ต้อง config ก่อน db ก่อน functions เพราะแต่ละตัวพึ่งพาตัวก่อนหน้า
+|------|---------|--------|
+| 🛡️ **Security** | `e()`, `generateCSRFToken()`, `validateCSRFToken()` | ป้องกัน XSS + CSRF |
+| 🔒 **Access Control** | `requireLogin()`, `requireStaff()`, `requireAdmin()` | ตรวจสิทธิ์ (redirect) |
+| 🔒 **API Access** | `requireStaffApi()`, `requireAdminApi()` | ตรวจสิทธิ์ (JSON 403) |
+| 🚦 **Rate Limit** | `checkRateLimit()`, `incrementRateLimit()`, `resetRateLimit()` | ป้องกัน brute force |
+| ✅ **Validation** | `validateMemberData()`, `validateBookData()`, `validatePassword()` | ตรวจข้อมูล (SSoT) |
+| 🔐 **Password** | `hashPassword()` | hash password (SSoT) |
+| 📦 **Flash** | `setFlash()`, `getFlash()`, `displayFlash()` | ข้อความแสดงครั้งเดียว |
+| 🌐 **UI** | `formatDate()`, `formatFine()`, `getBookStatusLabel()` | จัดรูปแบบแสดงผล |
+| 🔑 **Idempotency** | `acquireIdempotencyKey()`, `releaseIdempotencyKey()` | ป้องกันกดซ้ำ |
 
 ---
 
 ## 🔐 5. การออกแบบด้านความปลอดภัย (เชิงโครงสร้าง)
 
-### ป้องกันภัยคุกคามตรงไหน?
+ระบบนี้ไม่ได้แค่ "มีฟีเจอร์ security" แต่ออกแบบให้ **security อยู่ถูกชั้น** ตามหลัก Layered Architecture
+
+### 5.1 SQL Injection — ป้องกันที่ชั้น Repository
 
 ```
-📋 Controller Layer                 🛡️ ป้องกัน
-├── CSRF Token                      → ถูกหลอกให้กด submit โดยไม่รู้ตัว
-├── Rate Limiting                   → เดารหัสผ่านอัตโนมัติ (brute force)
-├── Access Control (requireStaff)   → คนไม่มีสิทธิ์เข้าหน้า admin
-└── Idempotency Key                 → กดปุ่มซ้ำ (double submit)
-
-🧠 Service Layer                    🛡️ ป้องกัน
-├── Business Rule Validation        → ข้อมูลผิดกฎ (ยืมเกินโควต้า)
-├── Transaction                     → ข้อมูลค้างครึ่งเดียว
-└── Row Locking (FOR UPDATE)        → 2 คนแก้ข้อมูลเดียวกันพร้อมกัน
-
-🗄️ Repository Layer                 🛡️ ป้องกัน
-├── Prepared Statements             → SQL Injection
-└── Parameterized Queries           → SQL Injection
-
-🔧 Utility Layer                    🛡️ ป้องกัน
-├── e() - HTML escape               → XSS (แทรก script ในหน้าเว็บ)
-├── hashPassword() - bcrypt          → อ่านรหัสผ่านจาก database
-├── startSession() - secure config   → Session hijacking
-└── session_regenerate_id()          → Session fixation
+ป้องกันตรงไหน: Repository Layer เท่านั้น
+วิธี: Prepared Statements (native, ไม่ใช่ emulated)
 ```
 
-### SQL Injection ป้องกันตรงไหน?
+| การตั้งค่า | คำอธิบาย |
+|-----------|---------|
+| **`EMULATE_PREPARES = false`** | ใช้ native prepared statements ของ MySQL จริงๆ |
+| **`?` placeholder ทุก query** | ไม่มี string concatenation ใน SQL |
+| **อยู่ชั้น Repository** | Service/Controller ไม่เขียน SQL → ไม่มีจุดให้ SQL injection เล็ดลอด |
 
-**Repository Layer** — ทุก SQL query ใช้ Prepared Statements
+**เปรียบเทียบ:**
+- ❌ `"SELECT * FROM users WHERE email = '$email'"` → อันตราย
+- ✅ `"SELECT * FROM users WHERE email = ?"` + `$stmt->execute([$email])` → ปลอดภัย
 
-```
-❌ ไม่ทำแบบนี้:
-"SELECT * FROM users WHERE email = '$email'"
-→ ถ้า email = "'; DROP TABLE users; --" จะลบตารางทั้งหมด!
+**ทำไมต้องอยู่ชั้น Repository?**
+ถ้า SQL กระจายอยู่ทุกชั้น → ต้องตรวจทุกจุด → พลาดง่าย
+แต่ถ้า SQL อยู่แค่ Repository → ตรวจที่เดียว → มั่นใจได้
 
-✅ ทำแบบนี้ (ในทุก Repository):
-"SELECT * FROM users WHERE email = ?" + bind $email แยก
-→ ตัวแปรถูกส่งแยกจากคำสั่ง SQL → แทรกคำสั่งอันตรายไม่ได้
-```
-
-### Password อยู่ชั้นไหน?
-
-```
-Controller (login.php) → รับ password จาก form
-                          ↓
-Service (AuthService)  → เรียก password_verify() เทียบกับ hash
-                          ↓
-Utility (functions.php) → hashPassword() ใช้ bcrypt เข้ารหัส
-                          ↓
-Repository             → เก็บ hash ลง database (ไม่เคยเก็บ password จริง)
-```
-
-- **hash** ทำที่ Utility Layer (เป็น Single Source of Truth)
-- **verify** ทำที่ Service Layer (เป็นส่วนหนึ่งของกฎธุรกิจ login)
-- **เก็บ hash** ทำที่ Repository Layer
-
-### Authorization ควรเช็คที่ชั้นไหน?
-
-**Controller Layer** — เป็นด่านแรกที่กรองก่อนทุกอย่าง
+### 5.2 XSS (Cross-Site Scripting) — ป้องกันที่ชั้น Controller (output)
 
 ```
-admin/borrows.php
-├── require bootstrap.php;
-├── requireStaff();          ← เช็คสิทธิ์ที่นี่ (ถ้าไม่ใช่ staff → redirect ออก)
-├── ... (ไม่ต้องเช็คซ้ำใน Service)
+ป้องกันตรงไหน: Controller Layer (ตอนแสดงผล HTML)
+วิธี: ฟังก์ชัน e() ครอบทุก output
 ```
 
-ทุกหน้าใน `admin/` เรียก `requireStaff()` หรือ `requireAdmin()` ก่อนทำอะไรทั้งนั้น
-API endpoints ใช้ `requireStaffApi()` / `requireLogin()` ซึ่งตอบ JSON แทน redirect
+| ฟังก์ชัน | ทำอะไร |
+|---------|--------|
+| **`e($value)`** | แปลง `<`, `>`, `"`, `'`, `&` เป็น HTML entities |
 
-### Transaction / Lock ควรอยู่ตรงไหน?
+**ทุกจุดที่แสดงข้อมูลจาก database บน HTML ต้องใช้ `e()`:**
+- `<?= e($user['name']) ?>`
+- `<?= e($book['title']) ?>`
 
-**Service Layer** — เพราะ Service เป็นคนตัดสินใจว่า "ต้องทำอะไรบ้าง"
+**ทำไมอยู่ชั้น Controller?**
+เพราะ Controller คือชั้นที่สร้าง HTML — จุดที่ข้อมูลจะถูกแสดงผลจริง
+
+### 5.3 CSRF (Cross-Site Request Forgery) — ป้องกันที่ชั้น Controller (input)
 
 ```
-BorrowService::returnBook()
-├── $this->pdo->beginTransaction()    ← เปิด transaction
-├── เรียก Repository ดึง/ล็อคข้อมูล
-├── ตรวจกฎธุรกิจ
-├── เรียก Repository บันทึก
-├── $this->pdo->commit()              ← ยืนยัน
-└── catch → $this->pdo->rollBack()    ← ถ้าพัง ย้อนกลับ
+ป้องกันตรงไหน: Controller Layer (ตอนรับ POST)
+วิธี: CSRF token ในทุก form
 ```
 
-**ทำไมไม่อยู่ใน Repository?**
-เพราะ 1 transaction อาจต้องเรียก Repository หลายตัว (เช่น BorrowRepository + BookRepository + PaymentRepository) ถ้าแต่ละ Repository เปิด transaction เอง จะกลายเป็นหลาย transaction ไม่ได้ "ทำครบหรือไม่ทำเลย" เป็นก้อนเดียว
+| ขั้นตอน | ฟังก์ชัน | อยู่ตรงไหน |
+|---------|---------|-----------|
+| สร้าง token | `generateCSRFToken()` | ใส่ใน form (hidden input) |
+| ตรวจ token | `validateCSRFToken()` | Controller ตรวจก่อน process POST |
+
+**ทำไมอยู่ชั้น Controller?**
+เพราะ CSRF เป็นเรื่องของ HTTP request — Service ไม่ควรรู้เรื่อง HTTP
+
+### 5.4 Password — hash ที่ชั้น Service/Helper
+
+```
+ป้องกันตรงไหน: functions.php (helper) + Service Layer
+วิธี: bcrypt ผ่าน password_hash() / password_verify()
+```
+
+| การจัดการ | อยู่ตรงไหน |
+|----------|-----------|
+| **hash password** | `hashPassword()` ใน functions.php (SSoT) |
+| **เรียก hash** | Service เรียก `hashPassword()` ก่อนส่งให้ Repository |
+| **เทียบ password** | `AuthService::login()` ใช้ `password_verify()` |
+| **Repository เห็น** | hash เท่านั้น — ไม่เคยเห็น plaintext |
+
+**ทำไม hash อยู่ที่ Helper/Service?**
+- Helper `hashPassword()` เป็น SSoT → ทุกจุดใช้ algorithm เดียวกัน
+- Service เรียก hash ก่อนส่ง Repository → Repository ไม่ต้องรู้เรื่อง password
+- ถ้าวันหนึ่งเปลี่ยน algorithm → แก้แค่ `hashPassword()` จุดเดียว
+
+### 5.5 Authorization — ตรวจสิทธิ์ที่ชั้น Controller
+
+```
+ป้องกันตรงไหน: Controller Layer (บรรทัดแรกของทุกหน้า)
+วิธี: helper functions (requireLogin, requireStaff, requireAdmin)
+```
+
+| ฟังก์ชัน | ใช้ที่ไหน | ผลถ้าไม่ผ่าน |
+|---------|----------|------------|
+| `requireLogin()` | หน้าที่ต้อง login | redirect → login.php |
+| `requireStaff()` | หน้า admin ทั่วไป | redirect → index.php |
+| `requireAdmin()` | หน้ารายงาน, ตั้งค่า | redirect → admin/ |
+| `requireStaffApi()` | API endpoint | JSON 403 |
+
+**ทำไมอยู่ชั้น Controller?**
+- Controller เป็นจุดแรกที่ request เข้ามา → ตรวจสิทธิ์ก่อนทำอะไรทั้งนั้น
+- ถ้าไม่ผ่าน → redirect/403 ทันที ไม่ถึง Service
+
+**เสริม:** บาง Service มีการตรวจเพิ่มเช่น "สมาชิกยกเลิกจองได้เฉพาะของตัวเอง" (ป้องกัน IDOR) — นี่เป็น business rule จึงอยู่ที่ Service
+
+### 5.6 Transaction & Locking — จัดการที่ชั้น Service
+
+```
+อยู่ตรงไหน: Service Layer
+วิธี: PDO beginTransaction/commit/rollBack + SELECT ... FOR UPDATE
+```
+
+| เทคนิค | อยู่ที่ | ทำอะไร |
+|--------|-------|--------|
+| **Transaction** | Service | ครอบหลาย Repository calls เป็นก้อนเดียว |
+| **Row Locking** | Repository (SQL) แต่สั่งโดย Service | ล็อคแถวก่อนแก้ ป้องกัน race condition |
+
+**ทำไม Transaction อยู่ที่ Service?**
+- Service เป็นคนตัดสินใจว่า "operation นี้ต้อง atomic"
+- Service เรียก Repository หลายตัว → ต้องครอบ transaction ข้าม Repository
+- Repository ไม่รู้ว่าตัวเองกำลังอยู่ใน transaction ไหม (ไม่จำเป็นต้องรู้)
+
+### สรุปภาพรวม Security ตาม Layer
+
+```
+┌───────────────────────────────────────────────────────┐
+│ 📋 Controller Layer                                   │
+│  ├── CSRF token check      (ป้องกัน CSRF)             │
+│  ├── Authorization check    (ตรวจสิทธิ์)              │
+│  ├── Rate limit check       (ป้องกัน brute force)     │
+│  ├── e() output escaping    (ป้องกัน XSS)             │
+│  └── Idempotency key        (ป้องกันกดซ้ำ)            │
+├───────────────────────────────────────────────────────┤
+│ 🧠 Service Layer                                      │
+│  ├── Transaction management  (atomicity)              │
+│  ├── Password hashing        (ผ่าน helper SSoT)       │
+│  ├── IDOR prevention         (ตรวจ ownership)         │
+│  └── Business rule validation (โควต้า, stock, ...)    │
+├───────────────────────────────────────────────────────┤
+│ 🗄️ Repository Layer                                   │
+│  ├── Prepared statements     (ป้องกัน SQL injection)  │
+│  ├── FOR UPDATE locking      (ป้องกัน race condition) │
+│  └── WHERE guard clauses     (ป้องกัน stock ติดลบ)    │
+├───────────────────────────────────────────────────────┤
+│ 💾 Database Layer                                      │
+│  ├── UNIQUE constraints      (ป้องกันข้อมูลซ้ำ)       │
+│  ├── FOREIGN KEY             (บังคับความสัมพันธ์)      │
+│  └── InnoDB engine           (รองรับ transaction+lock)│
+└───────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -533,117 +561,142 @@ BorrowService::returnBook()
 
 ### เหมาะกับงานแบบไหน?
 
-| ประเภทงาน | เหมาะ |
-|-----------|-------|
-| ระบบ CRUD ทั่วไป (เช่น จัดการข้อมูล, สต็อก) | ✅ |
-| ระบบที่มีกฎธุรกิจชัดเจน | ✅ |
-| โปรเจคของคนเดียว / ทีมเล็ก | ✅ |
-| ระบบที่ต้องเรียนรู้แนวคิด backend | ✅ |
-| ระบบขนาดเล็ก (< 100 concurrent users) | ✅ |
+| งาน | ทำไมเหมาะ |
+|-----|----------|
+| **โปรเจคมหาวิทยาลัย** | โครงสร้างชัด มี comment ละเอียด อธิบายได้ |
+| **เรียนรู้ backend architecture** | เห็นทุกชั้นชัดเจน ไม่มี framework ซ่อน |
+| **เรียนรู้ security** | มีตัวอย่างจริงครบ CSRF, XSS, Rate Limit, Locking |
+| **Prototype / MVP** | ใช้ได้เลย ไม่ต้องตั้ง infrastructure ซับซ้อน |
+| **Template สำหรับต่อยอด** | เพิ่ม Service/Repository ใหม่ได้ง่าย |
+| **ห้องสมุดขนาดเล็ก** | ครบ feature ยืม-คืน-จอง-ค่าปรับ-รายงาน |
 
 ### ไม่เหมาะกับงานแบบไหน?
 
-| ประเภทงาน | เหตุผล |
-|-----------|--------|
-| ระบบ microservices | ออกแบบเป็น monolith (ทุกอย่างอยู่ใน project เดียว) |
-| ระบบ real-time (เช่น chat, notification push) | ไม่มี WebSocket |
-| ระบบที่ต้องรองรับ 500+ คนพร้อมกัน | PHP + session ไม่เหมาะกับ scale ระดับนั้น |
-| ระบบที่ต้องมี mobile app | ไม่มี REST API เต็มรูปแบบ |
-| ระบบที่ต้องรันหลาย server | Session เก็บเป็นไฟล์ ไม่ share ข้าม server |
+| งาน | ทำไมไม่เหมาะ | ต้องเพิ่มอะไร |
+|-----|-------------|-------------|
+| **ระบบ enterprise** | ไม่มี caching, queue, horizontal scaling | Redis, RabbitMQ, load balancer |
+| **High traffic (>1000 req/s)** | Session file-based, rate limit ใน DB | Redis session, Redis rate limit |
+| **Multi-tenant** | ออกแบบ single library | tenant isolation, database per tenant |
+| **Microservices** | monolith structure | แยก Service เป็น independent service |
+| **SPA + API only** | Controller สร้าง HTML inline | แยก frontend, API-only backend |
 
 ### ถ้าเอาไปใช้ production ต้องคิดเพิ่มเรื่องอะไร?
 
-| เรื่อง | สถานะปัจจุบัน | ถ้าจะใช้ production |
-|--------|-------------|-------------------|
-| **HTTPS** | ไม่มี | ต้องติดตั้ง SSL Certificate |
-| **Database backup** | ไม่มี | ต้องตั้ง backup อัตโนมัติ |
-| **Error logging** | แสดงบนหน้าจอ (debug mode) | ต้องเขียนลง log file + ปิด display |
-| **Session storage** | เก็บเป็นไฟล์ | ถ้ามีหลาย server → ใช้ Redis หรือ DB |
-| **Rate limit storage** | เก็บใน MySQL | ถ้า traffic สูง → ใช้ Redis |
-| **File upload** | เก็บใน local folder | ถ้ามีหลาย server → ใช้ S3 หรือ shared storage |
-| **Monitoring** | ไม่มี | ต้องเพิ่ม health check / uptime monitor |
-| **CI/CD** | ไม่มี | ต้องเพิ่ม automated testing + deployment |
+| ด้าน | ปัจจุบัน | ควรเปลี่ยนเป็น |
+|------|--------|-------------|
+| **Session** | file-based (default PHP) | Redis / Database session |
+| **Rate Limit** | เก็บใน MySQL | Redis (เร็วกว่ามาก) |
+| **Email** | แสดง link บนหน้าจอ (dev) | SMTP / SendGrid / Mailgun |
+| **File Storage** | local disk (uploads/) | S3 / Cloud Storage + CDN |
+| **HTTPS** | config พร้อม, ยังไม่บังคับ | SSL certificate + force HTTPS |
+| **Backup** | ไม่มี | mysqldump cron / managed DB |
+| **Logging** | error_log → file | centralized logging (ELK, Sentry) |
+| **Monitoring** | ไม่มี | uptime monitoring, error alerting |
+| **Reservation Expiry** | Lazy Expire (ตรวจตอนเปิดหน้า) | cron job ทุก 5-15 นาที |
 
 ---
 
 ## 🧭 7. แนวทางการต่อยอด
 
-### ถ้าจะเพิ่ม feature ควรเพิ่มที่ layer ไหน?
+### 7.1 ถ้าจะเพิ่ม feature ใหม่ ควรเพิ่มที่ layer ไหน?
 
-**ตัวอย่าง:** อยากเพิ่ม "ระบบแจ้งเตือนหนังสือเกินกำหนด"
-
-```
-ขั้นที่ 1 │ Repository Layer
-          │ สร้าง method ใหม่ใน BorrowRepository
-          │ เพื่อดึงรายการยืมที่เกินกำหนด
-          │
-ขั้นที่ 2 │ Service Layer
-          │ สร้าง NotificationService (ไฟล์ใหม่)
-          │ เรียก BorrowRepository → สร้างข้อความแจ้งเตือน
-          │
-ขั้นที่ 3 │ Controller Layer
-          │ สร้างหน้า admin/notifications.php
-          │ เรียก NotificationService → แสดงผล
-          │
-ขั้นที่ 4 │ (Optional) cron/
-          │ สร้าง cron job สำหรับส่งแจ้งเตือนอัตโนมัติ
-```
-
-**หลักการ:** เพิ่มจากล่างขึ้นบน (Repository → Service → Controller)
-
-### ถ้าจะเปลี่ยน Database ควรแก้ส่วนไหน?
-
-**แก้แค่ Repository Layer**
-
-เพราะ Service ไม่รู้จัก SQL — Service แค่สั่ง "ขอข้อมูลหนังสือ" ไม่สนว่า Repository จะใช้ MySQL, PostgreSQL หรืออ่านจากไฟล์ JSON
+**ตัวอย่าง:** เพิ่มระบบ "แจ้งเตือนหนังสือใกล้ครบกำหนดคืน"
 
 ```
-ก่อน: BookRepository → MySQL
-หลัง: BookRepository → PostgreSQL
+ขั้นตอนการเพิ่ม feature:
 
-Service ไม่ต้องแก้เลย → เรียก $bookRepo->findById() เหมือนเดิม
+1️⃣ Repository — สร้างฟังก์ชันดึงข้อมูล
+   BorrowRepository::findDueSoon($days)
+   → SELECT borrows ที่ due_date ภายใน $days วัน
+
+2️⃣ Service — สร้าง logic แจ้งเตือน
+   NotificationService::sendDueReminders()
+   → เรียก BorrowRepository → วนส่ง notification
+
+3️⃣ Controller — สร้างจุดเรียก
+   cron/send_reminders.php หรือ admin/notifications.php
+   → เรียก NotificationService
+
+4️⃣ Config — เพิ่มค่าตั้งค่า (ถ้าจำเป็น)
+   .env: REMINDER_DAYS_BEFORE=2
+   config.php: define('REMINDER_DAYS_BEFORE', ...)
 ```
 
-อาจต้องแก้:
-- `includes/db.php` — เปลี่ยน DSN connection string
-- ไฟล์ใน `app/Repositories/` — แก้ SQL ที่ specific กับ MySQL (ถ้ามี)
+**หลักการ:**
+- **ข้อมูลใหม่** → เพิ่ม Repository (SQL)
+- **กฎใหม่** → เพิ่ม Service (business logic)
+- **หน้าใหม่** → เพิ่ม Controller (.php ที่ root/admin/api)
+- **ค่าตั้งค่าใหม่** → เพิ่มใน `.env` + `config.php`
+- **ฟังก์ชันใช้ซ้ำ** → เพิ่มใน `functions.php`
 
-### ถ้าจะทำ API / Frontend แยก ควรเริ่มตรงไหน?
+### 7.2 ถ้าจะเปลี่ยน Database ควรแก้ส่วนไหน?
 
-**Option A: เพิ่ม API endpoint (ง่ายสุด)**
-
-```
-สร้างไฟล์ใหม่ใน api/
-├── api/books.php      → GET = รายการ, POST = สร้าง
-├── api/borrows.php    → GET = รายการ, POST = สร้าง
-└── ...
-
-แต่ละ endpoint:
-├── require bootstrap.php
-├── ตรวจสิทธิ์ (ใช้ session หรือ token)
-├── เรียก Service เดิม ← ไม่ต้องเขียนกฎธุรกิจซ้ำ
-└── ตอบ JSON
-```
-
-ข้อดี: ใช้ Service เดิมได้เลย ไม่ต้องเขียนกฎธุรกิจใหม่
-
-**Option B: แยก Frontend ออกเป็น SPA (React / Vue)**
+**ตัวอย่าง:** เปลี่ยนจาก MySQL เป็น PostgreSQL
 
 ```
-Frontend (React/Vue)  ←→  API (PHP)  ←→  Database
+แก้ที่ไหน:
 
-Frontend:
-├── เรียก API ผ่าน fetch / axios
-├── แสดงผลฝั่ง browser
-└── ไม่ต้องรู้จัก PHP
+✅ แก้: includes/db.php
+   → เปลี่ยน DSN จาก mysql: เป็น pgsql:
 
-API (PHP):
-├── รับ request → เรียก Service → ตอบ JSON
-├── เปลี่ยน authentication จาก session เป็น JWT
-└── เพิ่ม CORS headers
+✅ แก้: app/Repositories/*.php
+   → แก้ SQL syntax ที่ต่างกัน (เช่น LIMIT, auto_increment)
+
+❌ ไม่ต้องแก้: app/Services/*.php
+   → Service ไม่รู้จัก SQL → ไม่ได้รับผลกระทบ
+
+❌ ไม่ต้องแก้: Controller (*.php)
+   → Controller ไม่รู้จัก database → ไม่ได้รับผลกระทบ
 ```
 
-ข้อเสีย: ต้อง rewrite Controller Layer ทั้งหมด + เพิ่ม JWT auth
+**นี่คือข้อดีของ Repository Pattern:**
+เปลี่ยน database → แก้แค่ Repository + connection — ส่วนที่เหลือไม่ต้องแตะ
+
+### 7.3 ถ้าจะทำ API / Frontend แยก ควรเริ่มตรงไหน?
+
+**ตัวอย่าง:** ทำ React/Vue frontend แยก + PHP API backend
+
+```
+ขั้นตอน:
+
+1️⃣ สร้าง API Controller ใหม่ (api/*.php)
+   ├── ใช้ Service เดิมได้เลย! (ไม่ต้องเขียนใหม่)
+   ├── เปลี่ยน output จาก HTML → JSON
+   └── เปลี่ยน auth จาก session → token (JWT)
+
+2️⃣ ตัวอย่าง:
+   api/books.php (ใหม่):
+   ├── ตรวจ JWT token
+   ├── เรียก BookService::getBooks()  ← Service เดิม!
+   └── echo json_encode($books)
+
+3️⃣ Frontend (React/Vue):
+   ├── fetch('/api/books.php')
+   └── แสดงผลเอง
+```
+
+**จุดสำคัญ:**
+- **Service Layer ใช้ซ้ำได้เลย** — นี่คือข้อดีของ Thin Controller
+- แก้แค่ Controller (เปลี่ยนจาก HTML → JSON)
+- เพิ่ม JWT authentication แทน session
+
+### 7.4 ถ้าจะเพิ่ม Service ใหม่?
+
+```
+ขั้นตอน:
+
+1️⃣ สร้างไฟล์ app/Services/XxxService.php
+   namespace App\Services;
+
+2️⃣ สร้าง Repository (ถ้าต้องการตารางใหม่)
+   app/Repositories/XxxRepository.php
+
+3️⃣ autoloader ใน bootstrap.php จะโหลดให้อัตโนมัติ
+   (ไม่ต้องแก้ bootstrap.php ถ้า namespace ตรง)
+
+4️⃣ เรียกใช้จาก Controller:
+   $xxxService = new \App\Services\XxxService(getDB());
+```
 
 ---
 
@@ -652,36 +705,50 @@ API (PHP):
 ### ระบบนี้สอนแนวคิดอะไร?
 
 | แนวคิด | เรียนรู้จากส่วนไหน |
-|--------|-------------------|
-| **Layered Architecture** | โครงสร้าง Controller → Service → Repository |
-| **Separation of Concerns** | แต่ละชั้นมีหน้าที่ชัด ไม่ปนกัน |
-| **Single Source of Truth** | MemberService, config.php, functions.php |
-| **Repository Pattern** | app/Repositories/ ทุกไฟล์ |
-| **Transaction Management** | BorrowService, ReservationService |
-| **Concurrency Control** | Row Locking ด้วย SELECT ... FOR UPDATE |
-| **Authentication Design** | AuthService + session + rate limit |
-| **Security in Depth** | CSRF, XSS, SQL Injection, bcrypt ป้องกันหลายชั้น |
-| **State Machine** | ReservationService (pending → fulfilled/cancelled/expired) |
+|--------|-----------------|
+| **Layered Architecture** | โครงสร้าง Controller → Service → Repository → Database |
+| **Separation of Concerns** | แต่ละไฟล์มีหน้าที่เดียว ไม่ปนกัน |
+| **Single Source of Truth** | ค่าคงที่ใน config, validation ใน helper, hash ใน helper |
+| **Repository Pattern** | SQL ทั้งหมดอยู่ใน Repository เท่านั้น |
+| **Thin Controller / Fat Service** | Controller ส่งต่อ Service ทำงานหนัก |
+| **Transaction & Atomicity** | หลาย operation เป็นก้อนเดียว (all or nothing) |
+| **Row Locking** | ป้องกัน race condition ด้วย SELECT ... FOR UPDATE |
+| **Security in Depth** | CSRF, XSS, SQL Injection, Rate Limit, Session — แต่ละอย่างอยู่ถูกชั้น |
+| **Idempotency** | ป้องกันกดซ้ำด้วย key-based dedup |
+| **Stock Management** | จัดการ available ด้วย WHERE guard ป้องกันติดลบ |
 
 ### ได้ฝึกคิดแบบสถาปนิกระบบยังไง?
 
-1. **คิดเป็นชั้น** — ไม่ยัดทุกอย่างไว้ที่เดียว แบ่งหน้าที่ให้ชัด
-2. **คิดเรื่องขอบเขต** — แต่ละชั้นทำอะไรได้/ไม่ได้
-3. **คิดเรื่อง concurrency** — ถ้า 2 คนทำพร้อมกัน จะเกิดอะไร?
-4. **คิดเรื่อง data integrity** — ถ้ากลางทางพัง ข้อมูลจะเสียหายไหม?
-5. **คิดเรื่อง security** — ป้องกันภัยคุกคามที่ชั้นไหน?
-6. **คิดเรื่อง maintenance** — ถ้าจะแก้ไขทีหลัง แก้ง่ายไหม?
-
-แนวคิดเหล่านี้ **ใช้ได้กับทุกภาษา ทุก framework** ไม่ใช่แค่ PHP
-ถ้าเข้าใจจาก template นี้ วันที่ไปเรียน Laravel, Spring Boot, Django หรือ NestJS จะเข้าใจได้เร็วมาก
+1. **คิดเป็นชั้น** — ไม่โยนทุกอย่างรวมกัน แต่แยกหน้าที่ชัดเจน
+2. **คิดเรื่อง concurrency** — ถ้า 2 คนกดพร้อมกัน จะเกิดอะไร? ล็อคยังไง?
+3. **คิดเรื่อง atomicity** — ถ้าทำครึ่งทางแล้วพัง ข้อมูลจะถูกไหม?
+4. **คิดเรื่อง security** — ป้องกันอะไรบ้าง? ป้องกันตรงไหน? ทำไมต้องชั้นนั้น?
+5. **คิดเรื่อง SSoT** — กฎนี้ถูก define กี่ที่? ถ้าแก้จุดเดียว จะกระทบอะไรบ้าง?
+6. **คิดเรื่อง extensibility** — ถ้าจะเพิ่ม feature ต้องแก้กี่ไฟล์? กี่ชั้น?
 
 ### เหมาะกับใครมากที่สุด?
 
-- 🎯 **คนที่อยากเข้าใจ "backend ทำงานยังไง"** — เห็นภาพจริง ไม่ใช่แค่ทฤษฎี
-- 🎯 **คนที่อยากเรียนรู้ก่อนใช้ framework** — เข้าใจแนวคิดพื้นฐานก่อน แล้วค่อยใช้ framework จะง่ายขึ้นมาก
-- 🎯 **คนที่ต้องส่ง project** — มีทั้งโค้ดที่ทำงานได้จริง + เอกสารอธิบายครบ
-- 🎯 **คนที่อยากมี template ไปต่อยอด** — โครงสร้างดี แก้ไขง่าย เพิ่มฟีเจอร์ได้
+- **นักศึกษา** ที่ต้องส่งโปรเจค — ได้ระบบสมบูรณ์ + เข้าใจโครงสร้างเพื่ออธิบายได้
+- **ผู้สอน** ที่ต้องการตัวอย่าง backend ที่เขียนดี มีโครงสร้างชัด อธิบายง่าย
+- **ผู้เริ่มต้น backend** ที่อยากเห็นว่า "ระบบจริงออกแบบยังไง" ก่อนไปใช้ framework
+- **Freelancer** ที่อยากมี template ไว้ต่อยอด — เพิ่ม feature ได้ง่ายเพราะแยกชั้นชัด
+- **คนที่เตรียมไปสัมภาษณ์งาน** — มีตัวอย่าง architecture จริงที่อธิบายได้
+
+### สิ่งที่ได้จากระบบนี้ ไม่ใช่แค่ "โค้ดที่ทำงานได้"
+
+แต่คือ **"วิธีคิดในการออกแบบระบบ"** ที่ใช้ได้กับทุกภาษา ทุก framework:
+- วิธีแยกชั้น
+- วิธีจัดการ transaction
+- วิธีป้องกัน race condition
+- วิธีวาง security
+- วิธีจัดโครงสร้างให้ต่อยอดง่าย
+
+เมื่อเข้าใจแนวคิดเหล่านี้แล้ว ไม่ว่าจะย้ายไป Laravel, Node.js, Python หรือภาษาอื่น หลักการเดียวกันใช้ได้ทั้งหมด
 
 ---
 
-*เอกสารนี้เป็นส่วนหนึ่งของชุดโค้ด "ระบบยืมคืนหนังสือ" — อธิบายจากโค้ดจริงทั้งหมด ไม่มีการเดา*
+> 📖 **เอกสารอื่นที่เกี่ยวข้อง:**
+> - `README.md` — ภาพรวมระบบ + วิธีติดตั้ง + คำอธิบายสำหรับมือใหม่
+> - `FLOW.md` — ภาพรวมการทำงาน (flow ของแต่ละ feature)
+> - `FAQ.md` — คำถามที่พบบ่อย
+> - `STUDY_GUIDE.md` — คู่มือเรียนรู้ระบบเชิงลึก

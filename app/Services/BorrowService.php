@@ -40,11 +40,13 @@ require_once __DIR__ . '/../Repositories/BookRepository.php';
 require_once __DIR__ . '/../Repositories/BorrowRepository.php';
 require_once __DIR__ . '/../Repositories/UserRepository.php';
 require_once __DIR__ . '/../Repositories/PaymentRepository.php';
+require_once __DIR__ . '/../Repositories/ReservationRepository.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\BorrowRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\PaymentRepository;
+use App\Repositories\ReservationRepository;
 use PDO;
 use Exception;
 
@@ -57,6 +59,7 @@ class BorrowService
     private BorrowRepository $borrowRepo;
     private UserRepository $userRepo;
     private PaymentRepository $paymentRepo;
+    private ReservationRepository $reservationRepo;
 
     // 🏗️ Constructor: สร้าง repo ทั้งหมด — ใช้ PDO เดียวกัน
     //    สำคัญ! ถ้า PDO คนละ instance → transaction ข้าม repo ไม่ทำงาน
@@ -67,6 +70,7 @@ class BorrowService
         $this->borrowRepo = new BorrowRepository($pdo);
         $this->userRepo = new UserRepository($pdo);
         $this->paymentRepo = new PaymentRepository($pdo);
+        $this->reservationRepo = new ReservationRepository($pdo);
     }
 
     /**
@@ -136,8 +140,11 @@ class BorrowService
 
             // 📝 Step 6: ตรวจโควต้า (FOR UPDATE lock บน borrows)
             //    ⚙️ แก้เล่มสูงสุด → config.php → MAX_BORROW_BOOKS
+            //    🛡️ นับ pending reservations ด้วย — เพราะจะกลายเป็น borrow เมื่อ approve
+            //    ป้องกัน: admin สร้าง borrow จนเต็ม → approve reservation ไม่ได้
             $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
-            $availableSlots = MAX_BORROW_BOOKS - $currentBorrows;
+            $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
+            $availableSlots = MAX_BORROW_BOOKS - $currentBorrows - $pendingReservations;
 
             if ($availableSlots <= 0) {
                 throw new Exception('ผู้ยืมถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');

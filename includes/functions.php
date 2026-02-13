@@ -513,6 +513,37 @@ function validateMemberData(array $data, bool $isEdit = false): array
 
 /**
  * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจข้อมูลหนังสือ (Single Source of Truth)
+ * ==========================================================================
+ * รวม validation: title, author ไว้ที่เดียว
+ * ใช้ร่วมกันทั้ง admin/book_form.php และ admin/import_books.php
+ *
+ * 📥 Input: @param array $data {title, author}
+ * 📤 Output: @return array error messages (empty = valid)
+ */
+function validateBookData(array $data): array
+{
+    $errors = [];
+
+    // Title
+    if (empty(trim($data['title'] ?? ''))) {
+        $errors[] = 'กรุณากรอกชื่อหนังสือ';
+    } elseif (mb_strlen($data['title']) > 200) {
+        $errors[] = 'ชื่อหนังสือต้องไม่เกิน 200 ตัวอักษร';
+    }
+
+    // Author
+    if (empty(trim($data['author'] ?? ''))) {
+        $errors[] = 'กรุณากรอกชื่อผู้แต่ง';
+    } elseif (mb_strlen($data['author']) > 100) {
+        $errors[] = 'ชื่อผู้แต่งต้องไม่เกิน 100 ตัวอักษร';
+    }
+
+    return $errors;
+}
+
+/**
+ * ==========================================================================
  * 🎯 จุดประสงค์: Hash password (Single Source of Truth)
  * ==========================================================================
  * ⚠️ ทุกที่ที่ต้อง hash ต้องเรียกผ่านฟังก์ชันนี้

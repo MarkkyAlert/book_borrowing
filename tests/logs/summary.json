@@ -1,14 +1,14 @@
 {
-    "run_at": "2026-02-09T13:51:47+07:00",
+    "run_at": "2026-02-13T13:29:57+07:00",
     "total": 56,
-    "passed": 55,
-    "failed": 1,
+    "passed": 56,
+    "failed": 0,
     "skipped": 0,
-    "pass_rate": "98.2%",
+    "pass_rate": "100%",
     "details": [
         {
             "test_id": "HP-01",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:55+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -16,10 +16,10 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "QA User",
-                    "email": "qa_user_1770619905@test.com",
+                    "email": "qa_user_1770964195@test.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "0c571b5c8558a53bb5eae143a7d2cc6f46836a40a14b67894b7f0ec49befba47"
+                    "csrf_token": "6c0fa7e1c90557b2258722e0372692d226b350db07c5c96fa3ca198d3c52f37c"
                 }
             },
             "response": {
@@ -30,7 +30,7 @@
         },
         {
             "test_id": "HP-02",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:55+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -40,13 +40,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 24364,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n    "
+                "body_length": 24743,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;40"
             }
         },
         {
             "test_id": "HP-03",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -56,20 +56,20 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 72069,
+                "body_length": 73321,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>Dashboard - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n"
             }
         },
         {
             "test_id": "HP-04",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/logout.php",
                 "body": {
-                    "csrf_token": "3193fca538c9ba13d59369fb978831e7eb3ab92d4040291278cdae8c9f207ac7"
+                    "csrf_token": "d9070c8b7233f541460a7f4037db20104d093644d842b58466153505df9c7fea"
                 }
             },
             "response": {
@@ -80,7 +80,7 @@
         },
         {
             "test_id": "HP-05",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -90,13 +90,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 32996,
-                "body_preview": "    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                    <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-gray-100\">\r\n                                            <div class=\"flex flex-col it"
+                "body_length": 36597,
+                "body_preview": "    <!-- 📝 Grid: 1 col (mobile) → 2 col (tablet) → 4 col (desktop) -->\r\n    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                                <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-"
             }
         },
         {
             "test_id": "HP-06",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -108,13 +108,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 2787,
-                "body_preview": "    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                    <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-gray-100\">\r\n                                            <div class=\"flex flex-col it"
+                "body_length": 2929,
+                "body_preview": "    <!-- 📝 Grid: 1 col (mobile) → 2 col (tablet) → 4 col (desktop) -->\r\n    <div class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8\">\r\n                                <div class=\"group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full animate-fade-in-up\" style=\"animation-delay: 0ms\">\r\n                <!-- Cover Image -->\r\n                <div class=\"relative h-64 overflow-hidden bg-"
             }
         },
         {
             "test_id": "HP-07",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -124,32 +124,32 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 21580,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เกมล่าสังหาร - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r"
+                "body_length": 22283,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>เกมล่าสังหาร - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@3"
             }
         },
         {
             "test_id": "HP-08",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
-            "message": "Status 400 OK",
+            "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 1,
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
-                "status": 400,
-                "body_length": 181,
-                "body_preview": "{\"success\":false,\"message\":\"\\u0e2b\\u0e19\\u0e31\\u0e07\\u0e2a\\u0e37\\u0e2d\\u0e2b\\u0e21\\u0e14 \\u0e44\\u0e21\\u0e48\\u0e2a\\u0e32\\u0e21\\u0e32\\u0e23\\u0e16\\u0e08\\u0e2d\\u0e07\\u0e44\\u0e14\\u0e49\"}"
+                "status": 200,
+                "body_length": 344,
+                "body_preview": "{\"success\":true,\"message\":\"\\u0e08\\u0e2d\\u0e07\\u0e2a\\u0e33\\u0e40\\u0e23\\u0e47\\u0e08! \\u0e01\\u0e23\\u0e38\\u0e13\\u0e32\\u0e21\\u0e32\\u0e23\\u0e31\\u0e1a\\u0e2b\\u0e19\\u0e31\\u0e07\\u0e2a\\u0e37\\u0e2d \\\"\\u0e40\\u0e01\\u0e21\\u0e25\\u0e48\\u0e32\\u0e2a\\u0e31\\u0e07\\u0e2b\\u0e32\\u0e23\\\" \\u0e20\\u0e32\\u0e22\\u0e43\\u0e19\\u0e27\\u0e31\\u0e19\\u0e17\\u0e35\\u0e48 15\\\/02\\\/2026\"}"
             }
         },
         {
             "test_id": "HP-09",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -157,7 +157,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/cancel_reservation.php",
                 "body": {
                     "id": 1,
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -168,7 +168,7 @@
         },
         {
             "test_id": "HP-10",
-            "timestamp": "2026-02-09T13:51:45+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -178,7 +178,7 @@
                     "action": "update_profile",
                     "name": "QA User Updated",
                     "phone": "0899999999",
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -189,7 +189,7 @@
         },
         {
             "test_id": "HP-11",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -200,7 +200,7 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -211,17 +211,17 @@
         },
         {
             "test_id": "HP-12",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/book_form.php",
                 "body": {
-                    "title": "QA Book 1770619905",
+                    "title": "QA Book 1770964195",
                     "author": "QA Author",
                     "quantity": 3,
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
@@ -232,7 +232,7 @@
         },
         {
             "test_id": "HP-13",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -240,8 +240,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA_Cat_1770619905",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "name": "QA_Cat_1770964195",
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
@@ -252,7 +252,7 @@
         },
         {
             "test_id": "HP-14",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -260,19 +260,19 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/add_member.php",
                 "body": {
                     "name": "QA Member",
-                    "email": "qa_member_1770619905@test.com",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "email": "qa_member_1770964195@test.com",
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
                 "status": 200,
                 "body_length": 220,
-                "body_preview": "{\"success\":true,\"message\":\"\\u0e40\\u0e1e\\u0e34\\u0e48\\u0e21\\u0e2a\\u0e21\\u0e32\\u0e0a\\u0e34\\u0e01\\u0e2a\\u0e33\\u0e40\\u0e23\\u0e47\\u0e08\",\"member\":{\"id\":19,\"name\":\"QA Member\",\"email\":\"qa_member_1770619905@test.com\",\"phone\":\"\"}}"
+                "body_preview": "{\"success\":true,\"message\":\"\\u0e40\\u0e1e\\u0e34\\u0e48\\u0e21\\u0e2a\\u0e21\\u0e32\\u0e0a\\u0e34\\u0e01\\u0e2a\\u0e33\\u0e40\\u0e23\\u0e47\\u0e08\",\"member\":{\"id\":35,\"name\":\"QA Member\",\"email\":\"qa_member_1770964195@test.com\",\"phone\":\"\"}}"
             }
         },
         {
             "test_id": "HP-15",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -288,7 +288,7 @@
         },
         {
             "test_id": "HP-16",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -298,7 +298,7 @@
                     "org_name": "QA Library",
                     "card_color_primary": "#1e3a8a",
                     "card_color_secondary": "#3b82f6",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
@@ -309,7 +309,7 @@
         },
         {
             "test_id": "HP-17",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -317,18 +317,18 @@
                 "url": "http:\/\/localhost\/book_borrowing\/forgot_password.php",
                 "body": {
                     "email": "nobody@example.com",
-                    "csrf_token": "8305cf50a6c88939735bf08bcb720d3a91e69dd8501b62d0e2dcab3904df70a6"
+                    "csrf_token": "c9d2ea592eec08b85f2fe29cff7eaa756bd041b9257585c4f7d5052d09c1eac9"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 11345,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>ลืมรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 11580,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>ลืมรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-01",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -339,18 +339,18 @@
                     "email": "",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "7aeab5baa375269a37a466ee462364727f07deffea861ebe7b402a7047192e77"
+                    "csrf_token": "3c5ef7b15f6ebac2584e501dbc7d44b3b484f5dc582c495d316b6ac15df0454a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 17024,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 17252,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-02",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -361,18 +361,18 @@
                     "email": "bad",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "2d1f4db428ed63ed3f0ba7e2ae1e7a5898e1945e4a0a3e094c66e91e5b9e2115"
+                    "csrf_token": "182b75c938f878ab4643d563af80e0d53338d7eeeb58e058379e3e194bcd9dbd"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 17048,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 17276,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-03",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -383,18 +383,18 @@
                     "email": "x@x.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "6719848545ab675d841e4d5b46499da3dc6bcc44ca18d83631eb49df7f388143"
+                    "csrf_token": "ecea23195edb0b3bf45dafaddac59d2d1567b390f481851d355aab051d9f8ce9"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 17085,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 17313,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-04",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -405,18 +405,18 @@
                     "email": "x@x.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "3ebe469f4b5fe15f347ba6989e381818bf57be0ea0bb9bdd0df3c2c0dc952344"
+                    "csrf_token": "c82c95252a386c16e8bc46bd8a5710556061402c3e5f6abb062298695f8d4e80"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 17040,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 17268,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-05",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -424,41 +424,41 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "T",
-                    "email": "qa_user_1770619905@test.com",
+                    "email": "qa_user_1770964195@test.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "f430a4028aabe01821843782ba9b09c94023917ce53151e159a8c966586b007f"
+                    "csrf_token": "dfdad05d125cdd33ae18a5db9f8739569e5714c72ec1da2f4eaf08edf542757c"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 17072,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 17329,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>สมัครสมาชิก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-06",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
-                    "email": "qa_user_1770619905@test.com",
+                    "email": "qa_user_1770964195@test.com",
                     "password": "***",
-                    "csrf_token": "93756c2ab3bc6ebac72b8ad570604d31978cf6acdf8d76c11ec3b60ab22665b8"
+                    "csrf_token": "bb4253b04fd338c2c62748487f3f5d25dabd493c2ea6914f9059e5dac41a778d"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 14924,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 15143,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-07",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -467,18 +467,18 @@
                 "body": {
                     "email": "ghost@x.com",
                     "password": "***",
-                    "csrf_token": "dfd2f0b089ac34d45fd1b65e7ad55d7bc3a26dc105cbe29f8b50595ab6360fbf"
+                    "csrf_token": "c1cd551c1afd06ed186729b73cf00306274acc22f5f15388f98951ce9539a572"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 14908,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 15127,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "VL-08",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -486,7 +486,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 0,
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -497,7 +497,7 @@
         },
         {
             "test_id": "VL-09",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -505,7 +505,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 99999,
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -516,7 +516,7 @@
         },
         {
             "test_id": "VL-10",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -525,18 +525,18 @@
                 "body": {
                     "action": "update_profile",
                     "name": "",
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 24466,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n    "
+                "body_length": 24831,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;40"
             }
         },
         {
             "test_id": "VL-11",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -547,18 +547,18 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 24483,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n    "
+                "body_length": 24848,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;40"
             }
         },
         {
             "test_id": "VL-12",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -568,18 +568,18 @@
                     "title": "",
                     "author": "A",
                     "quantity": 1,
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 26441,
+                "body_length": 26450,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เพิ่มหนังสือ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\""
             }
         },
         {
             "test_id": "VL-13",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -589,18 +589,18 @@
                     "title": "T",
                     "author": "",
                     "quantity": 1,
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 26441,
+                "body_length": 26450,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เพิ่มหนังสือ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\""
             }
         },
         {
             "test_id": "VL-14",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -609,7 +609,7 @@
                 "body": {
                     "name": "T",
                     "email": "bad-email",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
@@ -620,7 +620,7 @@
         },
         {
             "test_id": "VL-15",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -629,18 +629,18 @@
                 "body": {
                     "action": "add",
                     "name": "",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 38856,
+                "body_length": 38865,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>จัดการหมวดหมู่ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"styleshee"
             }
         },
         {
             "test_id": "VL-16",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -648,19 +648,19 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA_Cat_1770619905",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "name": "QA_Cat_1770964195",
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 38868,
+                "body_length": 38877,
                 "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>จัดการหมวดหมู่ - Admin | ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"styleshee"
             }
         },
         {
             "test_id": "EC-01",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -672,13 +672,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 639,
-                "body_preview": "    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเปลี่ยนตัวกรองของคุณใหม่<\/p>\r\n    <\/div>\r\n"
+                "body_length": 708,
+                "body_preview": "    <!-- 📝 Empty state: ไม่พบหนังสือ -->\r\n    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเ"
             }
         },
         {
             "test_id": "EC-02",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -690,13 +690,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 639,
-                "body_preview": "    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเปลี่ยนตัวกรองของคุณใหม่<\/p>\r\n    <\/div>\r\n"
+                "body_length": 708,
+                "body_preview": "    <!-- 📝 Empty state: ไม่พบหนังสือ -->\r\n    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเ"
             }
         },
         {
             "test_id": "EC-03",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -712,7 +712,7 @@
         },
         {
             "test_id": "EC-04",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -728,7 +728,7 @@
         },
         {
             "test_id": "EC-05",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -744,26 +744,26 @@
         },
         {
             "test_id": "EC-06",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
-            "message": "Status 400 OK",
+            "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 1,
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
-                "status": 400,
-                "body_length": 181,
-                "body_preview": "{\"success\":false,\"message\":\"\\u0e2b\\u0e19\\u0e31\\u0e07\\u0e2a\\u0e37\\u0e2d\\u0e2b\\u0e21\\u0e14 \\u0e44\\u0e21\\u0e48\\u0e2a\\u0e32\\u0e21\\u0e32\\u0e23\\u0e16\\u0e08\\u0e2d\\u0e07\\u0e44\\u0e14\\u0e49\"}"
+                "status": 200,
+                "body_length": 167,
+                "body_preview": "{\"success\":true,\"message\":\"\\u0e08\\u0e2d\\u0e07\\u0e2b\\u0e19\\u0e31\\u0e07\\u0e2a\\u0e37\\u0e2d\\u0e40\\u0e23\\u0e35\\u0e22\\u0e1a\\u0e23\\u0e49\\u0e2d\\u0e22\\u0e41\\u0e25\\u0e49\\u0e27\"}"
             }
         },
         {
             "test_id": "EC-07",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -772,7 +772,7 @@
                 "body": {
                     "action": "update_profile",
                     "name": "<img src=x onerror=alert(1)>",
-                    "csrf_token": "efd42cb52cf136e43f30e2ab76ad8292be9b85017477d99af81583416c9ed8ef"
+                    "csrf_token": "31a087fa9c4afb6198645a5113088ffe5bd3deb9533e51cd2f885d86df2e8c6a"
                 }
             },
             "response": {
@@ -783,7 +783,7 @@
         },
         {
             "test_id": "EC-07b",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:56+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -793,13 +793,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 23794,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n    "
+                "body_length": 24159,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>โปรไฟล์ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;40"
             }
         },
         {
             "test_id": "EC-08",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -809,13 +809,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 11835,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>รีเซ็ตรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n   "
+                "body_length": 12153,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>รีเซ็ตรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght"
             }
         },
         {
             "test_id": "EC-09",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -823,8 +823,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "delete",
-                    "id": "11",
-                    "csrf_token": "32b089d441c41fca001ac2c1b7f4ceab55c409b19c701adeb658f83a0996869b"
+                    "id": "14",
+                    "csrf_token": "1de7532aa0e974567c8490de49efbda00ef85e63beffe1c08e441d56cdac8d6a"
                 }
             },
             "response": {
@@ -835,7 +835,7 @@
         },
         {
             "test_id": "EC-10",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -843,18 +843,18 @@
                 "url": "http:\/\/localhost\/book_borrowing\/forgot_password.php",
                 "body": {
                     "email": "doesnotexist@nowhere.com",
-                    "csrf_token": "2069f8f24887565e810f245dff91fa45a4bd76587af4dceb1251df0c9ef2f5d6"
+                    "csrf_token": "fe10ae62bc5109e82b4d2ee316f34a42c08145b9da217d54cb75a9456bece95c"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 11345,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>ลืมรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 11580,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>ลืมรหัสผ่าน - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "EC-11",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -866,13 +866,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 639,
-                "body_preview": "    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเปลี่ยนตัวกรองของคุณใหม่<\/p>\r\n    <\/div>\r\n"
+                "body_length": 708,
+                "body_preview": "    <!-- 📝 Empty state: ไม่พบหนังสือ -->\r\n    <div class=\"bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center animate-fade-in-down\">\r\n        <div class=\"w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400\">\r\n            <i class=\"bi bi-search\" style=\"font-size: 3rem;\"><\/i>\r\n        <\/div>\r\n        <h4 class=\"text-2xl font-bold text-gray-800 mb-2\">ไม่พบหนังสือที่ค้นหา<\/h4>\r\n        <p class=\"text-gray-500\">ลองค้นหาด้วยคำอื่น หรือปรับเ"
             }
         },
         {
             "test_id": "EC-12",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -882,13 +882,13 @@
             },
             "response": {
                 "status": 200,
-                "body_length": 59928,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>หน้าแรก - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n    "
+                "body_length": 63522,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>หน้าแรก - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;40"
             }
         },
         {
             "test_id": "SC-01",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -907,7 +907,7 @@
         },
         {
             "test_id": "SC-02",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -927,7 +927,7 @@
         },
         {
             "test_id": "SC-03",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -943,7 +943,7 @@
         },
         {
             "test_id": "SC-04",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -959,7 +959,7 @@
         },
         {
             "test_id": "SC-05",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 405 OK",
             "request": {
@@ -975,7 +975,7 @@
         },
         {
             "test_id": "SC-06",
-            "timestamp": "2026-02-09T13:51:46+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 403 OK",
             "request": {
@@ -985,33 +985,33 @@
             },
             "response": {
                 "status": 403,
-                "body_length": 2,
-                "body_preview": "[]"
+                "body_length": 42,
+                "body_preview": "{\"success\":false,\"message\":\"Unauthorized\"}"
             }
         },
         {
             "test_id": "SC-07",
-            "timestamp": "2026-02-09T13:51:47+07:00",
-            "passed": false,
-            "message": "No rate limit message after 6+ attempts",
+            "timestamp": "2026-02-13T13:29:57+07:00",
+            "passed": true,
+            "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
                     "email": "admin@library.com",
                     "password": "***",
-                    "csrf_token": "03c63634eb6f7a010f4cef6df2c68ec178b07aa8d143fe2054360a9b5fe09e38"
+                    "csrf_token": "04097d4ba0f8c012aac535f8e62a412e3f8ff7fb45496f5c6a97b26187f8cff9"
                 }
             },
             "response": {
                 "status": 200,
-                "body_length": 14914,
-                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n    \r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\r\n    \r\n"
+                "body_length": 15153,
+                "body_preview": "<!DOCTYPE html>\r\n<html lang=\"th\">\r\n\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <!-- 📝 $pageTitle ต้องตั้งก่อน require header.php -->\r\n    <title>เข้าสู่ระบบ - ระบบยืมคืนหนังสือ<\/title>\r\n\r\n    <!-- Google Fonts -->\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.googleapis.com\">\r\n    <link rel=\"preconnect\" href=\"https:\/\/fonts.gstatic.com\" crossorigin>\r\n    <link href=\"https:\/\/fonts.googleapis.com\/css2?family=Sarabun:wght@30"
             }
         },
         {
             "test_id": "SC-08",
-            "timestamp": "2026-02-09T13:51:47+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -1027,7 +1027,7 @@
         },
         {
             "test_id": "SC-09",
-            "timestamp": "2026-02-09T13:51:47+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 401 OK",
             "request": {
@@ -1045,7 +1045,7 @@
         },
         {
             "test_id": "SC-10",
-            "timestamp": "2026-02-09T13:51:47+07:00",
+            "timestamp": "2026-02-13T13:29:57+07:00",
             "passed": true,
             "message": "Status 403 OK",
             "request": {

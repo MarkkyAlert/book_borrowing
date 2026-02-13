@@ -1,22 +1,21 @@
 <?php
 /**
- * Member Form - เพิ่ม/แก้ไข/ลบสมาชิก
+ * Member Form - เพิ่ม/แก้ไขสมาชิก
  * 
  * ⭐ สำหรับคนมาใหม่:
- * - หน้านี้ทำ 4 อย่าง: สร้าง, แก้ไข, ลบ, reset password
+ * - หน้านี้ทำ 2 อย่าง: สร้างสมาชิกใหม่ หรือ แก้ไขข้อมูลสมาชิก (รวมเปลี่ยนรหัสผ่าน)
  * - ใช้ MemberService เป็น single source of truth สำหรับ business logic
  * - สิทธิ์: staff ขึ้นไป
  * 
  * 📂 Flow:
  * 1. GET ?id=X      → โหลดข้อมูลสมาชิกเข้า form (edit mode)
  * 2. GET (ไม่มี id) → form ว่าง (create mode)
- * 3. POST action=save           → createMember() หรือ updateMember()
- * 4. POST action=delete         → deleteMember() (ต้องไม่มีประวัติยืม/จอง pending)
- * 5. POST action=reset_password → updatePassword() → แสดง password ใหม่ให้ copy
+ * 3. POST (id=0)    → createMember() (ถ้าไม่กรอกรหัสผ่าน Service จะ auto-generate)
+ * 4. POST (id>0)    → updateMember() + updatePassword() ถ้ากรอกรหัสผ่านใหม่
  * 
  * ⚠️ ระวัง:
- * - createMember() อาจ auto-generate password — ต้องแสดงให้ staff copy ทันที
- * - deleteMember() ป้องกัน cascade delete — ถ้ามีประวัติยืมจะ throw Exception
+ * - createMember() อาจ auto-generate password — ต้องแจ้ง staff
+ * - การลบสมาชิกไม่ได้อยู่ในหน้านี้
  */
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)

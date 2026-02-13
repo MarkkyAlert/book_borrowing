@@ -431,7 +431,8 @@ Staff บันทึกการยืมหนังสือให้ member 
    ├── beginTransaction()
    ├── UserRepository::lockById() ← lock user row ก่อน
    ├── BorrowRepository::countActiveBorrowsForUpdate() ← ตรวจ quota
-   ├── ตรวจ: count + current ≤ MAX_BORROW_BOOKS
+   ├── ReservationRepository::countPendingByUser() ← นับ pending reservations
+   ├── ตรวจ: borrows + pending ≤ MAX_BORROW_BOOKS
    ├── Loop each book:
    │   ├── BookRepository::findByIdForUpdate() ← lock
    │   ├── ตรวจ available > 0
@@ -479,6 +480,7 @@ Staff บันทึกการยืมหนังสือให้ member 
 | Transaction ครอบทุก book | rollback ทั้งหมดถ้า exception |
 | `MAX_BORROW_BOOKS` อยู่ใน `config.php` → แก้ที่เดียว |
 | Lock user ก่อน books | ป้องกัน deadlock |
+| นับ pending reservations ด้วยใน quota | ป้องกันยืม+จองเกิน MAX_BORROW_BOOKS |
 | ตรวจ isAlreadyBorrowing() ภายใต้ lock | ป้องกัน concurrent duplicate |
 
 #### Test Steps
@@ -722,6 +724,7 @@ Staff อนุมัติการจอง → สร้าง borrow อั�
    │   └→ lock + status='pending' → null = ไม่ใช่ pending
    ├── BorrowRepository::isAlreadyBorrowing() ← ตรวจยืมซ้ำ
    ├── BorrowRepository::countActiveBorrowsForUpdate() ← ตรวจ quota
+   ├── ReservationRepository::countPendingByUser() - 1 ← นับ pending อื่น (ลบตัวที่กำลัง fulfill)
    ├── BorrowRepository::create() ← สร้าง borrow
    ├── ReservationRepository::updateStatusWithBorrow($id, 'fulfilled', $borrowId)
    └→ commit()
@@ -923,7 +926,8 @@ Staff เพิ่มหนังสือใหม่ (พร้อม upload �
 | **Business Constants** | Config | `config.php`: `MAX_BORROW_BOOKS`, `FINE_PER_DAY`, `DEFAULT_BORROW_DAYS` |
 | **DB Connection** | Helper | `db.php`: `getDB()` (PDO singleton) |
 | **Fine Calculation** | Service | `BorrowService::calculateFine()` |
-| **Borrow Quota** | Service | `BorrowService::createBorrow()` ภายใน TX |
+| **Borrow Quota** | Service | `BorrowService::createBorrow()` ภายใน TX (นับ pending reservations ด้วย) |
+| **Book Data Validation** | Helper | `functions.php`: `validateBookData()` (shared: book_form + import_books) |
 | **Stock Management** | Repo | `BookRepository::decrementAvailable()` / `incrementAvailable()` |
 | **Member Creation** | Service | `MemberService::createMember()` (ทั้ง register + admin) |
 | **Report Config** | Helper | `report_helper.php`: `getReportConfig()` (shared reports + PDF) |
@@ -1225,7 +1229,7 @@ isAdmin()                         // admin ไหม
 requireLogin()                    // บังคับ login (redirect)
 requireStaff()                    // บังคับ staff+ (redirect)
 requireAdmin()                    // บังคับ admin (redirect)
-requireStaffApi()                 // บังคับ staff+ (JSON 401)
+requireStaffApi()                 // บังคับ staff+ (JSON 403)
 getCurrentUser()                  // ดึง user data จาก session
 
 // === Redirect & Flash ===
@@ -1239,6 +1243,7 @@ isValidEmail($email)              // email format
 isValidPhone($phone)              // 9-10 digits
 validatePassword($pw)             // return error string | null
 validateMemberData($data)         // return errors array
+validateBookData($data)           // return errors array (title, author)
 validateMaxLength($val, $max)     // ความยาว
 validateName($name)               // ชื่อ
 

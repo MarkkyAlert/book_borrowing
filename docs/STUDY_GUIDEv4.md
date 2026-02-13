@@ -135,7 +135,7 @@ book_borrowing/
 |---|------|--------|
 | 1 | `bootstrap.php` | จุดเริ่มต้นของทุกหน้า — เข้าใจว่าระบบ setup ตัวเองอย่างไร: โหลด config → db → functions → autoloader → startSession() → cleanupIdempotencyKeys() |
 | 2 | `includes/config.php` | ค่าคงที่ทั้งระบบ — `DEFAULT_BORROW_DAYS`, `MAX_BORROW_BOOKS`, `FINE_PER_DAY`, `APP_DEBUG` ทุกค่าอ่านจาก `.env` ผ่าน `env()` |
-| 3 | `includes/functions.php` | Helper functions ทุกตัว — auth (`isLoggedIn`, `requireStaff`), CSRF (`generateCSRFToken`, `validateCSRFToken`), validation (`validateMemberData`, `validatePassword`), rate limiting (`checkRateLimit`), formatting (`formatDate`, `formatFine`) |
+| 3 | `includes/functions.php` | Helper functions ทุกตัว — auth (`isLoggedIn`, `requireStaff`), CSRF (`generateCSRFToken`, `validateCSRFToken`), validation (`validateMemberData`, `validateBookData`, `validatePassword`), rate limiting (`checkRateLimit`), formatting (`formatDate`, `formatFine`) |
 | 4 | `includes/db.php` | PDO Singleton — `getDB()` สร้าง connection ครั้งเดียว ใช้ซ้ำ; `EMULATE_PREPARES=false` บังคับ native prepared statement |
 | 5 | `login.php` | ตัวอย่าง complete auth flow — CSRF check → rate limit → `AuthService::login()` → `session_regenerate_id()` → redirect ตาม role |
 | 6 | `app/Services/BorrowService.php` | Business logic ที่ซับซ้อนที่สุด — `createBorrow()` (transaction + FOR UPDATE lock + quota check), `returnBook()` (คำนวณค่าปรับ + คืน stock), `calculateFine()` |
@@ -389,7 +389,8 @@ $userId = $_SESSION['user_id'];  // ไม่ใช่ $_POST['user_id']
    - `beginTransaction()`
    - `userRepo->lockById($userId)` → lock user row
    - `borrowRepo->countActiveBorrowsForUpdate($userId)` → ตรวจ quota
-   - ถ้า `currentBorrows >= MAX_BORROW_BOOKS` → throw Exception
+   - `reservationRepo->countPendingByUser($userId)` → นับ pending reservations
+   - ถ้า `currentBorrows + pendingReservations >= MAX_BORROW_BOOKS` → throw Exception
    - Loop แต่ละ bookId:
      - `bookRepo->findByIdForUpdate($bookId)` → lock book
      - ตรวจ `$book['available'] > 0`
@@ -424,6 +425,7 @@ $userId = $_SESSION['user_id'];  // ไม่ใช่ $_POST['user_id']
 **จุดระวัง (Invariants):**
 - `decrementAvailable()` มี `WHERE available > 0` → **ห้ามลบ condition นี้** (ป้องกัน stock ติดลบ)
 - `MAX_BORROW_BOOKS` อยู่ใน `config.php` → แก้ที่เดียว
+- Quota นับ pending reservations ด้วย → ป้องกันยืม+จองเกิน MAX
 - Transaction ต้อง commit/rollback ครบทุก path → ถ้าพัง stock จะไม่ตรง
 
 **Test Steps:**
@@ -568,7 +570,7 @@ $userId = $_SESSION['user_id'];  // ไม่ใช่ $_POST['user_id']
    - `beginTransaction()`
    - `reservationRepo->findPendingForUpdate($id)` → lock + ตรวจ status='pending'
    - ตรวจ `borrowRepo->isAlreadyBorrowing()` → ไม่ยืมซ้ำ
-   - ตรวจ quota: `borrowRepo->countActiveBorrowsForUpdate()` < `MAX_BORROW_BOOKS`
+   - ตรวจ quota: `borrowRepo->countActiveBorrowsForUpdate()` + `reservationRepo->countPendingByUser() - 1` < `MAX_BORROW_BOOKS`
    - INSERT borrow
    - `reservationRepo->updateStatusWithBorrow($id, 'fulfilled', $borrowId)`
    - `commit()`
@@ -582,7 +584,7 @@ $userId = $_SESSION['user_id'];  // ไม่ใช่ $_POST['user_id']
 
 > **สำคัญ:** ไม่ต้อง update `books.available` เพราะหักไปแล้วตอนจอง
 
-**จุดระวัง:** ต้องตรวจ quota ก่อนสร้าง borrow → ไม่งั้นยืมเกินได้
+**จุดระวัง:** ต้องตรวจ quota ก่อนสร้าง borrow (นับ pending อื่นด้วย ลบตัวที่กำลัง fulfill) → ไม่งั้นยืมเกินได้
 
 ---
 
@@ -653,6 +655,8 @@ $userId = $_SESSION['user_id'];  // ไม่ใช่ $_POST['user_id']
 | **XSS protection** | `e()` | `includes/functions.php` | `htmlspecialchars(ENT_QUOTES, UTF-8)` |
 | **Business rules** | Constants | `includes/config.php` (อ่านจาก `.env`) | `MAX_BORROW_BOOKS`, `FINE_PER_DAY` ฯลฯ |
 | **Fine calculation** | `calculateFine()` | `app/Services/BorrowService.php` | `daysOverdue × FINE_PER_DAY` |
+| **Borrow Quota** | `createBorrow()`, `createReservation()`, `fulfillReservation()` | `BorrowService` + `ReservationService` | นับ pending reservations ด้วยเสมอ |
+| **Book data validation** | `validateBookData()` | `includes/functions.php` | shared: book_form + import_books |
 | **Stock management** | `decrementAvailable()`, `incrementAvailable()` | `app/Repositories/BookRepository.php` | มี WHERE guard ป้องกันติดลบ/เกิน |
 | **SQL queries** | Repository methods | `app/Repositories/*.php` | ห้ามเขียน SQL ที่อื่น |
 | **DB connection** | `getDB()` | `includes/db.php` | Singleton pattern |
@@ -956,6 +960,7 @@ requireStaffApi()                    // บังคับ staff+ (JSON 403 ถ�
 
 // ===== Validation =====
 validateMemberData($data, $isEdit)   // ตรวจ name, email, phone, password รวมจุดเดียว
+validateBookData($data)              // ตรวจ title, author (shared: book_form + import_books)
 validatePassword($pw, $allowEmpty)   // ตรวจ password (≥ MIN_PASSWORD_LENGTH)
 isValidEmail($email)                 // FILTER_VALIDATE_EMAIL
 isValidPhone($phone)                 // regex 9-10 digits

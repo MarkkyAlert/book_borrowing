@@ -82,18 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $book['id'] = (int) ($_POST['id'] ?? 0);
     
     // ── Input Validation ──
-    // 🔍 ตรวจสอบข้อมูลก่อนส่งเข้า Service
-    if (empty($book['title'])) {
-        $errors[] = 'กรุณากรอกชื่อหนังสือ';
-    } elseif (mb_strlen($book['title']) > 200) {
-        $errors[] = 'ชื่อหนังสือต้องไม่เกิน 200 ตัวอักษร';
-    }
-    
-    if (empty($book['author'])) {
-        $errors[] = 'กรุณากรอกชื่อผู้แต่ง';
-    } elseif (mb_strlen($book['author']) > 100) {
-        $errors[] = 'ชื่อผู้แต่งต้องไม่เกิน 100 ตัวอักษร';
-    }
+    // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ import_books.php)
+    $errors = array_merge($errors, validateBookData([
+        'title' => $book['title'],
+        'author' => $book['author']
+    ]));
     
     // 🔍 [DATA INTEGRITY] ตรวจ ISBN ซ้ำ — exclude ตัวเองในกรณี edit
     //    isbnExists($isbn, $excludeId) จะไม่นับ ID ของหนังสือที่กำลังแก้

@@ -13,7 +13,7 @@
  *
  * 📍 Entrypoints:
  * - ทุกที่ที่ต้องการ PDO → getDB()
- * - install.php → getDBWithoutDatabase()
+ * - getDBWithoutDatabase() → utility สำหรับเชื่อมต่อโดยไม่ระบุ database
  *
  * 🛡️ Security:
  * - EMULATE_PREPARES=false → native prepared statements (ป้องกัน SQL injection)

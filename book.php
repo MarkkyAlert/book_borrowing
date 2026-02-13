@@ -43,7 +43,7 @@ if ($currentBorrowCount > 0) {
     $currentBorrows = $borrowRepo->findCurrentByBook($bookId); // รายชื่อผู้ยืมปัจจุบัน
 }
 
-// 📜 ดึงประวัติการยืมล่าสุด 5 รายการ (แสดงเฉพาะ admin)
+// 📜 ดึงประวัติการยืมล่าสุด 5 รายการ (query ทุก user แต่แสดงเฉพาะ admin ใน HTML ด้านล่าง)
 $borrowHistory = $borrowRepo->findHistoryByBook($bookId, 5);
 
 $pageTitle = $book['title'];
@@ -309,10 +309,7 @@ require_once __DIR__ . '/includes/header.php';
                                             <td class="px-6 py-4 text-gray-600"><?= formatDate($borrow['due_date']) ?></td>
                                             <td class="px-6 py-4 text-gray-600"><?= formatDate($borrow['return_date']) ?></td>
                                             <td class="px-6 py-4">
-                                                <?= getBorrowStatusLabel($borrow['status'], $borrow['due_date']) ?> <!-- Ensure this function outputs Tailwind classes if modified, or standard text that we can wrap -->
-                                                <!-- Assume getBorrowStatusLabel outputs HTML with Bootstrap classes. We should ideally fix that text helper too, but for now let's hope it's not too broken. 
-                                                     Actually, I should check `includes/functions.php` to see `getBorrowStatusLabel` implementation. 
-                                                -->
+                                                <?= getBorrowStatusLabel($borrow['status'], $borrow['due_date']) ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

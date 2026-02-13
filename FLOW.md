@@ -1,8 +1,8 @@
-# 📘 FLOW — ภาพรวมการทำงานของระบบยืมคืนหนังสือ
+# 📚 FLOW.md — ภาพรวมการทำงานของระบบยืมคืนหนังสือ
 
-> เอกสารนี้อธิบาย "ระบบทำงานยังไง" แบบเห็นภาพ
-> ไม่ต้องอ่านโค้ด ไม่ต้องเข้าใจภาษา PHP ก็อ่านเข้าใจได้
-> เหมาะสำหรับ: อธิบายให้ลูกค้าฟัง, ใช้สอน, ใช้ตอบคำถามซัพพอร์ต
+> เอกสารนี้อธิบาย **"ระบบทำงานยังไง"** แบบเห็นภาพ
+> ไม่ต้องอ่านโค้ด ก็เข้าใจได้ว่าแต่ละส่วนเชื่อมกันอย่างไร
+> เหมาะสำหรับ: อธิบายให้ลูกค้า, สอนนักเรียน, ตอบคำถามซัพพอร์ต
 
 ---
 
@@ -10,561 +10,737 @@
 
 ### ระบบนี้ทำอะไร?
 
-ระบบนี้คือ **"ห้องสมุดออนไลน์ขนาดเล็ก"** ที่บริหารจัดการ:
-- หนังสือ (เพิ่ม, แก้ไข, ลบ, ค้นหา, จัดหมวดหมู่)
-- สมาชิก (สมัคร, จัดการข้อมูล, พิมพ์บัตร)
-- การยืม-คืน (บันทึกการยืม, คำนวณค่าปรับอัตโนมัติ)
-- การจอง (สมาชิกจองหนังสือ, Staff อนุมัติ)
-- ค่าปรับ (คำนวณ, รับชำระ, ดูประวัติ)
-- รายงาน (สถิติ, สรุปยอด, Export CSV/PDF)
+ระบบนี้เป็น **"ระบบจัดการห้องสมุดบนเว็บ"** ที่ครอบคลุมงานหลัก 6 อย่าง:
+
+| งาน | คำอธิบาย |
+|-----|---------|
+| **ยืมหนังสือ** | Staff บันทึกการยืม หัก stock อัตโนมัติ |
+| **คืนหนังสือ** | Staff บันทึกการคืน คืน stock + คำนวณค่าปรับอัตโนมัติ |
+| **จองหนังสือ** | สมาชิกจองเองผ่านเว็บ กัน stock ไว้ให้ |
+| **จัดการหนังสือ** | เพิ่ม แก้ไข ลบ import CSV |
+| **จัดการสมาชิก** | เพิ่ม แก้ไข ลบ import CSV พิมพ์บัตร |
+| **รายงาน + สถิติ** | สรุปภาพรวม + Export CSV |
 
 ### ใครใช้ระบบนี้บ้าง? (Roles)
 
-| Role | คือใคร | ทำอะไรได้ |
-|------|--------|----------|
-| **Admin** | ผู้ดูแลระบบ | ทำได้ทุกอย่าง + ตั้งค่าระบบ + ดูรายงาน |
-| **Staff** | เจ้าหน้าที่ห้องสมุด | จัดการหนังสือ, สมาชิก, ยืม-คืน, จอง, ค่าปรับ |
-| **Member** | สมาชิกทั่วไป | ดูหนังสือ, จองหนังสือ, ดูประวัติตัวเอง |
+ระบบแบ่งผู้ใช้เป็น 3 บทบาท:
 
-> 💡 Admin กับ Staff เข้าหน้า admin เดียวกัน แต่ Admin ทำได้มากกว่า (เช่น ตั้งค่าระบบ, ดูรายงาน)
+| บทบาท | คือใคร | สิทธิ์หลัก |
+|--------|--------|-----------|
+| **Admin** | ผู้ดูแลระบบ | ทำได้ทุกอย่าง + ตั้งค่าระบบ + ดูรายงาน + จัดการ staff |
+| **Staff** | เจ้าหน้าที่ | จัดการหนังสือ สมาชิก ยืม-คืน จอง ค่าปรับ |
+| **Member** | สมาชิกทั่วไป | ดูหนังสือ จองหนังสือ ดูประวัติตัวเอง |
+
+> 💡 Admin กับ Staff เข้าหน้าจัดการเหมือนกัน แต่บางเมนู (เช่น รายงาน, ตั้งค่า) เฉพาะ Admin เท่านั้น
 
 ### ข้อมูลหลักที่ระบบจัดการ
 
-| ข้อมูล | เก็บอยู่ในตาราง | หน้าที่ |
-|--------|----------------|---------|
-| ผู้ใช้งาน | `users` | ชื่อ, email, password, role |
-| หนังสือ | `books` | ชื่อ, ผู้แต่ง, จำนวน, จำนวนที่ว่าง |
-| หมวดหมู่ | `categories` | จัดกลุ่มหนังสือ |
-| การยืม | `borrows` | ใครยืมอะไร, วันยืม, วันกำหนดคืน, สถานะ |
-| การจอง | `reservations` | ใครจองอะไร, สถานะ, วันหมดอายุ |
-| ค่าปรับ | `payments` | ชำระค่าปรับของรายการยืมไหน, เท่าไหร่ |
-| รีเซ็ตรหัสผ่าน | `password_resets` | token สำหรับตั้งรหัสผ่านใหม่ |
-| ตั้งค่าระบบ | `settings` | ชื่อหน่วยงาน, สีบัตรสมาชิก |
-| จำกัดครั้ง | `rate_limits` | ป้องกันลอง login ผิดหลายครั้ง |
+| ตาราง | เก็บอะไร | ตัวอย่าง |
+|-------|---------|---------|
+| **users** | ข้อมูลผู้ใช้ทุก role | ชื่อ, email, password (เข้ารหัส), role |
+| **books** | ข้อมูลหนังสือ | ชื่อ, ผู้แต่ง, ISBN, จำนวนทั้งหมด, จำนวนว่าง |
+| **categories** | หมวดหมู่หนังสือ | นิยาย, วิชาการ, การ์ตูน |
+| **borrows** | รายการยืม-คืน | ใครยืม, เล่มไหน, วันยืม, วันกำหนดคืน, ค่าปรับ |
+| **reservations** | รายการจอง | ใครจอง, เล่มไหน, สถานะ (รอ/อนุมัติ/ยกเลิก/หมดอายุ) |
+| **payments** | การชำระค่าปรับ | จ่ายกี่บาท, ใครบันทึก |
+| **rate_limits** | ป้องกัน brute force | นับจำนวน login ผิดต่อ email |
+| **password_resets** | token รีเซ็ตรหัสผ่าน | token, วันหมดอายุ, ใช้แล้วหรือยัง |
+| **settings** | ค่าตั้งค่าระบบ | สีธีม, ชื่อห้องสมุด |
 
 ---
 
 ## 🗂️ 2. โครงสร้างการไหลของระบบ (High-level Flow)
 
-### ระบบทำงานเป็นชั้นๆ (Layers)
+### ทุกคำสั่งผ่าน 4 ชั้น
 
-เวลาผู้ใช้กดปุ่มอะไรก็ตาม ข้อมูลจะไหลผ่าน 4 ชั้น ตามลำดับ:
+เวลาผู้ใช้ทำอะไรก็ตามบนเว็บ ข้อมูลจะไหลผ่าน 4 ชั้นเสมอ:
 
 ```
-👤 ผู้ใช้กดปุ่มบนเว็บ
+👤 ผู้ใช้กดปุ่มบนเว็บ (browser)
       │
       ▼
-📋 Controller (ไฟล์ .php ที่หน้าเว็บ)
-      │  รับข้อมูล → ตรวจสิทธิ์ → ตรวจ CSRF → ส่งต่อ
+📋 Controller (ไฟล์ .php ที่ root + admin/)
+      │  "พนักงานต้อนรับ" — รับคำขอ ตรวจสิทธิ์ ส่งต่อ
       ▼
 🧠 Service (app/Services/)
-      │  คิด → ตัดสินใจ → บังคับใช้กฎ → สั่งบันทึก
+      │  "ผู้จัดการ / สมอง" — คิด ตัดสินใจ บังคับกฎ
       ▼
 🗄️ Repository (app/Repositories/)
-      │  แปลงเป็นคำสั่ง SQL → ส่งไป database → รับผลกลับมา
+      │  "พนักงานคลัง" — อ่าน/เขียนข้อมูลจาก database
       ▼
 💾 Database (MySQL)
-      เก็บข้อมูลทั้งหมด
+      เก็บข้อมูลทั้งหมดอย่างถาวร
 ```
 
-### แต่ละชั้นทำหน้าที่อะไร?
+### หน้าที่ของแต่ละชั้น
 
-#### 📋 Controller — "พนักงานต้อนรับ"
-- รับคำขอจากผู้ใช้ (กดปุ่ม, กรอก form)
-- ตรวจว่า login แล้วหรือยัง? มีสิทธิ์ทำไหม?
-- ตรวจ CSRF token (ป้องกันคำสั่งปลอม)
-- ส่งข้อมูลต่อไปให้ Service
-- ตัวอย่างไฟล์: `login.php`, `admin/borrows.php`, `api/reserve_book.php`
+| ชั้น | เปรียบเทียบ | หน้าที่ | ตัวอย่างไฟล์ |
+|-----|-----------|--------|-------------|
+| **Controller** | พนักงานรับออเดอร์ | รับ request, ตรวจสิทธิ์, ตรวจ CSRF, ส่งต่อให้ Service | `login.php`, `admin/borrows.php` |
+| **Service** | พ่อครัว | ตัดสินใจตามกฎ, ใช้ transaction, จัดการ lock | `BorrowService.php`, `AuthService.php` |
+| **Repository** | พนักงานคลัง | เขียน SQL, ดึง/บันทึกข้อมูล, ไม่มีกฎธุรกิจ | `BookRepository.php`, `UserRepository.php` |
+| **Database** | ตู้เก็บเอกสาร | เก็บข้อมูลถาวร, บังคับ constraint | MySQL (InnoDB) |
 
-#### 🧠 Service — "ผู้จัดการ / สมอง"
-- ตัดสินใจว่า "ทำได้" หรือ "ทำไม่ได้"
-- บังคับใช้กฎธุรกิจ (เช่น ยืมเกิน 3 เล่มไม่ได้, stock หมดจองไม่ได้)
-- ควบคุม transaction (ถ้าขั้นตอนใดพัง ย้อนกลับทุกอย่าง)
-- สั่งให้ Repository ไปบันทึกหรือดึงข้อมูล
-- ตัวอย่างไฟล์: `BorrowService`, `ReservationService`, `AuthService`
+### ทำไมต้องแยกเป็นชั้นๆ? (Separation of Concerns)
 
-#### 🗄️ Repository — "พนักงานคลัง"
-- รับคำสั่งจาก Service
-- แปลงเป็นคำสั่ง SQL (ภาษาคุยกับ database)
-- ส่งคำสั่งไป database และรับผลลัพธ์กลับมา
-- ตัวอย่างไฟล์: `BorrowRepository`, `BookRepository`, `UserRepository`
+แนวคิดหลักคือ: **แยกหน้าที่ให้ชัด แก้ง่าย พังยาก**
 
-#### 💾 Database — "ตู้เก็บเอกสาร"
-- เก็บข้อมูลทั้งหมดอย่างถาวร
-- ไม่คิด ไม่ตัดสินใจ แค่เก็บและส่งคืนตามที่ถูกถาม
+- **Controller ไม่คิด ไม่ตัดสินใจ** — แค่รับคำขอแล้วส่งต่อ
+- **Service คิดและตัดสินใจทุกอย่าง** — กฎทั้งหมดอยู่ที่นี่
+- **Repository แค่ดึง/บันทึกข้อมูล** — ไม่มีกฎธุรกิจ
 
-### ทำไมต้องแยกเป็นชั้น?
+ถ้าอยากเปลี่ยนกฎ "ยืมได้กี่เล่ม" → แก้แค่ `.env` (config)
+ถ้าอยากเปลี่ยนหน้าตาเว็บ → แก้แค่ Controller (ไฟล์ .php ที่ root)
+ถ้าอยากเปลี่ยนวิธีเก็บข้อมูล → แก้แค่ Repository
+ไม่ต้องไปยุ่งกับส่วนอื่น
 
-คำตอบสั้นๆ: **แยกหน้าที่ให้ชัด แก้ง่าย พังยาก**
+### จุดเริ่มต้นของทุกหน้า: bootstrap.php
 
-| ถ้าอยากเปลี่ยน... | แก้แค่ชั้นเดียว |
-|-------------------|----------------|
-| หน้าตาเว็บ | Controller (ไฟล์ .php ที่ root/admin) |
-| กฎธุรกิจ (เช่น ยืมได้กี่เล่ม) | Service หรือ config |
-| วิธีดึงข้อมูลจาก DB | Repository |
-| โครงสร้างตาราง | Database (schema.sql) |
+**ทุกหน้าเว็บ** เริ่มต้นด้วยการเรียก `bootstrap.php` ซึ่งทำ 6 อย่าง:
 
-ไม่ต้องไปยุ่งกับชั้นอื่น ลดโอกาสทำพังแบบลูกโซ่
+```
+bootstrap.php ทำอะไรบ้าง?
+
+1️⃣ โหลด config.php     → อ่าน .env แล้วสร้างค่าคงที่ (DB_HOST, MAX_BORROW_BOOKS, ...)
+2️⃣ โหลด db.php         → สร้างการเชื่อมต่อ database (PDO)
+3️⃣ โหลด functions.php  → ฟังก์ชันพื้นฐาน (login check, CSRF, escape HTML, ...)
+4️⃣ ล้าง idempotency    → ลบ key กันกดซ้ำที่หมดอายุ
+5️⃣ ตั้ง autoloader      → โหลด class ใน app/ อัตโนมัติตาม namespace
+6️⃣ ตั้ง error reporting → APP_DEBUG=true แสดง error / false ซ่อน
+```
+
+> ⚠️ **ห้ามแก้ลำดับ require ใน bootstrap.php** — config ต้องโหลดก่อน db ต้องก่อน functions
 
 ---
 
 ## 🔐 3. Flow: Authentication / Login
 
-### ผู้ใช้ทำอะไร?
-เปิดหน้า login → กรอก email + password → กด "เข้าสู่ระบบ"
+### 3.1 Login (เข้าสู่ระบบ)
 
-### ระบบทำอะไรเบื้องหลัง?
-
-```
-ขั้นที่ 1 — ตรวจ input
-├── email ว่างไหม?
-├── password ว่างไหม?
-└── ถ้าว่าง → หยุดทันที แสดง error
-
-ขั้นที่ 2 — ตรวจ rate limit (จำกัดจำนวนครั้ง)
-├── ระบบนับว่า email + IP นี้ ลองผิดมาแล้วกี่ครั้ง
-├── ถ้าเกิน 5 ครั้งใน 15 นาที → ล็อค ไม่ให้ลองต่อ
-└── เพื่อป้องกันคนเดารหัสผ่านอัตโนมัติ (brute force)
-
-ขั้นที่ 3 — ตรวจ email + password
-├── ค้นหาผู้ใช้ที่มี email ตรงกันใน database
-├── ถ้าเจอ → เอา password ที่กรอกมาเทียบกับ hash ที่เก็บไว้
-├── ถ้าไม่เจอ หรือ password ไม่ตรง → แสดง error กลางๆ
-│   "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-│   (ไม่บอกว่าอะไรผิด → ป้องกันคนมาเช็คว่า email นี้มีในระบบไหม)
-└── นับครั้งที่ผิด +1
-
-ขั้นที่ 4 — login สำเร็จ!
-├── ล้างจำนวนครั้งที่ผิดออก
-├── สร้าง session ใหม่ (session_regenerate_id)
-│   → ป้องกันการแอบใช้ session เก่าโจมตี
-├── เก็บข้อมูลผู้ใช้ใน session: id, ชื่อ, email, role
-├── ถ้า role = admin หรือ staff → ไปหน้า admin
-└── ถ้า role = member → ไปหน้าแรก
-```
-
-### เรื่อง password ที่ควรรู้
-
-- ระบบ **ไม่เก็บรหัสผ่านเป็นตัวอักษรปกติ** เก็บเป็น "hash" (ข้อมูลที่เข้ารหัสแล้ว)
-- ใช้ `bcrypt` ซึ่งเป็นมาตรฐานสากลสำหรับเข้ารหัสรหัสผ่าน
-- แม้คนเจาะ database ได้ ก็ **อ่านรหัสผ่านจริงไม่ออก**
-- ตอนเทียบ password ระบบเอาที่กรอกมา hash แล้วเทียบกับ hash ที่เก็บ — ไม่เคย decode hash กลับ
-
-### เรื่อง session ที่ควรรู้
-
-- หลัง login สำเร็จ ระบบสร้าง "session" ไว้ใน server
-- session เหมือน **บัตรผ่าน** — ทุกครั้งที่ผู้ใช้เปิดหน้าใหม่ ระบบเช็คบัตรนี้
-- ถ้าบัตรหมดอายุ (ค่าเริ่มต้น 1 ชั่วโมง) → ต้อง login ใหม่
-- ตอน logout ระบบทำลาย session ทิ้ง → ผู้ใช้ต้อง login ใหม่ถึงจะเข้าได้
-
-### จุดที่เน้นความปลอดภัย
-
-| จุด | ป้องกันอะไร |
-|-----|------------|
-| Error message กลาง (ไม่แยก email/password) | ป้องกันคนเช็คว่ามี email ไหม (user enumeration) |
-| Rate limit (5 ครั้ง / 15 นาที) | ป้องกันเดารหัสผ่านอัตโนมัติ (brute force) |
-| session_regenerate_id | ป้องกันแอบใช้ session เก่าโจมตี (session fixation) |
-| bcrypt password hash | ป้องกันอ่านรหัสผ่านจาก database |
-| CSRF token ใน form | ป้องกันถูกหลอกให้กด login โดยไม่รู้ตัว |
-
-### การสมัครสมาชิก (Register)
-
-Flow คล้ายกันแต่กลับด้าน:
+**ไฟล์ที่เกี่ยวข้อง:** `login.php` → `AuthService` → `UserRepository`
 
 ```
-ผู้ใช้กรอกข้อมูล → ระบบตรวจ:
-├── ชื่อ, email, เบอร์โทร → ไม่ว่าง? ถูกรูปแบบ?
-├── email → ซ้ำกับคนอื่นไหม?
-├── password → ยาวพอไหม? (ขั้นต่ำ 6 ตัว)
-├── ยืนยัน password → ตรงกันไหม?
-└── ผ่านหมด → hash password → บันทึกลง database → ไปหน้า login
+ผู้ใช้เปิดหน้า login → กรอก email + password → กดเข้าสู่ระบบ
+
+Step 1 → ตรวจ CSRF token
+         ป้องกันเว็บอื่นหลอกส่ง form login แทนผู้ใช้
+
+Step 2 → ตรวจ input
+         email ว่างไหม? password ว่างไหม?
+         ถ้าว่าง → หยุดทันที แสดง error
+
+Step 3 → ตรวจ rate limit (จำกัดจำนวนครั้ง)
+         login ผิดมากี่ครั้งแล้ว? (นับแยกตาม email)
+         ถ้าเกิน 5 ครั้งใน 15 นาที → ล็อค "กรุณารอ 15 นาที"
+         ทำไม: ป้องกันคนร้ายเดารหัสผ่านด้วยโปรแกรมอัตโนมัติ
+
+Step 4 → AuthService::login()
+         หา user จาก email → เทียบ password ด้วย password_verify()
+         ถ้าผิด → คืน null (ไม่บอกว่า email ผิดหรือ password ผิด)
+         ทำไม: ป้องกันคนร้ายมาเช็คว่า email นี้มีในระบบไหม
+
+Step 5 → สำเร็จ!
+         ├── ล้างจำนวนครั้งที่ผิด
+         ├── session_regenerate_id(true) ← สร้างบัตรผ่านใหม่
+         │   ทำไม: ป้องกัน session fixation attack
+         ├── เก็บ user_id, name, email, role ใน session
+         └── redirect ตาม role:
+             admin/staff → /admin/
+             member      → /index.php
 ```
 
-> 💡 การ register ใช้ `AuthService` เป็นจุดเข้า แต่เรียก `MemberService` เพื่อบันทึกจริง
-> เพราะ `MemberService` เป็น "แหล่งเดียว" ที่สร้าง user ได้ (Single Source of Truth)
+**จุดสำคัญด้านความปลอดภัย:**
+
+| มาตรการ | ทำอะไร | อยู่ตรงไหน |
+|---------|--------|-----------|
+| **CSRF token** | ป้องกันเว็บอื่นหลอกส่ง form | Controller (login.php) |
+| **Rate limiting** | ล็อคหลัง login ผิดเกิน 5 ครั้ง | Controller + functions.php |
+| **Generic error** | ไม่แยก "email ผิด" / "password ผิด" | AuthService |
+| **password_verify()** | เทียบ hash อย่างปลอดภัย | AuthService |
+| **session_regenerate_id()** | สร้าง session ID ใหม่หลัง login | Controller (login.php) |
+| **Secure cookie** | HttpOnly + SameSite=Lax + Secure(HTTPS) | functions.php → startSession() |
+
+### 3.2 Register (สมัครสมาชิก)
+
+**ไฟล์ที่เกี่ยวข้อง:** `register.php` → `AuthService` → `MemberService` → `UserRepository`
+
+```
+Step 1 → ตรวจ CSRF token
+
+Step 2 → AuthService::register()
+         ├── delegate ไป MemberService::createMember()
+         │   (ใช้ logic เดียวกันกับ admin สร้างสมาชิก = Single Source of Truth)
+         ├── validate: ชื่อ, email (ไม่ซ้ำ), เบอร์โทร, password (≥ 6 ตัว)
+         ├── hash password ด้วย bcrypt ก่อนเก็บ
+         └── INSERT เป็น role = member
+
+Step 3 → redirect ไป login.php (ไม่ auto-login)
+         แสดง "สมัครสำเร็จ กรุณาเข้าสู่ระบบ"
+```
+
+**จุดสำคัญ:** `register.php` และ `admin/member_form.php` ใช้ `MemberService::createMember()` เดียวกัน — แก้กฎตรวจสอบที่เดียว มีผลทั้ง 2 จุด
+
+### 3.3 ลืมรหัสผ่าน + รีเซ็ต
+
+**ไฟล์ที่เกี่ยวข้อง:** `forgot_password.php` → `AuthService` → `PasswordResetRepository`
+**ไฟล์ที่เกี่ยวข้อง:** `reset_password.php` → `AuthService` → `UserRepository` + `PasswordResetRepository`
+
+```
+ขอ reset:
+Step 1 → กรอก email → AuthService::requestPasswordReset()
+Step 2 → หา user จาก email
+         ถ้าไม่พบ → ยังคืน "สำเร็จ" (ไม่บอกว่า email ไม่มี — ป้องกัน enumeration)
+Step 3 → ตรวจ rate limit (max 3 ครั้ง/ชั่วโมง/email)
+Step 4 → สร้าง token (64 ตัวอักษร, random, หมดอายุ 1 ชม.)
+Step 5 → บันทึก token ลง database
+Step 6 → แสดง link reset บนหน้าจอ (ถ้า APP_DEBUG=true)
+
+รีเซ็ต:
+Step 1 → เปิด link → AuthService::validateResetToken()
+         ตรวจ: token ตรงไหม + ยังไม่หมดอายุ + ยังไม่ใช้
+Step 2 → กรอก password ใหม่ → AuthService::resetPassword()
+Step 3 → เปิด transaction:
+         ├── เปลี่ยน password (hash ใหม่)
+         └── mark token ว่าใช้แล้ว (ใช้ซ้ำไม่ได้)
+         ทั้ง 2 อย่างต้องสำเร็จพร้อมกัน ถ้าอันใดอันหนึ่งพัง → rollback ทั้งหมด
+```
 
 ---
 
 ## 👤 4. Flow: การจัดการผู้ใช้ (User Management)
 
-### การสร้างผู้ใช้ใหม่
+### 4.1 สร้างสมาชิก (Staff/Admin สร้างให้)
 
-ผู้ใช้สามารถถูกสร้างได้ 4 ทาง:
-
-| ช่องทาง | ใครทำ | ไปจบที่ไหน |
-|---------|-------|-----------|
-| หน้า register.php | สมาชิกสมัครเอง | AuthService → MemberService |
-| หน้า admin/member_form.php | Staff เพิ่มให้ | MemberService |
-| หน้า admin/import_members.php | Staff import CSV | MemberService |
-| หน้า api/add_member.php | Staff เพิ่มเร็ว (AJAX) | MemberService |
-
-สังเกต: **ทุกทางไปจบที่ MemberService เสมอ**
-
-นี่คือหลัก "Single Source of Truth" — กฎการสร้างผู้ใช้ (ตรวจ email ซ้ำ, hash password, ฯลฯ)
-อยู่ที่เดียว ไม่กระจาย ถ้าอยากแก้กฎ แก้จุดเดียวมีผลทุกทาง
-
-### การแก้ไขข้อมูลผู้ใช้
+**ไฟล์ที่เกี่ยวข้อง:** `admin/member_form.php` → `MemberService` → `UserRepository`
 
 ```
-Staff แก้ข้อมูลสมาชิก (admin/member_form.php)
-├── กรอกข้อมูลใหม่ + กด "บันทึก"
-├── MemberService ตรวจ:
-│   ├── ชื่อ, เบอร์โทร → รูปแบบถูกไหม?
-│   ├── email → ถ้าเปลี่ยน ซ้ำกับคนอื่นไหม?
-│   └── password → ถ้ากรอก hash ใหม่, ถ้าไม่กรอก ข้าม
-└── บันทึกผ่าน UserRepository
+Step 1 → Staff กรอกข้อมูล: ชื่อ, email, เบอร์, password (เว้นว่างได้)
+
+Step 2 → MemberService::createMember()
+         ├── validate ผ่าน validateMemberData() (shared helper)
+         ├── ตรวจ email ซ้ำ
+         ├── ถ้าไม่กรอก password → สร้าง random 8 ตัว
+         ├── hash password ด้วย bcrypt
+         └── INSERT เป็น role = member
+
+Step 3 → แสดง password ให้ admin เห็นครั้งเดียว
+         (หลังจากนี้ไม่มีทางดึง password จริงกลับมาได้)
 ```
 
-```
-สมาชิกแก้โปรไฟล์ตัวเอง (profile.php)
-├── AuthService → ตรวจ + บันทึก
-└── ข้อจำกัด: เปลี่ยน email ไม่ได้ (ป้องกัน account takeover)
-```
+### 4.2 แก้ไขสมาชิก
 
-### การแยก Role
-
-ระบบมี 3 roles ที่ถูกกำหนดตั้งแต่สร้างบัญชี:
+**ไฟล์ที่เกี่ยวข้อง:** `admin/member_form.php` → `MemberService` → `UserRepository`
 
 ```
-member  → สมาชิกทั่วไป (สมัครผ่าน register.php → เป็น member อัตโนมัติ)
-staff   → เจ้าหน้าที่ (Admin สร้างให้ทาง admin/member_form.php)
-admin   → ผู้ดูแลระบบ (สร้างตอน install หรือ Admin สร้างเพิ่ม)
+Step 1 → Staff แก้ไข: ชื่อ, email, เบอร์ (password แยกต่างหาก)
+
+Step 2 → MemberService::updateMember()
+         ├── ตรวจว่า member มีอยู่
+         ├── ถ้าเปลี่ยน email → ตรวจซ้ำ (ยกเว้นตัวเอง)
+         └── UPDATE ข้อมูล
 ```
 
-การตรวจสิทธิ์ใช้ 2 ฟังก์ชัน:
-- `requireLogin()` → ต้อง login แล้ว (role อะไรก็ได้)
-- `requireStaff()` → ต้องเป็น staff หรือ admin
-- `requireAdmin()` → ต้องเป็น admin เท่านั้น
+### 4.3 ลบสมาชิก
 
-ทุกหน้าใน `/admin/` เรียก `requireStaff()` ก่อนทำอะไรทั้งนั้น
-หน้าที่ sensitive เช่น ตั้งค่าระบบ เรียก `requireAdmin()` เพิ่ม
+**ไฟล์ที่เกี่ยวข้อง:** `admin/member_form.php` → `MemberService` → `UserRepository`
 
-### การลบผู้ใช้
+```
+Step 1 → MemberService::deleteMember()
+         ├── เปิด transaction
+         ├── Guard #1: มีประวัติการยืมไหม? → ถ้ามี ห้ามลบ (สถิติจะหาย)
+         ├── Guard #2: มี pending reservation ไหม? → ถ้ามี ห้ามลบ (stock จะไม่ถูกคืน)
+         └── ผ่านทั้ง 2 guard → DELETE (เฉพาะ role=member)
+```
 
-ลบไม่ได้ถ้า:
-- มีประวัติการยืมอยู่ (ไม่ว่าจะคืนแล้วหรือยัง)
-- มีการจองที่ยังรอดำเนินการ
+### 4.4 การแยก Role และตรวจสิทธิ์
 
-เพราะถ้าลบได้ ข้อมูลการยืม-คืนจะเสียหาย
+ระบบตรวจสิทธิ์ผ่าน helper functions ใน `functions.php`:
+
+| ฟังก์ชัน | ใช้ตรงไหน | ถ้าไม่ผ่าน |
+|---------|----------|-----------|
+| `requireLogin()` | ทุกหน้าที่ต้อง login | redirect ไป login.php |
+| `requireStaff()` | หน้า admin ทั่วไป | redirect ไป index.php |
+| `requireAdmin()` | หน้ารายงาน, ตั้งค่า | redirect ไป admin/ |
+| `requireStaffApi()` | API ที่ต้องเป็น staff+ | JSON 403 Forbidden |
+| `requireAdminApi()` | API ที่ต้องเป็น admin | JSON 403 Forbidden |
+
+**จุดสำคัญ:** ทุกหน้า admin เรียก `requireStaff()` หรือ `requireAdmin()` ที่บรรทัดแรกเสมอ — ถ้าลบบรรทัดนี้ ใครก็เข้าหน้า admin ได้
+
+### 4.5 Profile + เปลี่ยนรหัสผ่าน
+
+**ไฟล์ที่เกี่ยวข้อง:** `profile.php` → `AuthService` → `UserRepository`
+
+```
+แก้ profile:
+├── AuthService::updateProfile()
+├── แก้ได้: ชื่อ, เบอร์โทร
+└── แก้ไม่ได้: email (ป้องกัน account takeover)
+    ระบบใช้ email จาก DB เสมอ ไม่ใช่จาก form
+
+เปลี่ยน password:
+├── AuthService::changePassword()
+├── ต้องยืนยันรหัสเดิมก่อน (ป้องกัน session hijack)
+├── ห้ามใช้รหัสเดิมซ้ำ
+└── hash ใหม่แล้ว update
+```
 
 ---
 
-## 🔄 5. Flow หลักของระบบ (Core Business Flow)
+## 🔄 5. Flow หลักของระบบ (Core Business Flows)
 
-### 📖 Flow 5.1: การยืมหนังสือ
+### 5.1 ยืมหนังสือ (Create Borrow)
 
-นี่คือ flow ที่สำคัญที่สุดของระบบ
-
-**ใครทำ:** Staff / Admin
-**เข้าจากหน้า:** admin/borrow_form.php
-**ใช้ Service:** BorrowService → BorrowRepository + BookRepository
+**ไฟล์ที่เกี่ยวข้อง:** `admin/borrow_form.php` → `BorrowService` → `BorrowRepository` + `BookRepository` + `ReservationRepository`
 
 ```
-Step 1 │ Staff เปิดหน้าบันทึกการยืม
-       │ → เลือกสมาชิก → เลือกหนังสือ (1-3 เล่ม) → กำหนดวันยืม
-       │
-Step 2 │ กดปุ่ม "บันทึกการยืม"
-       │
-Step 3 │ BorrowService เริ่มทำงาน:
-       │ ├── เปิด transaction (ถ้าขั้นตอนไหนพัง → ย้อนกลับทุกอย่าง)
-       │ ├── ล็อคข้อมูลสมาชิก (ป้องกันยืมพร้อมกันจากหลาย Staff)
-       │ ├── นับจำนวนที่สมาชิกยืมอยู่ตอนนี้
-       │ ├── ตรวจว่า "ยืมอยู่ + ที่จะยืมใหม่" > 3 เล่มไหม?
-       │ │   ถ้าเกิน → error "เกินโควต้า"
-       │ │
-       │ └── วนทำทีละเล่ม:
-       │     ├── ล็อคข้อมูลหนังสือ (ป้องกัน stock เพี้ยน)
-       │     ├── เช็คว่ายืมเล่มเดียวกันซ้ำไหม
-       │     ├── เช็คว่า available > 0 ไหม
-       │     ├── หัก available ลง 1
-       │     └── สร้างบันทึกการยืม (status = "borrowing")
-       │
-Step 4 │ ✅ สำเร็จ → commit transaction → แสดงผล "ยืมสำเร็จ"
-       │ ❌ ล้มเหลว → rollback → ไม่มีอะไรเปลี่ยนใน database
+Staff เปิดหน้ายืม → เลือกสมาชิก + หนังสือ (หลายเล่มได้) → กดบันทึก
+
+Step 1 → ตรวจ input
+         ├── เลือกผู้ยืมแล้วหรือยัง?
+         ├── เลือกหนังสืออย่างน้อย 1 เล่มหรือยัง?
+         └── จำนวนวันยืม 1-30
+
+Step 2 → ตรวจว่าผู้ยืมเป็น member
+         (admin/staff ไม่สามารถยืมในนามตัวเองได้)
+
+Step 3 → เปิด transaction (เริ่มทำงานแบบ "ทั้งหมดหรือไม่เลย")
+
+Step 4 → ล็อคแถว user (FOR UPDATE)
+         ป้องกัน: admin 2 คนกดยืมให้ member เดียวกันพร้อมกัน
+
+Step 5 → ตรวจโควต้า
+         ├── นับจำนวนที่ยืมอยู่ (active borrows)
+         ├── นับจำนวนที่จองรอรับ (pending reservations)
+         ├── ยืม + จอง รวมกันต้องไม่เกิน MAX_BORROW_BOOKS (ค่าเริ่มต้น: 3)
+         └── ถ้าเกิน → หยุด แสดง error
+
+Step 6 → วนทีละเล่ม:
+         ├── ล็อคแถวหนังสือ (FOR UPDATE)
+         ├── ตรวจ stock (available > 0?)
+         ├── ตรวจยืมซ้ำ (ยืมเล่มนี้อยู่แล้วไหม?)
+         ├── หัก stock (available -1) ด้วย WHERE available > 0
+         └── สร้างรายการยืม (borrow record)
+
+Step 7 → COMMIT transaction
+         ├── สำเร็จ → stock ถูกหัก + borrow ถูกสร้าง
+         └── ล้มเหลว → rollback ทุกอย่าง (เหมือนไม่เกิดขึ้น)
 ```
 
-### 📕 Flow 5.2: การคืนหนังสือ
+**ทำไมต้องนับ pending reservations ด้วย?**
+ถ้านับแค่ที่ยืม สมาชิกอาจยืม 3 เล่ม + จองอีก 3 เล่ม = ถือครอง 6 เล่ม ซึ่งเกินกฎ
 
-**ใครทำ:** Staff / Admin
-**เข้าจากหน้า:** admin/borrows.php
-**ใช้ Service:** BorrowService → BorrowRepository + BookRepository + PaymentRepository
+### 5.2 คืนหนังสือ (Return Book)
 
-```
-Step 1 │ Staff เปิดรายการยืม → หารายการที่ต้องคืน → กดปุ่ม "คืน"
-       │
-Step 2 │ BorrowService เริ่มทำงาน:
-       │ ├── เปิด transaction
-       │ ├── ล็อคข้อมูลรายการยืม (ป้องกัน 2 Staff กดคืนพร้อมกัน)
-       │ ├── เช็คว่าคืนไปแล้วหรือยัง?
-       │ │   ถ้าคืนแล้ว → error "คืนไปแล้ว"
-       │ │
-       │ ├── คำนวณค่าปรับ:
-       │ │   วันเกิน = วันคืนจริง − วันกำหนดคืน
-       │ │   ค่าปรับ = วันเกิน × FINE_PER_DAY (ค่าเริ่มต้น 10 บาท/วัน)
-       │ │   ถ้าไม่เกิน → ค่าปรับ = 0
-       │ │
-       │ ├── อัปเดตสถานะเป็น "returned" + บันทึกวันคืนจริง + ค่าปรับ
-       │ ├── เพิ่ม available ของหนังสือกลับ +1
-       │ └── ถ้า Staff เลือก "จ่ายทันที" → สร้างบันทึก payment ด้วย
-       │
-Step 3 │ ✅ สำเร็จ → commit → แสดง "คืนสำเร็จ" (+ ค่าปรับถ้ามี)
-```
-
-### 🔖 Flow 5.3: การจองหนังสือ
-
-**ใครทำ:** Member (สมาชิก)
-**เข้าจากหน้า:** api/reserve_book.php (กดปุ่มจองบนหน้าเว็บ)
-**ใช้ Service:** ReservationService → ReservationRepository + BookRepository
+**ไฟล์ที่เกี่ยวข้อง:** `admin/borrows.php` → `BorrowService` → `BorrowRepository` + `BookRepository` + `PaymentRepository`
 
 ```
-Step 1 │ สมาชิกเห็นหนังสือบนหน้าเว็บ → กดปุ่ม "จอง"
-       │
-Step 2 │ ReservationService เริ่มทำงาน:
-       │ ├── เปิด transaction
-       │ ├── ล็อคข้อมูลหนังสือ
-       │ ├── เช็คว่า available > 0 ไหม?
-       │ ├── เช็คว่าสมาชิกจองเล่มเดียวกันซ้ำไหม?
-       │ ├── เช็คว่าสมาชิกยืมเล่มเดียวกันอยู่หรือเปล่า?
-       │ ├── หัก available ลง 1 ทันที (กันไว้ให้)
-       │ └── สร้างรายการจอง (status = "pending", หมดอายุใน 2 วัน)
-       │
-Step 3 │ ✅ สำเร็จ → สมาชิกเห็น "จองสำเร็จ กรุณามารับภายใน 2 วัน"
+Staff เปิดรายการยืม → หารายการ → กดคืน
+
+Step 1 → เปิด transaction
+
+Step 2 → ล็อค borrow (FOR UPDATE + status='borrowing')
+         ถ้าสถานะเป็น 'returned' แล้ว → คืน null → หยุด
+         ป้องกัน: 2 คนกดคืนพร้อมกัน
+
+Step 3 → คำนวณค่าปรับ
+         ├── วันเกิน = วันคืนจริง − วันกำหนดคืน
+         ├── ค่าปรับ = วันเกิน × FINE_PER_DAY (ค่าเริ่มต้น: 10 บาท/วัน)
+         └── คืนตรงเวลา → ค่าปรับ = 0
+
+Step 4 → 3 การเขียนใน 1 transaction:
+         ├── เปลี่ยนสถานะ borrowing → returned + บันทึกค่าปรับ
+         ├── คืน stock (available +1)
+         └── ถ้า Staff เลือก "จ่ายทันที" + มีค่าปรับ → สร้าง payment record
+
+Step 5 → COMMIT
 ```
 
-**หลังจากจอง มี 3 ทางที่จะเกิดขึ้น:**
+### 5.3 รับชำระค่าปรับทีหลัง (Pay Fine)
+
+**ไฟล์ที่เกี่ยวข้อง:** `admin/payments.php` → `BorrowService` → `BorrowRepository` + `PaymentRepository`
 
 ```
-ทางที่ 1 — Staff กด "อนุมัติ" (fulfill)
-├── ReservationService สร้างรายการยืมให้อัตโนมัติ
-├── ไม่หัก stock เพิ่ม (เพราะหักตอนจองแล้ว)
-└── สถานะจอง → "fulfilled"
+Step 1 → เปิด transaction
 
-ทางที่ 2 — สมาชิกหรือ Staff กด "ยกเลิก" (cancel)
-├── คืน stock กลับ (available +1)
-└── สถานะจอง → "cancelled"
+Step 2 → ล็อค borrow (FOR UPDATE)
+         ป้องกัน: 2 คนกดชำระพร้อมกัน
 
-ทางที่ 3 — หมดอายุ (expired)
-├── ครบ 2 วันแล้วยังไม่มารับ
-├── ระบบ expire อัตโนมัติ (lazy check หรือ cron)
-├── คืน stock กลับ
-└── สถานะจอง → "expired"
+Step 3 → ตรวจ: มีค่าปรับจริงไหม? ชำระไปแล้วหรือยัง?
+
+Step 4 → สร้าง payment record
+         (UNIQUE constraint บน borrow_id = จ่ายได้ครั้งเดียวต่อรายการยืม)
+
+Step 5 → COMMIT
 ```
 
-> 💡 **สิ่งสำคัญ:** stock ถูกหักตอนจอง ไม่ใช่ตอนอนุมัติ
-> ดังนั้น ถ้ายกเลิก/หมดอายุ → ต้องคืน stock เสมอ มิฉะนั้นจำนวนหนังสือจะเพี้ยน
+### 5.4 จองหนังสือ (Create Reservation)
 
-### 💰 Flow 5.4: การชำระค่าปรับ
-
-**ใครทำ:** Staff / Admin
-**เข้าจากหน้า:** admin/payments.php
-**ใช้ Service:** BorrowService → BorrowRepository + PaymentRepository
+**ไฟล์ที่เกี่ยวข้อง:** `api/reserve_book.php` → `ReservationService` → `ReservationRepository` + `BookRepository` + `BorrowRepository`
 
 ```
-Step 1 │ Staff เปิดหน้าค่าปรับ → เห็นรายการค้างชำระ
-       │
-Step 2 │ กดปุ่ม "รับชำระ" ที่รายการที่ต้องการ
-       │
-Step 3 │ BorrowService เริ่มทำงาน:
-       │ ├── เปิด transaction
-       │ ├── ล็อคข้อมูลรายการยืม
-       │ ├── เช็คว่า "คืนแล้วจริงไหม?" (ต้องคืนก่อนถึงจ่ายค่าปรับได้)
-       │ ├── เช็คว่า "จ่ายไปแล้วหรือยัง?" (ป้องกันจ่ายซ้ำ)
-       │ └── สร้างบันทึก payment
-       │
-Step 4 │ ✅ "รับชำระเรียบร้อย"
+สมาชิกเปิดหน้าหนังสือ → กดปุ่ม "จอง"
+
+Step 0 → Lazy expire: คืน stock จาก reservation ที่หมดอายุก่อน
+
+Step 1 → เปิด transaction
+
+Step 2 → ล็อคหนังสือ (FOR UPDATE)
+         ป้องกัน: 2 คนจองเล่มสุดท้ายพร้อมกัน
+
+Step 3 → ตรวจ 5 เงื่อนไข:
+         ├── stock ว่างไหม? (available > 0)
+         ├── จองเล่มนี้ซ้ำไหม?
+         ├── ยืมเล่มนี้อยู่แล้วไหม?
+         ├── ล็อค user row (ป้องกัน concurrent borrow+reserve)
+         └── ยืม+จอง เกิน MAX_BORROW_BOOKS ไหม?
+
+Step 4 → สร้างรายการจอง (หมดอายุใน 2 วัน)
+
+Step 5 → หัก stock ทันที (available -1)
+         ⚠️ stock ถูกหักตอนจอง ไม่ใช่ตอนอนุมัติ!
+
+Step 6 → COMMIT
 ```
 
-### 📚 Flow 5.5: การจัดการหนังสือ
+**หลังจากจองแล้ว มี 3 ทางเป็นไปได้:**
 
-**ใครทำ:** Staff / Admin
-**เข้าจากหน้า:** admin/books.php, admin/book_form.php
-**ใช้ Service:** BookService → BookRepository
+```
+              ┌─────────────────────────────────────────┐
+              │         reservation (pending)            │
+              └──────┬──────────┬──────────┬─────────────┘
+                     │          │          │
+          Staff อนุมัติ    ยกเลิก     หมดอายุ (2 วัน)
+                     │          │          │
+                     ▼          ▼          ▼
+              ┌──────────┐ ┌────────┐ ┌─────────┐
+              │fulfilled │ │cancelled│ │ expired │
+              │สร้าง borrow│ │คืน stock│ │คืน stock│
+              │ไม่หัก stock│ │        │ │(อัตโนมัติ)│
+              └──────────┘ └────────┘ └─────────┘
+```
 
-**เพิ่ม/แก้ไข:**
+### 5.5 อนุมัติการจอง (Fulfill Reservation)
+
+**ไฟล์ที่เกี่ยวข้อง:** `admin/reservations.php` → `ReservationService` → `ReservationRepository` + `BorrowRepository`
+
 ```
-Staff กรอกข้อมูล → BookService ตรวจ:
-├── ชื่อ, ผู้แต่ง ครบไหม?
-├── จำนวน ≥ 0 ไหม?
-├── ถ้าแก้ไข: จำนวนใหม่ ≥ จำนวนที่ถูกยืม/จองอยู่ไหม?
-│   (ลดจำนวนจน available ติดลบไม่ได้)
-├── มีรูปปกไหม? → upload ไปเก็บใน uploads/covers/
-└── บันทึก
+Step 1 → เปิด transaction
+
+Step 2 → ล็อค reservation (FOR UPDATE + status='pending')
+         ป้องกัน: 2 admin กดอนุมัติพร้อมกัน
+
+Step 3 → ตรวจ: ยืมเล่มนี้ซ้ำไหม?
+
+Step 4 → ตรวจโควต้า
+         ├── นับ active borrows
+         ├── นับ pending reservations อื่น (ลบ 1 = ตัวที่กำลัง fulfill)
+         └── ถ้าเกิน → หยุด
+
+Step 5 → สร้าง borrow record (ไม่หัก stock เพิ่ม — หักไปแล้วตอนจอง)
+
+Step 6 → เปลี่ยนสถานะ pending → fulfilled + เชื่อม borrow_id
+
+Step 7 → COMMIT
 ```
 
-**ลบ:**
+### 5.6 ยกเลิกการจอง (Cancel Reservation)
+
+**ไฟล์ที่เกี่ยวข้อง:** `admin/reservations.php` หรือ `my_reservations.php` → `ReservationService`
+
 ```
-Staff กดลบ → BookService ตรวจ:
-├── มีคนยืมอยู่ไหม? → ลบไม่ได้
-├── มีประวัติยืมไหม? → ลบไม่ได้ (เพราะข้อมูลรายงานจะเสียหาย)
-├── มีคนจอง pending ไหม? → ลบไม่ได้
-└── ผ่านทุกข้อ → ลบ + ลบรูปปก (ถ้ามี)
+Step 1 → เปิด transaction
+
+Step 2 → ล็อค reservation (FOR UPDATE + status='pending')
+         ถ้าเรียกจาก member → เพิ่มเงื่อนไข user_id ตรงไหม (ป้องกัน IDOR)
+         ถ้าเรียกจาก admin → ยกเลิกได้ทุกคน
+
+Step 3 → เปลี่ยนสถานะ pending → cancelled
+
+Step 4 → คืน stock (available +1)
+
+Step 5 → COMMIT
 ```
+
+### 5.7 จัดการหนังสือ (Book Management)
+
+**ไฟล์ที่เกี่ยวข้อง:** `admin/book_form.php`, `admin/books.php` → `BookService` → `BookRepository`
+
+**สร้างหนังสือ:**
+```
+กรอกข้อมูล → BookService::createBook() → INSERT (available = quantity)
+```
+
+**แก้ไขหนังสือ:**
+```
+Step 1 → เปิด transaction + ล็อคหนังสือ (FOR UPDATE)
+Step 2 → คำนวณ available ใหม่:
+         available_ใหม่ = available_เดิม + (quantity_ใหม่ − quantity_เดิม)
+Step 3 → ตรวจ: ลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง) ไม่ได้
+Step 4 → UPDATE + COMMIT
+```
+
+**ลบหนังสือ:**
+```
+Step 1 → เปิด transaction + ล็อคหนังสือ
+Step 2 → ตรวจ 3 guard:
+         ├── มีคนยืมอยู่ไหม? → ห้ามลบ
+         ├── มีประวัติการยืมไหม? → ห้ามลบ (สถิติจะหาย)
+         └── มี pending reservation ไหม? → ห้ามลบ (stock จะไม่ถูกคืน)
+Step 3 → DELETE + COMMIT
+Step 4 → ลบรูปปก (หลัง COMMIT — ป้องกันลบรูปแล้ว DB rollback)
+```
+
+### 5.8 Lazy Expire: การคืน stock อัตโนมัติจากจองหมดอายุ
+
+ระบบไม่ได้ตั้ง cron job ไว้คืน stock — แต่ใช้หลัก **"ตรวจตอนเปิดหน้า"**
+
+```
+ทุกครั้งที่เปิดหน้าที่แสดงรายชื่อหนังสือ:
+├── HomeService::getBooks()
+├── BookService::getBooks()
+├── BookService::getBookById()
+└── BookService::getAvailableBooks()
+
+   ก่อนดึงข้อมูล → เรียก markExpiredReservations()
+   ├── หา reservation ที่ pending + เลยกำหนด 2 วัน
+   ├── เปลี่ยนสถานะ → expired
+   └── คืน stock (available +1) ทีละรายการ
+```
+
+> 💡 วิธีนี้เรียกว่า **Lazy Expire** — ไม่ต้องตั้ง cron แต่ stock จะถูกคืนก่อนแสดงผลเสมอ
 
 ---
 
 ## ⚠️ 6. จุดสำคัญที่ต้องเข้าใจเป็นพิเศษ
 
-### 🔒 Transaction — "ทำครบหรือไม่ทำเลย"
+### 6.1 Transaction — "ทั้งหมดหรือไม่เลย"
 
-หลาย flow สำคัญใช้ transaction:
+Transaction คือกลไกที่ทำให้หลายขั้นตอนเป็น **"ก้อนเดียว"** — ถ้าขั้นตอนใดพัง ทุกอย่างจะถูกยกเลิกกลับ
 
+**ตัวอย่าง:** ยืมหนังสือ 3 เล่ม
 ```
-เริ่ม transaction
-├── ขั้นตอน A (เช่น หัก stock)
-├── ขั้นตอน B (เช่น สร้างบันทึกยืม)
-└── ขั้นตอน C (เช่น อัปเดตสถานะ)
-
-ถ้าทุกขั้นสำเร็จ → commit (บันทึกจริง)
-ถ้าขั้นตอนไหนพัง → rollback (ยกเลิกทุกอย่าง กลับไปเหมือนไม่เคยทำ)
-```
-
-**ทำไมสำคัญ?**
-สมมติยืมหนังสือ: ระบบหัก stock แล้ว แต่สร้างบันทึกยืมพัง
-ถ้าไม่มี transaction → stock หาย แต่ไม่มีบันทึกว่าใครยืม = ข้อมูลเพี้ยน
-มี transaction → ทั้ง stock และบันทึก ถูกย้อนกลับ = ข้อมูลปกติ
-
-**Flow ที่ใช้ transaction:**
-- ยืมหนังสือ (BorrowService → createBorrow)
-- คืนหนังสือ (BorrowService → returnBook)
-- ชำระค่าปรับ (BorrowService → payFine)
-- จองหนังสือ (ReservationService → createReservation)
-- อนุมัติการจอง (ReservationService → fulfillReservation)
-- ยกเลิกการจอง (ReservationService → cancelReservation)
-- ลบหนังสือ (BookService → deleteBook)
-- รีเซ็ตรหัสผ่าน (AuthService → resetPassword)
-
-### 🔐 Row Locking — "ป้องกัน 2 คนแก้พร้อมกัน"
-
-ปัญหา: ถ้าหนังสือเหลือ 1 เล่ม แล้ว Staff 2 คนกดยืมพร้อมกันให้คนละคน?
-
-```
-ถ้าไม่มี lock:
-├── Staff A อ่าน available = 1 → ✅ ยืมได้
-├── Staff B อ่าน available = 1 → ✅ ยืมได้ (อ่านค่าเดิม!)
-├── Staff A หัก available → เหลือ 0
-└── Staff B หัก available → เหลือ -1 ❌ ข้อมูลเพี้ยน!
+BEGIN TRANSACTION
+├── หัก stock เล่ม A ✅
+├── หัก stock เล่ม B ✅
+├── หัก stock เล่ม C ❌ (available = 0!)
+└── ROLLBACK → stock เล่ม A, B ถูกคืนกลับ → เหมือนไม่เกิดขึ้น
 ```
 
+**จุดที่ใช้ transaction:**
+
+| Flow | ทำไมต้องใช้ |
+|------|-----------|
+| **ยืมหนังสือ** | หัก stock หลายเล่ม + สร้าง borrow → ถ้าเล่มใดพัง ต้อง rollback ทั้งหมด |
+| **คืนหนังสือ** | คืน stock + เปลี่ยนสถานะ + สร้าง payment → ต้องสำเร็จพร้อมกัน |
+| **จองหนังสือ** | หัก stock + สร้าง reservation → ถ้าอันใดพัง stock ต้องถูก |
+| **อนุมัติจอง** | สร้าง borrow + เปลี่ยนสถานะ reservation → ต้องสำเร็จพร้อมกัน |
+| **ยกเลิกจอง** | คืน stock + เปลี่ยนสถานะ → ต้องสำเร็จพร้อมกัน |
+| **ลบหนังสือ** | ตรวจ guard + DELETE → ป้องกัน race condition |
+| **ลบสมาชิก** | ตรวจ guard + DELETE → ป้องกัน race condition |
+| **รีเซ็ต password** | เปลี่ยน password + mark token ว่าใช้แล้ว → ต้องสำเร็จพร้อมกัน |
+
+> ⚠️ **ห้ามลบ `beginTransaction()` / `commit()` / `rollBack()` ออก!** ถ้าลบ → stock จะผิดเมื่อเกิดข้อผิดพลาด
+
+### 6.2 Row Locking — "ล็อคแถวก่อนแก้"
+
+Row locking (`SELECT ... FOR UPDATE`) คือการ **"จองสิทธิ์แก้ข้อมูล"** — คนอื่นต้องรอจนกว่า transaction จะจบ
+
+**เปรียบเทียบ:** เหมือนเข้าห้องน้ำแล้วล็อคประตู คนอื่นต้องรอจนเราออกมา
+
+**จุดที่ใช้ row locking:**
+
+| จุดที่ lock | ล็อคอะไร | ป้องกันอะไร |
+|-----------|---------|-----------|
+| **ยืม → ล็อค user** | แถว user ของผู้ยืม | 2 admin กดยืมให้คนเดียวกันพร้อมกัน |
+| **ยืม → ล็อค book** | แถว book ทีละเล่ม | 2 คนยืมเล่มสุดท้ายพร้อมกัน |
+| **คืน → ล็อค borrow** | แถว borrow | 2 คนกดคืนพร้อมกัน (กันคืนซ้ำ) |
+| **จอง → ล็อค book** | แถว book | 2 คนจองเล่มสุดท้ายพร้อมกัน |
+| **จอง → ล็อค user** | แถว user ของผู้จอง | จอง + ยืมพร้อมกัน เกินโควต้า |
+| **อนุมัติจอง → ล็อค reservation** | แถว reservation | 2 admin กดอนุมัติพร้อมกัน |
+| **ยกเลิกจอง → ล็อค reservation** | แถว reservation | กดยกเลิก 2 ครั้งพร้อมกัน |
+| **ชำระค่าปรับ → ล็อค borrow** | แถว borrow | 2 คนกดชำระพร้อมกัน |
+| **แก้หนังสือ → ล็อค book** | แถว book | admin แก้ quantity ระหว่างมีคนยืม |
+| **ลบหนังสือ → ล็อค book** | แถว book | 2 admin กดลบพร้อมกัน |
+
+> ⚠️ **ลำดับ lock สำคัญ!** ระบบ lock user ก่อน book เสมอ — ถ้าสลับลำดับจะเกิด **deadlock** (2 ฝ่ายรอกันไม่จบ)
+
+### 6.3 Idempotency Key — "กันกดซ้ำ"
+
+เวลาผู้ใช้กดปุ่ม "ยืม" แล้วอินเทอร์เน็ตช้า อาจกดซ้ำ 2-3 ครั้ง
+
 ```
-ถ้ามี lock (ระบบนี้ใช้):
-├── Staff A ล็อคข้อมูลหนังสือ + อ่าน available = 1 → ✅ ยืมได้
-├── Staff B พยายามล็อค → "รอ..." (Staff A ยังไม่ปล่อย)
-├── Staff A หัก available → เหลือ 0 → ปล่อย lock
-├── Staff B ได้ lock → อ่าน available = 0 → ❌ "หนังสือหมด"
-└── ✅ ข้อมูลถูกต้อง!
+กดยืม (ครั้งที่ 1) → สร้าง idempotency key → ยืมสำเร็จ → ลบ key
+กดยืม (ครั้งที่ 2) → เจอ key เดิม → "กำลังดำเนินการ กรุณาอย่ากดซ้ำ"
 ```
 
-ระบบใช้ `SELECT ... FOR UPDATE` ใน Repository เพื่อล็อคข้อมูลระหว่างทำ transaction
+> 💡 Key หมดอายุใน 60 วินาที (ล้างอัตโนมัติทุก request ผ่าน `bootstrap.php`)
 
-**Flow ที่ใช้ row locking:**
-- ยืมหนังสือ → ล็อคข้อมูลหนังสือ + ข้อมูลสมาชิก
-- คืนหนังสือ → ล็อคข้อมูลรายการยืม
-- จองหนังสือ → ล็อคข้อมูลหนังสือ
-- อนุมัติการจอง → ล็อคข้อมูลการจอง
-- ชำระค่าปรับ → ล็อคข้อมูลรายการยืม
-- ลบหนังสือ → ล็อคข้อมูลหนังสือ
+### 6.4 Stock Management — "ตัวเลข available ต้องถูกเสมอ"
 
-### 🛑 Idempotency — "กดซ้ำก็ไม่ทำซ้ำ"
+`available` = จำนวนเล่มที่ว่างอยู่จริงๆ (ไม่รวมที่ถูกยืมหรือจอง)
 
-ปัญหา: ถ้าผู้ใช้กดปุ่ม "คืนหนังสือ" 2 ครั้งติดๆ (double click)?
+```
+available ถูกหักเมื่อ:
+├── ยืมหนังสือ (available -1 ต่อเล่ม)
+└── จองหนังสือ (available -1 ทันทีที่จอง!)
 
-ระบบมีกลไก "idempotency key" ที่เก็บใน session
-ทุกครั้งที่กดปุ่ม ระบบสร้าง key ไม่ซ้ำขึ้นมา
-ถ้าเห็น key เดิมซ้ำ → "ดำเนินการไปแล้ว" ไม่ทำอีก
+available ถูกคืนเมื่อ:
+├── คืนหนังสือ (available +1)
+├── ยกเลิกการจอง (available +1)
+└── จองหมดอายุ (available +1 — lazy expire)
 
-ใช้ใน:
-- คืนหนังสือ
-- อนุมัติ/ยกเลิกการจอง
-- ชำระค่าปรับ
+available ไม่เปลี่ยนเมื่อ:
+└── อนุมัติจอง → สร้าง borrow (stock หักไปแล้วตอนจอง)
+```
 
-### 🚫 จุดที่ห้ามแก้ถ้าไม่เข้าใจ
+**จุดสำคัญ:** SQL ที่หัก stock ใช้ `WHERE available > 0` — ถ้า available = 0 จะหักไม่ได้ (ป้องกันติดลบ)
 
-| ไฟล์ | ห้ามแก้ตรงไหน | เหตุผล |
-|------|---------------|--------|
-| AuthService | error message ของ login | ถ้าแยก "email ไม่พบ" กับ "password ผิด" → คนร้ายเช็คได้ว่า email มีในระบบไหม |
-| AuthService | requestPasswordReset ให้ return error | ถ้าบอกว่า "email ไม่มี" → คนร้ายเช็คได้เหมือนกัน |
-| BorrowService | ลำดับการ lock และ transaction | เปลี่ยนลำดับ → อาจเกิด deadlock หรือข้อมูลเพี้ยน |
-| ReservationService | การหัก stock ตอนจอง | ถ้าย้ายไปหักตอนอนุมัติ → ระหว่างรอ อาจมีคนอื่นยืมไปก่อน |
-| MemberService | hash password ก่อน save | ถ้าลืม hash → เก็บ password เป็นตัวอักษรปกติ = อันตราย |
-| BookService | guard ก่อนลบ | ถ้าลบหนังสือที่มีคนยืมอยู่ → ข้อมูลการยืมเสียหาย |
+### 6.5 Quota Check — "ยืม + จอง ไม่เกิน 3"
+
+```
+โควต้า = active borrows + pending reservations
+
+ตรวจตอน:
+├── ยืมหนังสือ → ยืม+จอง ≥ MAX? → ห้ามยืม
+├── จองหนังสือ → ยืม+จอง ≥ MAX? → ห้ามจอง
+└── อนุมัติจอง → ยืม + (จองอื่น−1) ≥ MAX? → ห้ามอนุมัติ
+    (ลบ 1 = ตัวที่กำลัง fulfill เพราะมันจะเปลี่ยนจาก reservation เป็น borrow)
+```
+
+### 6.6 จุดที่ห้ามแก้ถ้าไม่เข้าใจ
+
+| จุด | เหตุผล |
+|-----|--------|
+| **`beginTransaction()` / `commit()` / `rollBack()`** | ลบ → stock ผิดเมื่อเกิด error |
+| **`SELECT ... FOR UPDATE`** | ลบ → race condition → stock ติดลบ/เกิน |
+| **`WHERE available > 0` ใน decrementAvailable()** | ลบ → stock ติดลบได้ |
+| **`WHERE available < quantity` ใน incrementAvailable()** | ลบ → stock เกิน quantity ได้ |
+| **`session_regenerate_id(true)`** | ลบ → session fixation attack |
+| **`e()` ครอบทุก output** | ลบ → XSS attack |
+| **`validateCSRFToken()`** | ลบ → CSRF attack |
+| **ลำดับ lock (user ก่อน book)** | สลับ → deadlock |
+| **password_hash() / password_verify()** | เปลี่ยน → password ไม่ปลอดภัย |
+| **ลำดับ require ใน bootstrap.php** | สลับ → ระบบพัง (constant ยังไม่ถูก define) |
 
 ---
 
 ## 🛡️ 7. ขอบเขตการใช้งานที่ควรรู้
 
-### ออกแบบมาเพื่อ
+### ออกแบบมาเพื่ออะไร?
 
-| การใช้งาน | ระดับ |
-|----------|-------|
-| เรียนรู้ PHP + หลัก backend | ⭐⭐⭐⭐⭐ |
-| ส่ง project / ส่งงาน | ⭐⭐⭐⭐⭐ |
-| เดโมให้ลูกค้าหรืออาจารย์ดู | ⭐⭐⭐⭐ |
-| ห้องสมุดเล็ก / ร้านเช่าหนังสือ (< 100 คน) | ⭐⭐⭐ |
+| เหมาะกับ | คำอธิบาย |
+|---------|---------|
+| **เรียนรู้ Backend** | โครงสร้างชัดเจน แยกชั้น มี comment ละเอียด |
+| **เรียนรู้ Security** | มีตัวอย่าง CSRF, XSS, Rate Limit, Session, Locking จริงๆ |
+| **ส่งงานมหาวิทยาลัย** | ครบ CRUD + ระบบยืมคืน + รายงาน |
+| **ใช้เป็น Template** | แก้ชื่อ ปรับ config แล้วใช้ได้เลย |
+| **สอนนักเรียน** | มีเอกสารอธิบายครบ อ่านแล้วเข้าใจ |
 
-### ไม่เหมาะกับ
+### ไม่เหมาะกับอะไร?
 
-| การใช้งาน | เหตุผล |
-|----------|--------|
-| ผู้ใช้หลักร้อยถึงพันคนพร้อมกัน | PHP + session ไม่ได้ออกแบบมาสำหรับ scale ระดับนั้น |
-| ต้อง online 24/7 ไม่มีวันล่ม | ไม่มีระบบ failover หรือ monitoring |
-| ต้องผ่าน security audit | ยังไม่ครบมาตรฐาน enterprise |
-| ต้องมี mobile app | ไม่มี REST API สำหรับ mobile |
-| ต้องรองรับหลายภาษา | ตอนนี้มีภาษาไทยอย่างเดียว |
+| ไม่เหมาะ | เหตุผล |
+|---------|--------|
+| **ห้องสมุดจริงขนาดใหญ่** | ยังไม่มี caching, queue, horizontal scaling |
+| **ระบบที่ต้อง uptime 99.99%** | เป็น single server, ไม่มี failover |
+| **ระบบที่ต้อง multi-tenant** | ออกแบบ single library เท่านั้น |
+| **E-commerce / ระบบจ่ายเงินจริง** | ไม่มี payment gateway |
 
-### ถ้าจะเอาไปต่อยอด production ต้องระวัง
+### ถ้าจะเอาไปต่อยอด production ต้องระวังเรื่องไหน?
 
-| เรื่อง | คำแนะนำ |
-|--------|---------|
-| **HTTPS** | ต้องใช้ SSL certificate เพื่อเข้ารหัสข้อมูลระหว่างทาง |
-| **Database backup** | ต้องตั้ง backup อัตโนมัติ ไม่งั้นข้อมูลหายแล้วเอาคืนไม่ได้ |
-| **Error logging** | ควรเก็บ log อย่างเป็นระบบ ไม่ใช่แค่แสดงบนหน้าจอ |
-| **Environment** | `.env` ต้องตั้ง `APP_DEBUG=false` เด็ดขาด |
-| **install.php** | ลบทิ้งหลังติดตั้งเสร็จ ไม่งั้นคนอื่นรัน install ซ้ำได้ |
-| **Rate limit tuning** | อาจต้องปรับค่าตาม traffic จริง |
-| **Session storage** | ถ้ารันหลาย server ต้องเปลี่ยนจาก file session เป็น Redis หรือ database |
+| เรื่อง | ทำไม | ทำอะไร |
+|--------|------|--------|
+| **Session Storage** | default ใช้ file → ไม่รองรับ multi-server | เปลี่ยนเป็น Redis/Database |
+| **Rate Limit** | เก็บใน DB → ช้าถ้า traffic สูง | ย้ายไป Redis |
+| **File Upload** | เก็บใน local disk → ไม่รองรับ CDN | ย้ายไป S3/Cloud Storage |
+| **Email** | ยังไม่ส่ง email จริง (แสดง link บนหน้าจอเท่านั้น) | ต่อ SMTP / SendGrid |
+| **HTTPS** | config พร้อมแต่ต้องเปิดเอง | ตั้ง SSL certificate |
+| **Backup** | ไม่มี auto backup | ตั้ง mysqldump cron |
+| **Logging** | ใช้ error_log → เขียนลง file | ต่อ centralized logging |
+| **Reservation Expiry** | ใช้ Lazy Expire → ขึ้นกับว่ามีคนเปิดหน้า | เพิ่ม cron job |
+| **Password Reset** | แสดง link บนหน้าจอ (dev mode) | ต่อ email service |
 
 ---
 
 ## 🧠 8. วิธีอ่านโค้ดจาก FLOW นี้
 
-### ถ้าอยากเริ่มอ่านโค้ด เริ่มจากตรงไหน?
+### เริ่มจากไหน?
 
-**ลำดับแนะนำ:**
+ถ้าอยากเข้าใจระบบนี้ แนะนำอ่านตามลำดับนี้:
 
 ```
-อ่านก่อน (เข้าใจโครงสร้าง)
-├── 1. bootstrap.php       → เข้าใจว่าระบบเริ่มต้นยังไง
-├── 2. includes/config.php → เข้าใจว่ามีค่าตั้งค่าอะไรบ้าง
-└── 3. includes/functions.php → เข้าใจฟังก์ชันที่ใช้บ่อย
-        (login check, CSRF, flash message, redirect)
+ลำดับแนะนำสำหรับมือใหม่:
 
-อ่านต่อ (เข้าใจ flow)
-├── 4. login.php           → ตัวอย่าง Controller ที่เข้าใจง่ายที่สุด
-├── 5. AuthService.php     → ตัวอย่าง Service (login, register)
-└── 6. UserRepository.php  → ตัวอย่าง Repository (SQL)
+1️⃣ bootstrap.php
+   → เข้าใจว่า "ทุกหน้าเริ่มต้นยังไง"
+   → config, db, functions โหลดตรงไหน
 
-อ่านเพิ่ม (เข้าใจ flow หลัก)
-├── 7. admin/borrows.php        → Controller สำหรับยืม-คืน
-├── 8. BorrowService.php        → กฎธุรกิจการยืม-คืน
-├── 9. BorrowRepository.php     → SQL สำหรับยืม-คืน
-├── 10. ReservationService.php  → กฎธุรกิจการจอง
-└── 11. BookService.php         → กฎธุรกิจจัดการหนังสือ
+2️⃣ includes/config.php
+   → ดูค่าคงที่ทั้งหมด (MAX_BORROW_BOOKS, FINE_PER_DAY, ...)
+   → เข้าใจว่า .env ทำงานยังไง
+
+3️⃣ includes/functions.php
+   → ดูฟังก์ชันพื้นฐาน (login check, CSRF, escape, rate limit)
+   → เข้าใจ "เครื่องมือ" ที่ระบบใช้ทั่วไป
+
+4️⃣ login.php
+   → ดูตัวอย่าง Controller ที่ง่ายที่สุด
+   → เห็นภาพ: รับ POST → ตรวจ CSRF → เรียก Service → redirect
+
+5️⃣ app/Services/AuthService.php
+   → ดูตัวอย่าง Service แรก
+   → เห็น: login(), register(), password hashing
+
+6️⃣ app/Services/BorrowService.php
+   → ดู flow หลักของระบบ: ยืม, คืน, ค่าปรับ
+   → เห็น: transaction, lock, quota check
+
+7️⃣ app/Services/ReservationService.php
+   → ดู flow จอง: สร้าง, อนุมัติ, ยกเลิก, หมดอายุ
+   → เห็น: stock management, lazy expire
+
+8️⃣ app/Services/BookService.php
+   → ดู CRUD + guard ก่อนลบ
+   → เห็น: available calculation, file deletion after commit
+
+9️⃣ app/Repositories/ (เลือกอ่าน)
+    → ดูว่า SQL เขียนยังไง
+    → เห็น: prepared statements, FOR UPDATE, WHERE guard
 ```
 
 ### มือใหม่ควรโฟกัสส่วนไหนก่อน?
 
-| ระดับ | โฟกัส | ได้อะไร |
-|-------|-------|---------|
-| **เริ่มต้น** | `login.php` + `AuthService` | เข้าใจ Controller → Service → Repository ภาพรวม |
-| **กลาง** | `BorrowService` + `admin/borrows.php` | เข้าใจ transaction, lock, business logic |
-| **ขั้นสูง** | `ReservationService` + state transition | เข้าใจ concurrency, stock management |
+| ระดับ | โฟกัส | ไฟล์ |
+|-------|-------|------|
+| **เริ่มต้น** | เข้าใจ flow: request → controller → service → repo → DB | `login.php` → `AuthService` |
+| **กลาง** | เข้าใจ transaction + lock + stock | `BorrowService` → `ReservationService` |
+| **ขั้นสูง** | เข้าใจ security: CSRF, XSS, rate limit, session | `functions.php` + controller ทุกตัว |
 
-### เคล็ดลับการอ่าน
+### แผนที่ Service ↔ หน้าที่
 
-1. **อ่าน comment ในหัวไฟล์ก่อน** — ทุก Service/Repository มี comment อธิบายว่าไฟล์ทำอะไร, เรียกจากไหน, ห้ามแก้อะไร
-2. **ตาม flow ไม่ใช่ตามไฟล์** — อย่าอ่านทุกไฟล์ทุกบรรทัด ให้เลือก 1 flow (เช่น "ยืมหนังสือ") แล้วตามจาก Controller → Service → Repository
-3. **เปิด 2 ไฟล์พร้อมกัน** — เปิด Controller + Service คู่กัน จะเห็นว่า Controller ส่งอะไรให้ Service
-4. **ดู error handling ด้วย** — ดูว่าถ้าข้อมูลไม่ถูก ระบบตอบกลับยังไง จะเข้าใจ validation
+| Service | หน้าที่หลัก | ความซับซ้อน |
+|---------|-----------|------------|
+| **AuthService** | Login, Register, Profile, Password Reset | ⭐⭐ |
+| **BorrowService** | ยืม, คืน, ค่าปรับ | ⭐⭐⭐ (มี transaction + lock) |
+| **ReservationService** | จอง, อนุมัติ, ยกเลิก, หมดอายุ | ⭐⭐⭐ (มี transaction + lock + lazy expire) |
+| **BookService** | CRUD หนังสือ + guard ก่อนลบ | ⭐⭐ |
+| **MemberService** | CRUD สมาชิก + import CSV | ⭐⭐ |
+| **HomeService** | หน้าแรก (public) | ⭐ (read-only + lazy expire) |
+| **DashboardService** | สถิติ admin dashboard | ⭐ (read-only aggregator) |
+| **ReportService** | รายงานเชิงลึก | ⭐ (read-only aggregator) |
+
+### แผนที่ Repository ↔ ตาราง
+
+| Repository | ตาราง | จุดเด่น |
+|-----------|-------|--------|
+| **UserRepository** | users | findByEmail, emailExists, findMembers |
+| **BookRepository** | books | decrementAvailable (WHERE guard), findByIdForUpdate |
+| **BorrowRepository** | borrows | countActiveBorrowsForUpdate (lock), isAlreadyBorrowing |
+| **ReservationRepository** | reservations | countPendingByUser, markExpiredReservations |
+| **CategoryRepository** | categories | CRUD หมวดหมู่ |
+| **PaymentRepository** | payments | UNIQUE constraint บน borrow_id |
+| **PasswordResetRepository** | password_resets | token management |
+| **ReportRepository** | หลายตาราง (JOIN) | สถิติและรายงาน |
+| **SettingsRepository** | settings | key-value store |
 
 ---
 
@@ -572,32 +748,40 @@ Staff กดลบ → BookService ตรวจ:
 
 ### ระบบนี้เหมาะกับใคร?
 
-- **คนที่อยากเรียนรู้ PHP + Backend** → เห็นตัวอย่างจริงของ Controller, Service, Repository, Transaction, Security
-- **นักศึกษาที่ต้องส่ง project** → มีครบ: ยืม-คืน, จอง, ค่าปรับ, รายงาน, บัตรสมาชิก
-- **คนที่อยากเดโมให้ลูกค้า** → หน้าตาใช้ได้ ฟีเจอร์ครบ ทำงานได้จริง
-- **ร้านหรือห้องสมุดเล็กๆ** → ใช้งานจริงได้ ในขอบเขตที่เหมาะสม
+- **นักศึกษา** ที่ต้องส่งโปรเจคจบหรือรายงาน — ได้ระบบสมบูรณ์พร้อมใช้
+- **ผู้สอน** ที่ต้องการตัวอย่าง PHP ที่เขียนดี มีโครงสร้างชัดเจน
+- **ผู้เริ่มต้น** ที่อยากเรียนรู้ backend: layered architecture, security, transaction
+- **Freelancer** ที่อยากมี template ไว้ต่อยอดงานให้ลูกค้า
+- **ห้องสมุดขนาดเล็ก** ที่ต้องการระบบยืมคืนบนเว็บ
 
 ### ใช้เรียนรู้อะไรได้บ้าง?
 
-| หัวข้อ | เรียนได้จาก |
-|--------|------------|
-| Layered Architecture | โครงสร้าง Controller → Service → Repository |
-| Transaction Management | BorrowService, ReservationService |
-| Concurrency Control (Row Locking) | ทุก Service ที่มี `FOR UPDATE` |
-| Authentication + Security | AuthService, login.php, rate limit |
-| CRUD + Validation | BookService, MemberService |
-| State Machine | ReservationService (pending → fulfilled/cancelled/expired) |
-| Report + Export | ReportService, admin/reports.php |
-| Session Management | bootstrap.php, functions.php |
+| หัวข้อ | ตัวอย่างในระบบ |
+|--------|---------------|
+| **Layered Architecture** | Controller → Service → Repository → Database |
+| **Transaction & Locking** | ยืม, คืน, จอง ทุก flow ที่แก้ข้อมูลหลายตาราง |
+| **Security** | CSRF, XSS prevention, Rate Limiting, Session Management, Password Hashing |
+| **CRUD + Validation** | หนังสือ, สมาชิก, หมวดหมู่ — มี shared validation helper |
+| **Stock Management** | available tracking, guard ป้องกันติดลบ/เกิน |
+| **Race Condition Prevention** | row locking, idempotency key, deadlock prevention |
+| **Quota System** | นับ borrows + reservations รวมกัน |
+| **Lazy Processing** | จองหมดอายุ → คืน stock ตอนเปิดหน้า |
+| **Single Source of Truth** | ค่าคงที่ใน config, validation ใน helper, fine calculation ใน Service |
+| **Role-based Access Control** | admin / staff / member แยกสิทธิ์ชัดเจน |
 
 ### ควรรู้อะไรก่อนนำไปใช้หรือขายต่อ?
 
-1. **อ่านเอกสารให้ครบ** — README.md, SUPPORT.md, และไฟล์ใน docs/
-2. **ทดลองทุก flow ด้วยตัวเอง** — ยืม, คืน, จอง, ค่าปรับ, จัดการหนังสือ, สมาชิก
-3. **รู้ขอบเขต** — เป็น template สำหรับเรียนรู้และธุรกิจเล็ก ไม่ใช่ enterprise software
-4. **รู้จุดที่ห้ามแก้** — อ่านหัวข้อที่ 6 ให้เข้าใจก่อนลงมือแก้อะไร
-5. **เตรียม backup** — ก่อนแก้โค้ดอะไร ใช้ Git เก็บเวอร์ชันไว้เสมอ
+1. **PHP + MySQL พื้นฐาน** — ต้องรู้ว่า `require`, `$_SESSION`, `$_POST` คืออะไร
+2. **XAMPP / WAMP** — ต้องติดตั้ง local server ได้
+3. **อ่าน .env.example** — ค่าที่ต้องปรับก่อนใช้งาน (database, URL)
+4. **รัน install.php ครั้งเดียว** — สร้างตาราง + ข้อมูลเริ่มต้น
+5. **อ่าน README.md ก่อน** — ขั้นตอนติดตั้ง + คำอธิบายระบบ
+6. **อ่าน FLOW.md (ไฟล์นี้)** — ภาพรวมการทำงาน
+7. **ระวังส่วนที่ห้ามแก้** — ดูหัวข้อ 6.6 ก่อนแก้โค้ด
 
 ---
 
-*เอกสารนี้เป็นส่วนหนึ่งของชุดโค้ด "ระบบยืมคืนหนังสือ" — อธิบายจากโค้ดจริงทั้งหมด ไม่มีการเดา*
+> 📖 **เอกสารอื่นที่เกี่ยวข้อง:**
+> - `README.md` — ภาพรวมระบบ + วิธีติดตั้ง + คำอธิบายสำหรับมือใหม่
+> - `FAQ.md` — คำถามที่พบบ่อย
+> - `STUDY_GUIDE.md` — คู่มือเรียนรู้ระบบเชิงลึก

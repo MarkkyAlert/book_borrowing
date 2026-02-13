@@ -3,19 +3,21 @@
  * Import Books from CSV - นำเข้าหนังสือจากไฟล์ CSV
  * 
  * ⭐ สำหรับคนมาใหม่:
- * - หน้านี้ upload CSV แล้ว import หนังสือเข้าระบบ (ทั้ง create + merge)
+ * - หน้านี้ upload CSV แล้ว import หนังสือเข้าระบบ (create หรือ merge by title+author)
  * - สิทธิ์: staff ขึ้นไป
  * 
  * 📂 Flow:
  * 1. POST → upload CSV → parse ทีละแถว (ภายใน transaction เดียว)
- * 2. ถ้า ISBN ตรงกับที่มีอยู่ → เพิ่ม quantity (merge)
+ * 2. ถ้า ISBN ซ้ำกับที่มีอยู่ → skip แถวนั้น (ไม่ merge)
  * 3. ถ้า title+author ตรงกัน → เพิ่ม quantity (merge)
  * 4. ถ้าไม่พบ → สร้างหนังสือใหม่
- * 5. ล้มเหลวแถวใดแถวหนึ่ง → rollback ทั้งหมด
+ * 5. แถวที่ validation ไม่ผ่าน → skip + เก็บรายละเอียด (ไม่ rollback)
+ * 6. ถ้าเกิด Exception → rollback ทั้ง batch
  * 
  * ⚠️ ระวัง:
- * - ทั้ง batch อยู่ใน transaction เดียว — ผิด 1 แถว = rollback ทั้งไฟล์
- * - CSV format: title, author, isbn, category, quantity, description
+ * - ทั้ง batch อยู่ใน transaction เดียว — Exception = rollback ทั้งไฟล์
+ * - แถวที่ validation ไม่ผ่านจะถูก skip (ไม่ทำให้ rollback)
+ * - CSV format: title, author, isbn, category, quantity
  */
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
@@ -83,8 +85,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $categoryName = trim($row[3] ?? 'General');
                         $qty = max(1, (int)($row[4] ?? 1));
                         
-                        if (empty($title)) {
-                            $skippedDetails[] = "แถวที่ $rowNumber: ชื่อหนังสือว่างเปล่า";
+                        // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ book_form.php)
+                        $bookErrors = validateBookData(['title' => $title, 'author' => $author]);
+                        if (!empty($bookErrors)) {
+                            $skippedDetails[] = "แถวที่ $rowNumber: " . $bookErrors[0];
                             continue;
                         }
                         

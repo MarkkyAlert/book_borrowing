@@ -11,7 +11,8 @@
  * 1. POST → upload CSV → parse ทีละแถว (ภายใน transaction เดียว)
  * 2. ถ้า email มีอยู่แล้ว → update name/phone (ไม่แก้ password)
  * 3. ถ้า email ใหม่ → สร้างสมาชิกใหม่ด้วย default password
- * 4. ล้มเหลวแถวใดแถวหนึ่ง → rollback ทั้งหมด
+ * 4. แถวที่ validation ไม่ผ่าน → skip + เก็บรายละเอียด (ไม่ rollback)
+ * 5. ถ้าเกิด Exception → rollback ทั้ง batch
  * 
  * ⚠️ ระวัง:
  * - สมาชิกใหม่จะได้ default password (123456) — ต้องแจ้งให้เปลี่ยน
