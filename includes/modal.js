@@ -192,9 +192,9 @@
             dialog.classList.add('scale-100', 'opacity-100');
         });
 
-        // Focus OK button
+        // Focus OK button (preventScroll: ป้องกันหน้าเลื่อนลงล่างสุด)
         const okBtn = document.getElementById('app-modal-ok');
-        if (okBtn) okBtn.focus();
+        if (okBtn) okBtn.focus({ preventScroll: true });
 
         // Return promise
         return new Promise((resolve) => {
