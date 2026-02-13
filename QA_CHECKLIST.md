@@ -1,0 +1,646 @@
+# 📋 QA Checklist — ทดสอบทุก Flow ก่อนปล่อยระบบ
+
+> **วัตถุประสงค์**: ใช้ทดสอบระบบยืมคืนหนังสือทีละข้อก่อน deploy / ขาย / ส่งโปรเจกต์
+> **วิธีใช้**: ทำตามทีละข้อ → ติ๊ก ✅ เมื่อผ่าน → ถ้าไม่ผ่านให้จดบันทึกไว้แก้ไข
+> **ค่า Config เริ่มต้น**: ยืมได้ 3 เล่ม, ยืม 7 วัน, ค่าปรับวันละ 10 บาท, Rate limit 5 ครั้ง/15 นาที
+
+---
+
+## 📑 สารบัญ
+
+| # | Flow | ความสำคัญ |
+|---|------|-----------|
+| 1 | [ติดตั้งระบบ (Install)](#1-ติดตั้งระบบ-install) | 🔴 Critical |
+| 2 | [Login / Logout](#2-login--logout) | 🔴 Critical |
+| 3 | [Register (สมัครสมาชิก)](#3-register-สมัครสมาชิก) | 🔴 Critical |
+| 4 | [ลืมรหัสผ่าน / Reset Password](#4-ลืมรหัสผ่าน--reset-password) | 🟡 Important |
+| 5 | [โปรไฟล์ผู้ใช้](#5-โปรไฟล์ผู้ใช้) | 🟡 Important |
+| 6 | [หน้าแรก + ค้นหาหนังสือ (Public)](#6-หน้าแรก--ค้นหาหนังสือ-public) | 🟡 Important |
+| 7 | [จองหนังสือ (Reservation)](#7-จองหนังสือ-reservation) | 🔴 Critical |
+| 8 | [ยืม-คืนหนังสือ (Borrow/Return)](#8-ยืม-คืนหนังสือ-borrowreturn) | 🔴 Critical |
+| 9 | [ค่าปรับ + ชำระเงิน (Fine/Payment)](#9-ค่าปรับ--ชำระเงิน-finepayment) | 🔴 Critical |
+| 10 | [จัดการหนังสือ (Admin: Books)](#10-จัดการหนังสือ-admin-books) | 🟡 Important |
+| 11 | [จัดการหมวดหมู่ (Admin: Categories)](#11-จัดการหมวดหมู่-admin-categories) | 🟢 Normal |
+| 12 | [จัดการสมาชิก (Admin: Members)](#12-จัดการสมาชิก-admin-members) | 🟡 Important |
+| 13 | [จัดการการจอง (Admin: Reservations)](#13-จัดการการจอง-admin-reservations) | 🔴 Critical |
+| 14 | [Import CSV](#14-import-csv) | 🟢 Normal |
+| 15 | [Dashboard + Reports](#15-dashboard--reports) | 🟢 Normal |
+| 16 | [ตั้งค่าระบบ (Admin: Settings)](#16-ตั้งค่าระบบ-admin-settings) | 🟢 Normal |
+| 17 | [Security Testing](#17-security-testing) | 🔴 Critical |
+| 18 | [Concurrency + Idempotency](#18-concurrency--idempotency) | 🔴 Critical |
+| 19 | [Data Integrity (ความถูกต้องข้อมูล)](#19-data-integrity-ความถูกต้องข้อมูล) | 🔴 Critical |
+| 20 | [UI / UX / Responsive](#20-ui--ux--responsive) | 🟡 Important |
+
+---
+
+## 1. ติดตั้งระบบ (Install)
+
+### Happy Path
+- [ ] เปิด `/install.php` → เห็นฟอร์มติดตั้ง
+- [ ] กรอกข้อมูล DB ถูกต้อง → กด Install → สร้าง DB + ตารางสำเร็จ
+- [ ] ระบบสร้าง admin user ที่ตั้งไว้ (admin / รหัสผ่านที่กรอก)
+- [ ] หลัง install → redirect ไปหน้า login
+- [ ] Login ด้วย admin ที่พึ่งสร้าง → เข้า admin panel ได้
+
+### Failure Case
+- [ ] กรอก DB host ผิด → แสดง error ชัดเจน, ไม่ครัช
+- [ ] กรอก DB name ไม่มีอยู่ → แสดง error ชัดเจน
+- [ ] กรอก password admin สั้นเกินไป (< 6 ตัว) → แสดง error
+- [ ] ลอง install ซ้ำ (DB มีอยู่แล้ว) → ทำงานถูกต้อง / แจ้งเตือน
+
+### Security
+- [ ] หลัง install → ไฟล์ `.installed` ถูกสร้าง → เข้า install.php อีกครั้งแสดง "ติดตั้งแล้ว"
+- [ ] เข้า install.php ด้วย `?force=1` เมื่อมี `.installed` → ตรวจพฤติกรรมว่าปลอดภัย
+
+---
+
+## 2. Login / Logout
+
+### Happy Path
+- [ ] เปิด `/login.php` → เห็นฟอร์ม login
+- [ ] กรอก email + password ถูกต้อง (member) → redirect ไปหน้าแรก
+- [ ] กรอก email + password ถูกต้อง (admin) → redirect ไป admin panel
+- [ ] กรอก email + password ถูกต้อง (staff) → redirect ไป admin panel
+- [ ] กดปุ่ม Logout → session ถูกทำลาย, redirect ไป login
+- [ ] หลัง logout กดปุ่ม Back ของ browser → ไม่กลับไป session เดิม
+
+### Failure Case
+- [ ] กรอก email ถูก, password ผิด → แสดง error "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
+- [ ] กรอก email ไม่มีในระบบ → แสดง error เดียวกัน (ไม่บอกว่า email ไม่มี)
+- [ ] ไม่กรอกอะไรเลย กด login → แสดง error validation
+- [ ] เข้าหน้า login ขณะ login อยู่แล้ว → redirect ไปหน้าที่เหมาะสม
+
+### Edge Case
+- [ ] กรอกช่องว่างนำหน้า/ท้าย email → ระบบ trim ให้ + login ได้
+- [ ] ใส่ email แบบ UPPER CASE → login ได้ (case insensitive)
+
+### Session Security
+- [ ] Login สำเร็จ → session ID เปลี่ยน (session_regenerate_id)
+- [ ] Logout → session ถูก destroy + cookie ถูกลบ
+- [ ] ปล่อยไว้ไม่ใช้งาน > 1 ชม. → session หมดอายุ ต้อง login ใหม่
+
+### Rate Limiting
+- [ ] ลอง login ผิด 5 ครั้ง → ครั้งที่ 6 แสดง "ลองผิดหลายครั้ง กรุณารอ 15 นาที"
+- [ ] รอ 15 นาทีหลัง rate limit → login ได้อีกครั้ง
+- [ ] Login สำเร็จหลัง rate limit reset → counter ถูก reset
+
+---
+
+## 3. Register (สมัครสมาชิก)
+
+### Happy Path
+- [ ] เปิด `/register.php` → เห็นฟอร์มสมัคร
+- [ ] กรอก ชื่อ, email, password ครบถ้วน → สมัครสำเร็จ
+- [ ] หลังสมัคร → login ด้วย credential ที่กรอก → เข้าระบบได้
+- [ ] สมาชิกที่สมัครมี role = "member" เสมอ
+
+### Failure Case
+- [ ] ไม่กรอกชื่อ → error
+- [ ] ไม่กรอก email → error
+- [ ] กรอก email ไม่ถูกรูปแบบ (เช่น `test@`) → error
+- [ ] กรอก password สั้นเกินไป (< 6 ตัว) → error
+- [ ] password กับ confirm password ไม่ตรงกัน → error
+- [ ] สมัคร email ซ้ำกับที่มีอยู่ → error "อีเมลนี้ถูกใช้งานแล้ว"
+
+### Security
+- [ ] ใส่ `<script>alert(1)</script>` ในช่องชื่อ → ไม่เกิด XSS
+- [ ] ไม่สามารถกำหนด role = "admin" ผ่าน form ได้
+- [ ] ตรวจ CSRF token → ส่ง POST โดยไม่มี token → error
+
+---
+
+## 4. ลืมรหัสผ่าน / Reset Password
+
+### Happy Path
+- [ ] เปิด `/forgot_password.php` → กรอก email ที่มีในระบบ → แสดง link reset (APP_DEBUG=true)
+- [ ] คลิก link reset → เข้าหน้า `/reset_password.php` ได้
+- [ ] ตั้ง password ใหม่ → login ด้วย password ใหม่ได้
+- [ ] Password เก่าใช้ไม่ได้แล้ว
+
+### Failure Case
+- [ ] กรอก email ที่ไม่มีในระบบ → แสดงข้อความกลาง (ไม่บอกว่า email ไม่มี)
+- [ ] ใช้ link reset ที่หมดอายุแล้ว → error
+- [ ] ใช้ link reset ซ้ำ (ใช้ไปแล้ว) → error
+
+### Rate Limiting
+- [ ] ส่ง forgot password หลายครั้งรัว ๆ → rate limit ทำงาน
+
+---
+
+## 5. โปรไฟล์ผู้ใช้
+
+### Happy Path
+- [ ] เปิด `/profile.php` → เห็นข้อมูลตัวเอง (ชื่อ, email, เบอร์โทร)
+- [ ] แก้ไขชื่อ → บันทึก → ชื่อเปลี่ยน
+- [ ] แก้ไขเบอร์โทร → บันทึก → เบอร์เปลี่ยน
+- [ ] เปลี่ยนรหัสผ่าน: กรอก password เก่าถูก + password ใหม่ → สำเร็จ
+- [ ] เห็นสถิติยืม/จองบนหน้า profile
+
+### Failure Case
+- [ ] แก้ชื่อเป็นว่าง → error
+- [ ] เปลี่ยนรหัสผ่าน: กรอก password เก่าผิด → error
+- [ ] เปลี่ยนรหัสผ่าน: password ใหม่สั้นเกินไป → error
+- [ ] เปลี่ยนรหัสผ่าน: password ใหม่ ≠ confirm → error
+
+### Security
+- [ ] ไม่สามารถเปลี่ยน email ได้ (ป้องกัน account takeover)
+- [ ] Rate limit สำหรับเปลี่ยนรหัสผ่าน (brute force old password)
+- [ ] เปลี่ยน password ใหม่เป็นรหัสเดิม → error "ต้องไม่ซ้ำกับรหัสปัจจุบัน"
+- [ ] ส่ง POST แก้ email ผ่าน DevTools → email ไม่เปลี่ยน (ใช้ค่าจาก DB เสมอ)
+
+---
+
+## 6. หน้าแรก + ค้นหาหนังสือ (Public)
+
+### Happy Path
+- [ ] เปิด `/index.php` → เห็นรายการหนังสือ
+- [ ] ค้นหาด้วยชื่อหนังสือ → แสดงผลที่ตรง
+- [ ] ค้นหาด้วยชื่อผู้แต่ง → แสดงผลที่ตรง
+- [ ] กรองตามหมวดหมู่ → แสดงเฉพาะหมวดที่เลือก
+- [ ] เรียงลำดับ (ใหม่สุด, เก่าสุด, A-Z) → ทำงานถูกต้อง
+- [ ] คลิกดูรายละเอียดหนังสือ → เปิด `/book.php?id=X` → เห็นข้อมูลครบ
+
+### Edge Case
+- [ ] ค้นหาด้วยคำที่ไม่มี → แสดง "ไม่พบหนังสือ" (ไม่ error)
+- [ ] ค้นหาด้วยอักขระพิเศษ (`%`, `'`, `<`) → ไม่ error, ไม่เกิด SQLi/XSS
+- [ ] เข้าดูหนังสือ ID ที่ไม่มีอยู่ → แสดง error 404 / redirect
+
+### API (search_books.php)
+- [ ] `GET /api/search_books.php?q=test` → ส่ง JSON กลับมาถูกต้อง
+- [ ] `POST /api/search_books.php` → ได้ 405 Method Not Allowed
+- [ ] ค้นหาด้วย string ยาวมาก → ไม่ครัช
+
+---
+
+## 7. จองหนังสือ (Reservation)
+
+### Happy Path
+- [ ] Login เป็น member → เปิดหน้าหนังสือ → กดปุ่ม "จอง" → จองสำเร็จ
+- [ ] หลังจอง → stock (available) ลดลง 1
+- [ ] เปิด `/my_reservations.php` → เห็นรายการจองของตัวเอง สถานะ "pending"
+- [ ] กด "ยกเลิกการจอง" → สถานะเปลี่ยนเป็น "cancelled"
+- [ ] หลังยกเลิก → stock กลับมา +1
+
+### Lazy Expiration
+- [ ] สร้างการจองที่หมดอายุ → เปิดหน้าหนังสือ `/book.php` → stock คืนอัตโนมัติ (lazy expire)
+- [ ] สถานะจองเปลี่ยนเป็น "expired" โดยไม่ต้องรอ cron
+
+### Failure Case
+- [ ] จองหนังสือที่ available = 0 → error "หนังสือไม่มีให้จอง"
+- [ ] จองหนังสือเล่มเดียวกันซ้ำ (มีจอง pending อยู่) → error "จองอยู่แล้ว"
+- [ ] จองเกินโควตา (ยืม + จอง pending รวม ≥ 3 เล่ม) → error
+- [ ] ยืมหนังสือเล่มที่จองอยู่ → error "กำลังยืมอยู่แล้ว"
+- [ ] ยกเลิกการจองที่ไม่ใช่ของตัวเอง → error (IDOR protection)
+
+### Rate Limiting
+- [ ] จองรัว ๆ หลายเล่มต่อเนื่อง → rate limit ทำงาน
+
+### My Reservations Page
+- [ ] กรองตาม tab: ทั้งหมด / รอดำเนินการ / อนุมัติแล้ว / ยกเลิก / หมดอายุ → แสดงถูกหมวด
+- [ ] หน้าแสดงผลถูกต้องบนมือถือ (responsive)
+
+---
+
+## 8. ยืม-คืนหนังสือ (Borrow/Return)
+
+> ⚠️ ยืม-คืนทำผ่าน Admin Panel เท่านั้น
+
+### Happy Path — ยืม (ทีละเล่ม)
+- [ ] Admin → เปิด `/admin/borrow_form.php` → เลือกสมาชิก + หนังสือ 1 เล่ม → กด "บันทึกการยืม"
+- [ ] สร้างรายการยืมสำเร็จ → stock ลดลง 1
+- [ ] จำนวนเล่มที่ยืมได้ของสมาชิก (available slots) ลดลง
+- [ ] เห็นรายการในหน้า `/admin/borrows.php` สถานะ "borrowing"
+- [ ] สมาชิกเห็นรายการใน `/my_borrows.php`
+
+### Happy Path — ยืมหลายเล่มพร้อมกัน
+- [ ] เลือกสมาชิก + หนังสือ 2-3 เล่ม → กดบันทึก → สร้างรายการยืมครบทุกเล่ม
+- [ ] Stock ลดลงถูกต้องทุกเล่ม (atomic — ถ้าเล่มใดพัง rollback ทั้งหมด)
+- [ ] Quota ถูกตรวจก่อนยืม: เลือก 3 เล่ม + ยืมอยู่ 1 → error เกินโควตา
+
+### Failure Case — ยืม
+- [ ] ยืมหนังสือที่ available = 0 → error "หนังสือหมด"
+- [ ] ยืมหนังสือเล่มเดียวกันที่ยืมอยู่แล้ว → error "ยืมอยู่แล้ว"
+- [ ] ยืมเกินโควตา (3 เล่ม) → error "ถึงจำนวนสูงสุดแล้ว"
+- [ ] ยืมให้สมาชิกที่ไม่มีในระบบ (user_id ไม่มี) → error
+- [ ] ยืมหนังสือที่ไม่มีในระบบ (book_id ไม่มี) → error
+
+### Happy Path — คืน
+- [ ] Admin → หน้า borrows → กดปุ่ม "คืนหนังสือ" → สถานะเปลี่ยนเป็น "returned"
+- [ ] stock (available) เพิ่มกลับ +1
+- [ ] วันที่คืน (return_date) ถูกบันทึก
+- [ ] จำนวนเล่มที่ยืมได้ของสมาชิก กลับมา +1
+
+### Happy Path — คืนเกินกำหนด (มีค่าปรับ)
+- [ ] คืนหนังสือที่ due_date ผ่านไปแล้ว 3 วัน → ค่าปรับ = 30 บาท (3 × 10)
+- [ ] เลือก "จ่ายเลย" → สถานะ = returned, fine_amount มีค่า, สร้าง payment record
+- [ ] เลือก "จ่ายทีหลัง" → สถานะ = returned, fine_amount มีค่า, ยังไม่มี payment
+
+### Edge Case — คืน
+- [ ] คืนหนังสือที่ไม่ใช่สถานะ "borrowing" → error
+- [ ] คืนหนังสือวันเดียวกับวัน due → ค่าปรับ = 0
+- [ ] คืนหนังสือก่อนกำหนด → ค่าปรับ = 0
+
+### My Borrows (สมาชิก)
+- [ ] สมาชิกเปิด `/my_borrows.php` → เห็นเฉพาะรายการของตัวเอง
+- [ ] กรองตาม: กำลังยืม / คืนแล้ว / เกินกำหนด → แสดงถูกหมวด
+- [ ] เห็นวันกำหนดคืน + สถานะค่าปรับ (ถ้ามี)
+
+---
+
+## 9. ค่าปรับ + ชำระเงิน (Fine/Payment)
+
+### Happy Path
+- [ ] Admin → เปิด `/admin/payments.php` → เห็นสถิติ: รายได้รวม / ค้างชำระ / เดือนนี้
+- [ ] เห็นรายการค้างชำระ (Unpaid section) → กดปุ่ม "รับชำระ"
+- [ ] ชำระสำเร็จ → ย้ายจาก Unpaid ไป Payment History
+- [ ] Payment record มี recorded_by = admin ที่กดรับชำระ
+- [ ] ยอดค้างชำระลดลง, ยอดชำระแล้วเพิ่มขึ้น
+
+### Failure Case
+- [ ] ชำระค่าปรับที่ชำระไปแล้ว → error (ไม่ชำระซ้อน)
+- [ ] ชำระค่าปรับของ borrow ที่ไม่มี fine_amount → error
+
+### Edge Case
+- [ ] สมาชิก 1 คนค้าง 3 รายการ → กรุ๊ปรวมถูกต้อง, ชำระทีละรายการได้
+- [ ] ค้นหา payment history ด้วยชื่อสมาชิก → แสดงถูกต้อง
+
+### Idempotency
+- [ ] กดปุ่ม "รับชำระ" 2 ครั้งติด (double click) → ชำระแค่ครั้งเดียว
+
+---
+
+## 10. จัดการหนังสือ (Admin: Books)
+
+### Happy Path
+- [ ] Admin → `/admin/books.php` → เห็นรายการหนังสือ
+- [ ] กด "เพิ่มหนังสือ" → กรอก ชื่อ, ผู้แต่ง, หมวด, จำนวน → บันทึกสำเร็จ
+- [ ] อัปโหลดรูปปก → รูปแสดงถูกต้อง
+- [ ] แก้ไขหนังสือ → ข้อมูลอัปเดตถูกต้อง
+- [ ] ลบหนังสือ → หนังสือหายจากรายการ
+- [ ] ค้นหา → แสดงผลตรงตามคำค้นหา
+- [ ] กรองตามหมวดหมู่ / สถานะ → แสดงถูกต้อง
+- [ ] เรียงลำดับ → ทำงานถูกต้อง
+
+### Failure Case
+- [ ] เพิ่มหนังสือโดยไม่กรอกชื่อ → error
+- [ ] เพิ่มหนังสือโดยไม่กรอกผู้แต่ง → error
+- [ ] ลบหนังสือที่มีคนยืมอยู่ → error (FK constraint / guard)
+- [ ] อัปโหลดไฟล์ที่ไม่ใช่รูป → error
+- [ ] อัปโหลดรูปขนาดใหญ่เกินไป → error
+
+### Edge Case — เพิ่ม/แก้ไข
+- [ ] เพิ่มหนังสือจำนวน = 0 → ระบบบังคับขั้นต่ำ 1 เล่ม
+- [ ] ชื่อหนังสือยาวมาก (> 200 ตัว) → error validation
+- [ ] เพิ่มหนังสือ ISBN ซ้ำกับที่มีอยู่ → error "ISBN นี้มีในระบบแล้ว"
+- [ ] แก้ไข ISBN เป็นค่าที่ซ้ำกับเล่มอื่น → error (exclude ตัวเอง)
+
+### Edge Case — แก้ไข Quantity
+- [ ] หนังสือ quantity=10, available=3 (ออกอยู่ 7 เล่ม) → ลด quantity เป็น 5 → error "มีหนังสือออกอยู่ 7 เล่ม"
+- [ ] เพิ่ม quantity จาก 10→15 → available เพิ่มจาก 3→8 (ถูกต้อง)
+- [ ] ลด quantity จาก 10→8 → available ลดจาก 3→1 (ถูกต้อง, ไม่ติดลบ)
+
+### Edge Case — ลบ
+- [ ] ลบหนังสือที่มีประวัติยืม (returned แล้ว) → error "มีประวัติการยืม"
+- [ ] ลบหนังสือที่มี pending reservation → error "มีการจองที่รอดำเนินการ"
+- [ ] ลบหนังสือที่ available = quantity (ไม่มีใครยืม/จอง) → ลบสำเร็จ + รูปปกถูกลบจาก disk
+
+### File Upload Security
+- [ ] อัปโหลดไฟล์ `.php` เปลี่ยน extension → error (ตรวจ MIME จาก content จริง)
+- [ ] อัปโหลดรูป > 2MB → error
+- [ ] อัปโหลดรูปสำเร็จ → ชื่อไฟล์ใน disk เป็น `cover_xxx.jpg` (ไม่ใช้ชื่อจาก user)
+
+---
+
+## 11. จัดการหมวดหมู่ (Admin: Categories)
+
+### Happy Path
+- [ ] Admin → `/admin/categories.php` → เห็นรายการหมวดหมู่ + จำนวนหนังสือในแต่ละหมวด
+- [ ] เพิ่มหมวดหมู่ → ปรากฏในรายการ
+- [ ] แก้ไขหมวดหมู่ → ชื่อเปลี่ยน
+- [ ] ลบหมวดหมู่ (ที่ไม่มีหนังสือ) → ลบสำเร็จ
+
+### Failure Case
+- [ ] เพิ่มชื่อหมวดว่าง → error
+- [ ] เพิ่มชื่อหมวดซ้ำ → error
+- [ ] ลบหมวดที่มีหนังสืออยู่ → error (FK constraint)
+
+---
+
+## 12. จัดการสมาชิก (Admin: Members)
+
+### Happy Path
+- [ ] Admin → `/admin/members.php` → เห็นรายการสมาชิกทั้งหมด
+- [ ] เห็นคอลัมน์: ชื่อ, สิทธิ์ (member/staff), อีเมล, เบอร์โทร, กำลังยืม, รวมยืม
+- [ ] กด "เพิ่มสมาชิก" → กรอกข้อมูล → บันทึกสำเร็จ
+- [ ] ไม่กรอก password → ระบบ auto-generate ให้ + แจ้ง staff
+- [ ] แก้ไขข้อมูลสมาชิก → อัปเดตสำเร็จ
+- [ ] ค้นหาสมาชิก → แสดงผลตรง
+- [ ] กรองตามสถานะ / สิทธิ์ / เรียงลำดับ → ทำงานถูกต้อง
+
+### Role Management (Admin เท่านั้น)
+- [ ] Admin → แก้ไขสมาชิก → เห็น dropdown "สิทธิ์การใช้งาน" (member / staff)
+- [ ] เปลี่ยน member → staff → สมาชิกเข้า admin panel ได้
+- [ ] เปลี่ยน staff → member → สมาชิกเข้า admin panel ไม่ได้
+- [ ] Staff login → ไม่เห็น dropdown เปลี่ยน role (เห็นเฉพาะ admin)
+
+### Failure Case
+- [ ] เพิ่มสมาชิก email ซ้ำ → error
+- [ ] แก้ไข email เป็น email ที่มีอยู่แล้ว → error
+
+### ลบสมาชิก
+- [ ] ลบสมาชิกที่ไม่มีการยืมเลย → ลบสำเร็จ
+- [ ] ลบสมาชิกที่มีการยืมอยู่ (active borrows > 0) → error
+- [ ] ลบสมาชิกที่มีประวัติยืม (returned แล้ว) → error "มีประวัติการยืม" (ข้อมูลสถิติห้ามหาย)
+- [ ] ลบสมาชิกที่มี pending reservation → error "กรุณายกเลิกการจองก่อน"
+- [ ] ลบ admin → ไม่สามารถลบได้ (role guard)
+- [ ] FK RESTRICT safety net: ถ้า guard ไม่ทัน → แสดง error ภาษาไทย (ไม่แสดง SQL error)
+
+---
+
+## 13. จัดการการจอง (Admin: Reservations)
+
+### Happy Path — อนุมัติ (Fulfill)
+- [ ] Admin → `/admin/reservations.php` → เห็นรายการจอง pending
+- [ ] กดปุ่ม "อนุมัติ" → สถานะเปลี่ยนเป็น "fulfilled"
+- [ ] ระบบสร้างรายการยืม (borrow) อัตโนมัติ
+- [ ] สมาชิกเห็นรายการยืมใหม่ใน my_borrows
+- [ ] Stock ไม่เปลี่ยน (หักตอนจองไปแล้ว)
+
+### Happy Path — ยกเลิก (Cancel by Admin)
+- [ ] กดปุ่ม "ยกเลิก" → สถานะเปลี่ยนเป็น "cancelled"
+- [ ] Stock คืนกลับ +1
+- [ ] สมาชิกเห็นสถานะ "ยกเลิก" ใน my_reservations
+
+### Failure Case
+- [ ] อนุมัติการจองที่ cancelled แล้ว → error
+- [ ] อนุมัติการจองที่ expired แล้ว → error
+- [ ] อนุมัติเมื่อสมาชิกยืมเต็มโควตาแล้ว → error
+- [ ] อนุมัติเมื่อสมาชิกยืมเล่มนี้อยู่แล้ว → error
+- [ ] ยกเลิกการจองที่ fulfilled แล้ว → error (terminal state)
+
+### Idempotency
+- [ ] กดปุ่มอนุมัติ 2 ครั้งติด (double click) → อนุมัติแค่ครั้งเดียว
+- [ ] กดปุ่มยกเลิก 2 ครั้งติด → ยกเลิกแค่ครั้งเดียว (stock +1 ไม่ใช่ +2)
+
+---
+
+## 14. Import CSV
+
+### Happy Path — Import หนังสือ
+- [ ] Admin → `/admin/import_books.php` → อัปโหลด CSV ที่ถูกรูปแบบ
+- [ ] Import สำเร็จ → แสดงผลลัพธ์: กี่รายการสำเร็จ / กี่รายการ error
+- [ ] ตรวจสอบข้อมูลในตารางหนังสือ → ถูกต้อง
+
+### Happy Path — Import สมาชิก
+- [ ] Admin → `/admin/import_members.php` → อัปโหลด CSV ที่ถูกรูปแบบ
+- [ ] Import สำเร็จ → แสดงผลลัพธ์
+- [ ] สมาชิกที่ import เข้ามา login ได้
+
+### Merge/Upsert Strategy
+- [ ] Import หนังสือ: title+author ตรงกับที่มี → เพิ่ม quantity (ไม่สร้างซ้ำ)
+- [ ] Import หนังสือ: ISBN ซ้ำกับที่มี → skip แถวนั้น + แจ้งเตือน
+- [ ] Import หนังสือ: หมวดหมู่ใหม่ที่ไม่มีในระบบ → สร้างหมวดหมู่อัตโนมัติ
+- [ ] Import สมาชิก: email ซ้ำกับที่มี → update ชื่อ/เบอร์ (ไม่แก้ password)
+- [ ] Import สมาชิก: email ใหม่ → สร้างด้วย default password (123456)
+
+### Failure Case
+- [ ] อัปโหลดไฟล์ที่ไม่ใช่ CSV → error
+- [ ] CSV ที่มี column ผิดรูปแบบ → แสดง error แต่ละ row (ไม่ rollback ทั้งไฟล์)
+- [ ] CSV ว่าง (ไม่มีข้อมูล) → error
+- [ ] CSV ที่มี encoding เป็น UTF-8 + BOM → ทำงานได้
+
+### Atomicity
+- [ ] Import 100 แถว, แถวที่ 50 เกิด Exception → rollback ทั้ง batch (all-or-nothing)
+- [ ] แถวที่ validation ไม่ผ่าน → skip แถวนั้น + ดำเนินการต่อ (ไม่ rollback)
+
+---
+
+## 15. Dashboard + Reports
+
+### Dashboard
+- [ ] Admin → `/admin/index.php` → เห็น dashboard
+- [ ] สถิติ: จำนวนหนังสือ, สมาชิก, รายการยืม, รายการเกินกำหนด → ตัวเลขถูกต้อง
+- [ ] รายการยืมล่าสุด → แสดงถูกต้อง
+- [ ] รายการเกินกำหนด → แสดงเฉพาะที่เกิน
+- [ ] Pending reservations badge → แสดงจำนวนถูกต้อง
+
+### Reports
+- [ ] Admin → `/admin/reports.php` → เห็นรายงานสรุป
+- [ ] สถิติสอดคล้องกับข้อมูลจริง
+
+### Export PDF
+- [ ] Admin → `/admin/export_pdf.php` → export PDF ได้
+- [ ] Print หน้า payments → แสดงผลถูกต้อง (print CSS)
+
+### Member Card / Labels
+- [ ] Admin → `/admin/member_card.php?id=X` → แสดงบัตรสมาชิก
+- [ ] Admin → `/admin/book_labels.php` → แสดง label หนังสือ
+- [ ] Print → layout ถูกต้อง
+
+---
+
+## 16. ตั้งค่าระบบ (Admin: Settings)
+
+### Happy Path
+- [ ] Admin → `/admin/settings.php` → เห็นฟอร์มตั้งค่า
+- [ ] แก้ชื่อองค์กร → บันทึก → ชื่อเปลี่ยนบนบัตรสมาชิก
+- [ ] แก้สีธีม → Preview แสดงสีใหม่ทันที
+- [ ] บันทึกสำเร็จ → flash message แสดง
+
+### Failure Case
+- [ ] ใส่รหัสสีผิดรูปแบบ → error validation
+- [ ] ชื่อองค์กรว่าง → error
+
+### Security
+- [ ] Staff ไม่เห็นหน้า settings (admin เท่านั้น) → redirect / 403
+- [ ] CSRF token ถูกตรวจสอบ
+
+---
+
+## 17. Security Testing
+
+### 🛡️ Authentication & Authorization
+
+- [ ] เข้า `/admin/` โดยไม่ login → redirect ไป login
+- [ ] เข้า `/admin/` ด้วย role member → redirect / 403
+- [ ] เข้า `/admin/settings.php` ด้วย role staff → redirect / 403 (admin only)
+- [ ] เข้า `/my_borrows.php` โดยไม่ login → redirect ไป login
+- [ ] เข้า `/profile.php` โดยไม่ login → redirect ไป login
+- [ ] เข้า `/api/reserve_book.php` (POST) โดยไม่ login → error
+
+### 🛡️ CSRF Protection
+
+- [ ] ทุกฟอร์ม POST มี `csrf_token` → ส่ง POST โดยไม่มี token → error
+- [ ] ใช้ token ที่หมดอายุ → error
+- [ ] ใช้ token ซ้ำ → error (one-time use)
+
+### 🛡️ SQL Injection
+
+- [ ] ใส่ `' OR 1=1 --` ในช่อง login email → ไม่สามารถ bypass ได้
+- [ ] ใส่ `'; DROP TABLE users; --` ในช่อง search → ไม่มีผลกับ DB
+- [ ] ใส่ SQL injection ในทุก input field ที่มี → ไม่มีผล
+
+### 🛡️ XSS (Cross-Site Scripting)
+
+- [ ] ใส่ `<script>alert('xss')</script>` ในชื่อหนังสือ → แสดงเป็น text ไม่ execute
+- [ ] ใส่ `<img src=x onerror=alert(1)>` ในชื่อสมาชิก → แสดงเป็น text
+- [ ] ใส่ HTML tag ในทุกช่อง input → ถูก escape ทั้งหมด
+- [ ] ค้นหาด้วย `"><svg onload=alert(1)>` → ไม่เกิด XSS
+
+### 🛡️ IDOR (Insecure Direct Object Reference)
+
+- [ ] Member A → ยกเลิกการจองของ Member B → error (ไม่สามารถทำได้)
+- [ ] เปลี่ยน `id` ใน URL ของ profile → เห็นแต่ข้อมูลตัวเอง
+- [ ] member/staff → เข้า member_form.php?id=X ของ admin → ไม่สามารถแก้ไขได้
+
+### 🛡️ Session Security
+
+- [ ] หลัง login → session ID เปลี่ยน (session fixation protection)
+- [ ] หลัง logout → session ถูกทำลายสมบูรณ์
+- [ ] Session cookie มี flags: HttpOnly, SameSite=Lax
+- [ ] Session cookie มี Secure flag เมื่อใช้ HTTPS
+- [ ] Session timeout: ไม่ใช้งาน > 1 ชม. → หมดอายุอัตโนมัติ
+
+### 🛡️ File/Directory Protection
+
+- [ ] เข้า `/.env` ผ่าน browser → 403 Forbidden
+- [ ] เข้า `/database/schema.sql` ผ่าน browser → 403 Forbidden
+- [ ] เข้า `/app/Services/BorrowService.php` ผ่าน browser → 403 Forbidden
+- [ ] เข้า `/bootstrap.php` ตรง → 403 "Direct access not allowed"
+- [ ] เข้า `/cron/expire_reservations.php` ผ่าน browser → 403 "Access denied"
+
+### 🛡️ Error Exposure
+
+- [ ] APP_DEBUG=false → error ไม่แสดง stack trace / DB credentials
+- [ ] DB connection fail (APP_DEBUG=false) → แสดง "ระบบขัดข้อง" (ไม่เห็น DSN)
+- [ ] ลบสมาชิกที่มี FK ชี้อยู่ → แสดง error ภาษาไทย (ไม่แสดง PDOException)
+
+---
+
+## 18. Concurrency + Idempotency
+
+### Double Submit
+- [ ] กดปุ่ม "ยืม" 2 ครั้งติด → สร้างแค่ 1 รายการ (idempotency key)
+- [ ] กดปุ่ม "จอง" 2 ครั้งติด → จองแค่ 1 ครั้ง (idempotency key)
+- [ ] กดปุ่ม "คืน" 2 ครั้งติด → คืนแค่ 1 ครั้ง
+- [ ] กดปุ่ม "รับชำระ" 2 ครั้งติด → ชำระแค่ 1 ครั้ง
+- [ ] กดปุ่ม "อนุมัติการจอง" 2 ครั้งติด → อนุมัติแค่ 1 ครั้ง
+
+### Refresh After Submit
+- [ ] หลังจากยืมสำเร็จ → กด F5 (refresh) → ไม่สร้างรายการซ้ำ (PRG pattern)
+- [ ] หลังจากคืนสำเร็จ → กด F5 → ไม่คืนซ้ำ
+- [ ] หลังจากชำระค่าปรับ → กด F5 → ไม่ชำระซ้ำ
+
+### Race Condition
+- [ ] 2 คนจองหนังสือเล่มสุดท้ายพร้อมกัน → มีคนเดียวได้ (FOR UPDATE lock)
+- [ ] Admin อนุมัติ + member ยกเลิก การจองเดียวกันพร้อมกัน → ไม่เกิด inconsistency
+- [ ] 2 admin คืนหนังสือเดียวกันพร้อมกัน → คืนแค่ครั้งเดียว (FOR UPDATE lock)
+- [ ] 2 admin จ่ายค่าปรับเดียวกันพร้อมกัน → จ่ายแค่ครั้งเดียว (UNIQUE borrow_id)
+- [ ] Admin แก้ไข quantity หนังสือ ขณะ user จองพร้อมกัน → stock ไม่เพี้ยน
+- [ ] 2 admin กดลบหนังสือเดียวกัน → ลบแค่ครั้งเดียว
+- [ ] Cron expire + user cancel การจองเดียวกัน → stock คืนแค่ 1 ครั้ง
+
+---
+
+## 19. Data Integrity (ความถูกต้องข้อมูล)
+
+### Stock (จำนวนหนังสือคงเหลือ)
+- [ ] เพิ่มหนังสือ 5 เล่ม → available = 5
+- [ ] ยืมไป 2 เล่ม → available = 3
+- [ ] คืน 1 เล่ม → available = 4
+- [ ] จอง 1 เล่ม → available = 3
+- [ ] ยกเลิกการจอง → available = 4
+- [ ] อนุมัติการจอง → available ไม่เปลี่ยน (หักตอนจองแล้ว)
+- [ ] **available ต้องไม่ติดลบ** → ตรวจ: ลองยืมเมื่อ available = 0
+
+### ค่าปรับ
+- [ ] คืนเกินกำหนด 1 วัน → fine = 10 บาท
+- [ ] คืนเกินกำหนด 5 วัน → fine = 50 บาท
+- [ ] คืนตรงกำหนด → fine = 0
+- [ ] คืนก่อนกำหนด → fine = 0
+- [ ] ชำระค่าปรับแล้ว → payment record สร้างถูกต้อง (amount ตรง)
+
+### จำนวนยืม (Quota)
+- [ ] ยืม 3 เล่ม → ยืมเพิ่มไม่ได้
+- [ ] คืน 1 เล่ม → ยืมเพิ่มได้ 1 เล่ม
+- [ ] จอง 2 เล่ม + ยืม 1 เล่ม → ยืมเพิ่มได้ 0 เล่ม (3 - 1 - 2 = 0)
+
+### ความสัมพันธ์ข้อมูล
+- [ ] ลบหนังสือที่มี borrow history → ไม่สามารถลบได้ (FK)
+- [ ] ลบหมวดหมู่ที่มีหนังสือ → ไม่สามารถลบได้ (FK)
+- [ ] ลบสมาชิกที่มี borrow history → ไม่สามารถลบได้
+
+### Expiration (การจองหมดอายุ)
+- [ ] การจองที่หมดอายุ → สถานะเปลี่ยนเป็น "expired"
+- [ ] Stock คืนกลับเมื่อ expire (+1 ต่อรายการ)
+- [ ] Cron job (`cron/expire_reservations.php`) ทำงานถูกต้องผ่าน CLI
+- [ ] Cron job รันซ้ำหลายครั้ง → ไม่มี side effect (idempotent)
+- [ ] Lazy expire: เปิดหน้าหนังสือ → จองที่หมดอายุถูก expire + stock คืนอัตโนมัติ
+- [ ] Cron job เข้าผ่าน browser → 403 Access denied
+
+### DB Constraints (Safety Net)
+- [ ] `books.available` ไม่สามารถติดลบได้ (CHECK constraint, MySQL 8.0.16+)
+- [ ] `books.available` ไม่สามารถเกิน `quantity` ได้ (CHECK constraint)
+- [ ] `payments.borrow_id` ไม่ซ้ำ (UNIQUE constraint)
+- [ ] `users.email` ไม่ซ้ำ (UNIQUE constraint)
+- [ ] `books.isbn` ไม่ซ้ำ (UNIQUE index)
+
+---
+
+## 20. UI / UX / Responsive
+
+### Desktop (≥ 1024px)
+- [ ] ทุกหน้าแสดงผลถูกต้อง ไม่มี overflow
+- [ ] Sidebar admin ทำงานปกติ
+- [ ] ตารางข้อมูลแสดงครบทุกคอลัมน์
+- [ ] Modal เปิด/ปิดได้ปกติ ไม่กระตุก
+
+### Tablet (768px - 1024px)
+- [ ] Layout ปรับตัวเหมาะสม
+- [ ] ตารางสามารถ scroll แนวนอนได้
+- [ ] ฟอร์มกรอกข้อมูลได้สะดวก
+
+### Mobile (< 768px)
+- [ ] หน้าแรก: หนังสือแสดง 1 คอลัมน์
+- [ ] Navbar: เมนู hamburger ทำงานถูกต้อง
+- [ ] หน้า my_reservations: tab เลื่อนแนวนอนได้
+- [ ] หน้า my_borrows: การ์ดแสดงข้อมูลครบ
+- [ ] ฟอร์ม login/register: ไม่ล้นจอ
+- [ ] Modal: ไม่หลุดจอ, ปิดได้
+
+### Performance
+- [ ] หน้าที่มี modal → เปิด modal ไม่หน่วง (ไม่ใช้ backdrop-blur)
+- [ ] Scroll ไม่กระตุก (ไม่ใช้ background-attachment: fixed)
+- [ ] ภาพปกหนังสือโหลดเร็ว (optimized size)
+
+---
+
+## ✅ สรุปผลการทดสอบ
+
+| Flow | ผ่าน | ไม่ผ่าน | หมายเหตุ |
+|------|------|---------|----------|
+| 1. Install | | | |
+| 2. Login/Logout | | | |
+| 3. Register | | | |
+| 4. Forgot Password | | | |
+| 5. Profile | | | |
+| 6. หน้าแรก + ค้นหา | | | |
+| 7. จองหนังสือ | | | |
+| 8. ยืม-คืน | | | |
+| 9. ค่าปรับ/ชำระ | | | |
+| 10. จัดการหนังสือ | | | |
+| 11. หมวดหมู่ | | | |
+| 12. จัดการสมาชิก | | | |
+| 13. จัดการการจอง | | | |
+| 14. Import CSV | | | |
+| 15. Dashboard/Reports | | | |
+| 16. ตั้งค่าระบบ | | | |
+| 17. Security | | | |
+| 18. Concurrency | | | |
+| 19. Data Integrity | | | |
+| 20. UI/UX | | | |
+
+> **ทดสอบโดย**: _______________
+> **วันที่ทดสอบ**: _______________
+> **เวอร์ชัน**: _______________
+> **ผลรวม**: _____ / _____ ข้อ ผ่าน
