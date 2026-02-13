@@ -168,6 +168,7 @@ class ReservationService
         } catch (Exception $e) {
             // ❌ rollback → stock ไม่ถูกหัก + ไม่มี reservation
             $this->pdo->rollBack();
+            error_log("[ReservationService::createReservation] userId={$userId} bookId={$bookId} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -220,6 +221,7 @@ class ReservationService
         } catch (Exception $e) {
             // ❌ rollback → ยังเป็น pending + stock ไม่ถูกคืน
             $this->pdo->rollBack();
+            error_log("[ReservationService::cancelReservation] resId={$reservationId} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -303,6 +305,7 @@ class ReservationService
         } catch (Exception $e) {
             // ❌ rollback → ยังเป็น pending + ไม่มี borrow
             $this->pdo->rollBack();
+            error_log("[ReservationService::fulfillReservation] resId={$reservationId} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -344,6 +347,7 @@ class ReservationService
         } catch (Exception $e) {
             // ❌ rollback → reservation ยังเป็น pending
             $this->pdo->rollBack();
+            error_log("[ReservationService::expireOverdue] error: " . $e->getMessage());
             throw $e;
         }
     }

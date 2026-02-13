@@ -176,6 +176,7 @@ class BorrowService
         } catch (Exception $e) {
             // ❌ rollback ทั้งหมด → stock ไม่ถูกหัก + ไม่มี borrow record
             $this->pdo->rollBack();
+            error_log("[BorrowService::createBorrow] userId={$userId} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -245,6 +246,7 @@ class BorrowService
         } catch (Exception $e) {
             // ❌ rollback → status ยังเป็น borrowing + stock ไม่ถูกคืน
             $this->pdo->rollBack();
+            error_log("[BorrowService::returnBook] borrowId={$borrowId} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -398,6 +400,7 @@ class BorrowService
         } catch (Exception $e) {
             // ❌ rollback → ไม่มี payment record
             $this->pdo->rollBack();
+            error_log("[BorrowService::payFine] borrowId={$borrowId} error: " . $e->getMessage());
             throw $e;
         }
     }

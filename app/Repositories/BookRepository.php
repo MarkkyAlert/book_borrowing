@@ -706,20 +706,22 @@ class BookRepository
      */
     public function getStatistics(): array
     {
-        // 📝 4 query แยกดึงสถิติคนละตัว
         // 🧠 COALESCE(..., 0) = ถ้าไม่มีหนังสือเลย SUM จะได้ NULL → COALESCE เปลี่ยนเป็น 0
         //    ป้องกัน Dashboard พังเพราะแสดงค่า null แทน 0
-        // ⚠️ query 4 รอบ = 4 round trip ไป DB
-        //    ระดับ template ไม่เป็นปัญหา แต่ถ้าหนังสือเยอะมาก อาจรวมเป็น 1 query ได้
+        $row = $this->pdo->query("
+            SELECT 
+                COALESCE(SUM(quantity), 0) as total,
+                COALESCE(SUM(available), 0) as available,
+                COALESCE(SUM(quantity - available), 0) as borrowed,
+                COUNT(*) as titles
+            FROM books
+        ")->fetch();
+
         return [
-            // total: จำนวน "เล่ม" ทั้งหมด (SUM quantity)
-            'total' => (int) $this->pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM books")->fetchColumn(),
-            // available: จำนวน "เล่ม" ที่ว่าง (SUM available)
-            'available' => (int) $this->pdo->query("SELECT COALESCE(SUM(available), 0) FROM books")->fetchColumn(),
-            // borrowed: จำนวน "เล่ม" ที่ถูกยืม/จอง (total - available)
-            'borrowed' => (int) $this->pdo->query("SELECT COALESCE(SUM(quantity - available), 0) FROM books")->fetchColumn(),
-            // titles: จำนวน "รายการ" หนังสือ (COUNT rows)
-            'titles' => (int) $this->pdo->query("SELECT COUNT(*) FROM books")->fetchColumn(),
+            'total' => (int) $row['total'],
+            'available' => (int) $row['available'],
+            'borrowed' => (int) $row['borrowed'],
+            'titles' => (int) $row['titles'],
         ];
     }
 }

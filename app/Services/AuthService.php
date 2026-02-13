@@ -141,6 +141,7 @@ class AuthService
             return ['success' => true, 'user_id' => $result['id']];
         } catch (\Exception $e) {
             // ❌ MemberService throw Exception → ดักแล้วคืน error message
+            error_log("[AuthService::register] email={$data['email']} error: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -331,6 +332,7 @@ class AuthService
         } catch (\Exception $e) {
             // ❌ rollback ทั้งหมด → password ไม่ถูกเปลี่ยน + token ยังใช้ได้
             $this->pdo->rollBack();
+            error_log("[AuthService::resetPassword] error: " . $e->getMessage());
             return ['success' => false, 'error' => 'เกิดข้อผิดพลาด กรุณาลองใหม่'];
         }
     }

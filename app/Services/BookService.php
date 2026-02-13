@@ -198,6 +198,7 @@ class BookService
 
         } catch (\Exception $e) {
             $this->pdo->rollBack();
+            error_log("[BookService::updateBook] bookId={$id} error: " . $e->getMessage());
             throw $e;
         }
     }
@@ -262,6 +263,7 @@ class BookService
         } catch (Exception $e) {
             // ❌ rollback → หนังสือยังอยู่
             $this->pdo->rollBack();
+            error_log("[BookService::deleteBook] bookId={$id} error: " . $e->getMessage());
             throw $e;
         }
     }

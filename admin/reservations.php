@@ -59,6 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'cancel') {
             // [STATE TRANSITION] pending → cancelled
             //   📦 cancelReservation() ทำ: คืน stock (available +1) + เปลี่ยน status
+            //   🛡️ [BY DESIGN] ไม่ส่ง userId → ข้าม ownership check
+            //      staff/admin ยกเลิกการจองของใครก็ได้ (ต่างจาก member ที่ยกเลิกได้เฉพาะของตัวเอง)
+            //      ดู api/cancel_reservation.php ที่ส่ง $_SESSION['user_id'] เพื่อเช็ค ownership
             $reservationService->cancelReservation($resId);
             $_SESSION['processed_actions'][$idempotencyKey] = time();
             setFlash('success', 'ยกเลิกการจองและคืนสต็อกหนังสือเรียบร้อยแล้ว');

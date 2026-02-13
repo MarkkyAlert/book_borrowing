@@ -597,22 +597,27 @@ function startSession(): void
 
 /**
  * ==========================================================================
- * 🎯 จุดประสงค์: ตรวจ rate limit (DB-based, keyed by IP)
+ * 🎯 จุดประสงค์: ตรวจ rate limit (DB-based)
  * ==========================================================================
  *
  * 📥 Input: @param string $key, @param int|null $maxAttempts, @param int|null $windowMinutes
+ *           @param bool $appendIp  true = ต่อ IP ท้าย key (default, เหมาะกับ login)
+ *                                  false = ใช้ key ตรงๆ (เหมาะกับ reserve ที่ key มี user_id แล้ว)
  * 📤 Output: @return bool true = ยังไม่เกิน limit
  * 🧠 เหตุผล: DB fail → allow (best-effort — ไม่ lock out ทุกคน)
  */
-function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinutes = null): bool
+function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinutes = null, bool $appendIp = true): bool
 {
     // 📝 ใช้ default จาก config.php ถ้าไม่ระบุ
     $maxAttempts = $maxAttempts ?? RATE_LIMIT_MAX_ATTEMPTS;
     $windowMinutes = $windowMinutes ?? RATE_LIMIT_WINDOW_MINUTES;
     
-    // 📝 ใช้ IP + key เป็นตัวระบุ (เช่น "login_192.168.1.1")
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $fullKey = $key . '_' . $ip;
+    // 📝 สร้าง key สำหรับ rate limit
+    //    $appendIp = true  → key + IP (default, เหมาะกับ login/register — จำกัดต่อ IP)
+    //    $appendIp = false → key เท่านั้น (เหมาะกับ reserve — จำกัดต่อ user ไม่ว่า IP ไหน)
+    //    🛡️ [SECURITY FIX] เพิ่ม $appendIp เพราะ reserve ใช้ user_id เป็น key
+    //    แต่ระบบต่อ _IP ให้อัตโนมัติ → user เปลี่ยน IP ก็ bypass rate limit ได้
+    $fullKey = $appendIp ? $key . '_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') : $key;
     
     try {
         $pdo = getDB();
@@ -638,11 +643,11 @@ function checkRateLimit(string $key, ?int $maxAttempts = null, ?int $windowMinut
  * 🎯 จุดประสงค์: เพิ่ม attempt counter (DB-based)
  * ==========================================================================
  */
-function incrementRateLimit(string $key): void
+function incrementRateLimit(string $key, bool $appendIp = true): void
 {
     // 📝 เพิ่ม 1 record ใน rate_limits (บันทึก attempt)
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $fullKey = $key . '_' . $ip;
+    //    $appendIp ต้องตรงกับ checkRateLimit() ที่จับคู่กัน
+    $fullKey = $appendIp ? $key . '_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') : $key;
     
     try {
         $pdo = getDB();
@@ -658,11 +663,11 @@ function incrementRateLimit(string $key): void
  * 🎯 จุดประสงค์: Reset rate limit counter (เรียกหลัง success)
  * ==========================================================================
  */
-function resetRateLimit(string $key): void
+function resetRateLimit(string $key, bool $appendIp = true): void
 {
-    // 📝 ลบ attempt ทั้งหมดของ key+IP (เรียกหลัง login สำเร็จ)
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $fullKey = $key . '_' . $ip;
+    // 📝 ลบ attempt ทั้งหมดของ key (เรียกหลัง login สำเร็จ)
+    //    $appendIp ต้องตรงกับ checkRateLimit() ที่จับคู่กัน
+    $fullKey = $appendIp ? $key . '_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') : $key;
     
     try {
         $pdo = getDB();

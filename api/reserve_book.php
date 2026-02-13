@@ -52,14 +52,15 @@ if ($bookId <= 0) {
 
 // 🛡️ [SECURITY] Rate limit — ป้องกัน script ยิง reserve ถี่เกินไป
 //    10 ครั้ง / 5 นาที ต่อ user (ใช้ user_id เป็น key)
-//    ⚠️ ต้องส่ง window=5 ด้วย ไม่งั้นใช้ default 15 นาทีจาก config
+//    🛡️ [SECURITY FIX] ส่ง appendIp=false เพื่อจำกัดต่อ user ไม่ว่า IP ไหน
+//    เดิมต่อ _IP อัตโนมัติ → user เปลี่ยน IP ก็ bypass rate limit ได้
 $rateLimitKey = 'reserve_' . $userId;
-if (!checkRateLimit($rateLimitKey, 10, 5)) {
+if (!checkRateLimit($rateLimitKey, 10, 5, false)) {
     http_response_code(429);
     echo json_encode(['success' => false, 'message' => 'ส่งคำขอบ่อยเกินไป กรุณารอสักครู่']);
     exit;
 }
-incrementRateLimit($rateLimitKey);
+incrementRateLimit($rateLimitKey, false);
 
 // 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดจองซ้ำเร็วๆ)
 //    ใช้ user_id + book_id เป็น key — ถ้าจองเล่มเดียวกันซ้ำภายใน 5 วินาทีจะถูกบล็อก

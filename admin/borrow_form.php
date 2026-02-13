@@ -527,7 +527,9 @@ $(document).ready(function() {
             $.ajax({
                 url: 'borrow_form.php',
                 method: 'POST',
-                data: { action: 'scan', type: 'user', id: userId },
+                // 🛡️ [BUG FIX] ต้องส่ง csrf_token ด้วย — server เช็ค CSRF ที่ line 49
+                //    เดิมไม่ส่ง → validateCSRFToken('') = false → scan ไม่ทำงาน
+                data: { action: 'scan', type: 'user', id: userId, csrf_token: '<?= generateCSRFToken() ?>' },
                 dataType: 'json',
                 success: function(res) {
                     if (res.success) {
@@ -569,7 +571,8 @@ $(document).ready(function() {
             $.ajax({
                 url: 'borrow_form.php',
                 method: 'POST',
-                data: { action: 'scan', type: 'book', id: bookId },
+                // 🛡️ [BUG FIX] ต้องส่ง csrf_token ด้วย — ป้องกัน scan ถูก reject
+                data: { action: 'scan', type: 'book', id: bookId, csrf_token: '<?= generateCSRFToken() ?>' },
                 dataType: 'json',
                 success: function(res) {
                     if (res.success) {

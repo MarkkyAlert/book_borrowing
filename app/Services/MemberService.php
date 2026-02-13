@@ -226,6 +226,7 @@ class MemberService
 
         } catch (Exception $e) {
             $this->pdo->rollBack();
+            error_log("[MemberService::deleteMember] memberId={$id} error: " . $e->getMessage());
             throw $e;
         }
     }
