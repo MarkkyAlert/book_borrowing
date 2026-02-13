@@ -85,6 +85,7 @@ define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15));
 define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));  // 📝 อายุ session วินาที (ป้องกัน session ค้างบน shared PC)
 
 // 🐛 Debug Mode — true = แสดง error ละเอียด (ห้ามเปิดบน production!)
+//    ⚠️ APP_DEBUG=true จะแสดง password reset link บนหน้าจอด้วย (forgot_password.php)
 define('APP_DEBUG', env('APP_DEBUG', 'false') === 'true');
 
 // 🌏 Timezone — ใช้กับ date(), strtotime() ทั้งระบบ

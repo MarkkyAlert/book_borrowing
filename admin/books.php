@@ -25,28 +25,9 @@ $pdo = getDB();
 $bookService = new BookService($pdo);
 $categoryRepo = new CategoryRepository($pdo);
 
-// ── GET: ดึงข้อมูลหนังสือตาม filter ──
-// รับ filter จาก query string (XSS-safe เพราะ e() ใน HTML)
-$search = trim($_GET['search'] ?? '');
-$category = $_GET['category'] ?? '';
-$status = $_GET['status'] ?? '';
-$sort = $_GET['sort'] ?? 'newest';
-
-// ดึงหนังสือตาม filter ผ่าน Service (จัดการ search, sort, pagination ให้)
-$books = $bookService->getBooks([
-    'search' => $search,
-    'category_id' => $category,
-    'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
-    'sort' => $sort
-]);
-
-// ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
-$categories = $categoryRepo->findAll();
-
-// ── POST: ลบหนังสือ (PRG pattern — ทำก่อน fetch data) ──
-// ทำ POST ก่อน GET เพื่อให้ข้อมูลที่แสดงเป็น version ล่าสุดหลังลบ
+// ── POST: ลบหนังสือ (ทำก่อน fetch data — PRG pattern) ──
+// 🧠 ทำ POST ก่อน GET เพื่อให้ข้อมูลที่แสดงเป็น version ล่าสุดหลังลบ
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
-    // [SECURITY] ตรวจ CSRF ก่อนทำ destructive action
     // [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff ลบหนังสือโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
@@ -72,6 +53,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     }
     redirect('books.php');
 }
+
+// ── GET: ดึงข้อมูลหนังสือตาม filter ──
+// รับ filter จาก query string (XSS-safe เพราะ e() ใน HTML)
+$search = trim($_GET['search'] ?? '');
+$category = $_GET['category'] ?? '';
+$status = $_GET['status'] ?? '';
+$sort = $_GET['sort'] ?? 'newest';
+
+// ดึงหนังสือตาม filter ผ่าน Service (จัดการ search, sort, pagination ให้)
+$books = $bookService->getBooks([
+    'search' => $search,
+    'category_id' => $category,
+    'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
+    'sort' => $sort
+]);
+
+// ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
+$categories = $categoryRepo->findAll();
 
 $pageTitle = 'จัดการหนังสือ';
 require_once __DIR__ . '/header.php';

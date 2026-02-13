@@ -54,6 +54,12 @@ require_once BASE_PATH . '/includes/functions.php';  // 3️⃣ helper functions
 // 🧹 [CLEANUP] ล้าง idempotency keys ที่หมดอายุ (>60วินาที) ทุก request
 cleanupIdempotencyKeys();
 
+// 🧹 [CLEANUP] ล้าง rate_limits records เก่ากว่า 1 วัน (probabilistic — ~1% ของ requests)
+//    ป้องกัน table บวมจาก stale records ที่ไม่ถูกเรียกอีก (เช่น login_md5(email)_IP ของ user ที่ไม่กลับมา)
+if (mt_rand(1, 100) === 1) {
+    try { getDB()->exec("DELETE FROM rate_limits WHERE created_at < DATE_SUB(NOW(), INTERVAL 1 DAY)"); } catch (\Exception $e) {}
+}
+
 /**
  * ==========================================================================
  * 🎯 Autoloader: โหลด class จาก app/ อัตโนมัติตาม namespace

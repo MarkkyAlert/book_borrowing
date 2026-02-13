@@ -12,7 +12,10 @@
 
 require_once __DIR__ . '/../bootstrap.php';
 
-// 🛡️ [SECURITY] บังคับ GET เท่านั้น (read-only API)
+// � [BY DESIGN] ไม่มี auth guard — API นี้เป็น public เพราะหน้า index.php (ค้นหาหนังสือ) เป็น public
+//    มี rate limit (60 req/5min) ป้องกัน abuse อยู่แล้ว
+
+// �🛡️ [SECURITY] บังคับ GET เท่านั้น (read-only API)
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
     exit;

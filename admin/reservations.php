@@ -37,8 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('reservations.php');
     }
 
-    $resId = (int) $_POST['id'];
-    $action = $_POST['action'];
+    $resId = (int) ($_POST['id'] ?? 0);
+    $action = $_POST['action'] ?? '';
 
     // [IDEMPOTENCY] ป้องกัน double-submit
     $idempotencyKey = 'reservation_' . $action . '_' . $resId;
