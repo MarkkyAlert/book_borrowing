@@ -232,6 +232,12 @@ class MemberService
             $this->pdo->commit();
             return $result;
 
+        } catch (\PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("[MemberService::deleteMember] memberId={$id} PDOException: " . $e->getMessage());
+            // 🛡️ FK RESTRICT safety net: ถ้า guard ไม่ทัน (race condition)
+            //    DB จะป้องกันลบให้ → แปลง error เป็นภาษาคนอ่านออก
+            throw new Exception('ไม่สามารถลบได้ สมาชิกมีข้อมูลที่เกี่ยวข้องในระบบ');
         } catch (Exception $e) {
             $this->pdo->rollBack();
             error_log("[MemberService::deleteMember] memberId={$id} error: " . $e->getMessage());
