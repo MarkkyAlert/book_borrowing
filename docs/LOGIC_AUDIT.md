@@ -140,7 +140,7 @@ admin/borrow_form.php POST
   ├─ Step 1: Staff auth + CSRF + idempotency
   ├─ Step 2: BorrowService::createBorrow()
   │   ├─ Validate: userId > 0, bookIds not empty, 1 <= borrowDays <= 30
-  │   ├─ Check: findMemberById(userId) — ต้องเป็น member
+  │   ├─ Check: findMemberById(userId) — ต้องเป็น member/staff (ไม่ใช่ admin)
   │   ├─ BEGIN TX
   │   ├─ userRepo::lockById(userId) — lock user row
   │   ├─ countActiveBorrowsForUpdate(userId) — lock + count quota
@@ -226,13 +226,13 @@ admin/books.php POST action=delete
 
 ## Flow 12: Delete Member
 ```
-admin/member_form.php POST action=delete
-  ├─ Step 1: Staff auth + CSRF
+admin/members.php POST action=delete
+  ├─ Step 1: Staff auth + CSRF + idempotency
   ├─ Step 2: MemberService::deleteMember()
   │   ├─ BEGIN TX
   │   ├─ Guard #1: countByUser() > 0 → มีประวัติยืม?
   │   ├─ Guard #2: countPendingByUser() > 0 → มี pending reservation?
-  │   ├─ userRepo::deleteMember(id) → WHERE role='member'
+  │   ├─ userRepo::deleteMember(id) → WHERE role IN ('member','staff')
   │   └─ COMMIT
   └─ Output: redirect + flash
 ```

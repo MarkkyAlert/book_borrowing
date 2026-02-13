@@ -18,7 +18,7 @@
 | **คืนหนังสือ** | Staff บันทึกการคืน คืน stock + คำนวณค่าปรับอัตโนมัติ |
 | **จองหนังสือ** | สมาชิกจองเองผ่านเว็บ กัน stock ไว้ให้ |
 | **จัดการหนังสือ** | เพิ่ม แก้ไข ลบ import CSV |
-| **จัดการสมาชิก** | เพิ่ม แก้ไข ลบ import CSV พิมพ์บัตร |
+| **จัดการผู้ใช้** | เพิ่ม แก้ไข ลบ เปลี่ยน role import CSV พิมพ์บัตร |
 | **รายงาน + สถิติ** | สรุปภาพรวม + Export CSV |
 
 ### ใครใช้ระบบนี้บ้าง? (Roles)
@@ -27,7 +27,7 @@
 
 | บทบาท | คือใคร | สิทธิ์หลัก |
 |--------|--------|-----------|
-| **Admin** | ผู้ดูแลระบบ | ทำได้ทุกอย่าง + ตั้งค่าระบบ + ดูรายงาน + จัดการ staff |
+| **Admin** | ผู้ดูแลระบบ | ทำได้ทุกอย่าง + ตั้งค่าระบบ + ดูรายงาน + แต่งตั้งสิทธิ์ (member ↔ staff) |
 | **Staff** | เจ้าหน้าที่ | จัดการหนังสือ สมาชิก ยืม-คืน จอง ค่าปรับ |
 | **Member** | สมาชิกทั่วไป | ดูหนังสือ จองหนังสือ ดูประวัติตัวเอง |
 
@@ -227,29 +227,33 @@ Step 3 → แสดง password ให้ admin เห็นครั้งเ�
          (หลังจากนี้ไม่มีทางดึง password จริงกลับมาได้)
 ```
 
-### 4.2 แก้ไขสมาชิก
+### 4.2 แก้ไขผู้ใช้ + เปลี่ยน role
 
 **ไฟล์ที่เกี่ยวข้อง:** `admin/member_form.php` → `MemberService` → `UserRepository`
 
 ```
 Step 1 → Staff แก้ไข: ชื่อ, email, เบอร์ (password แยกต่างหาก)
+         Admin เพิ่มเติม: เปลี่ยน role (member ↔ staff) ผ่าน dropdown
 
 Step 2 → MemberService::updateMember()
-         ├── ตรวจว่า member มีอยู่
+         ├── ตรวจว่าผู้ใช้มีอยู่ (member/staff)
          ├── ถ้าเปลี่ยน email → ตรวจซ้ำ (ยกเว้นตัวเอง)
-         └── UPDATE ข้อมูล
+         ├── role whitelist: member/staff เท่านั้น (ป้องกัน escalation เป็น admin)
+         └── UPDATE ข้อมูล (+ role ถ้า admin ส่งมา)
 ```
 
-### 4.3 ลบสมาชิก
+**จุดสำคัญ:** หลังเปลี่ยน role ผู้ใช้ต้อง re-login ถึงจะเห็นสิทธิ์ใหม่ (เพราะ session เก็บ role ตอน login)
 
-**ไฟล์ที่เกี่ยวข้อง:** `admin/member_form.php` → `MemberService` → `UserRepository`
+### 4.3 ลบผู้ใช้
+
+**ไฟล์ที่เกี่ยวข้อง:** `admin/members.php` → `MemberService` → `UserRepository`
 
 ```
 Step 1 → MemberService::deleteMember()
          ├── เปิด transaction
          ├── Guard #1: มีประวัติการยืมไหม? → ถ้ามี ห้ามลบ (สถิติจะหาย)
          ├── Guard #2: มี pending reservation ไหม? → ถ้ามี ห้ามลบ (stock จะไม่ถูกคืน)
-         └── ผ่านทั้ง 2 guard → DELETE (เฉพาะ role=member)
+         └── ผ่านทั้ง 2 guard → DELETE (เฉพาะ member/staff, ไม่รวม admin)
 ```
 
 ### 4.4 การแยก Role และตรวจสิทธิ์
@@ -293,15 +297,15 @@ Step 1 → MemberService::deleteMember()
 **ไฟล์ที่เกี่ยวข้อง:** `admin/borrow_form.php` → `BorrowService` → `BorrowRepository` + `BookRepository` + `ReservationRepository`
 
 ```
-Staff เปิดหน้ายืม → เลือกสมาชิก + หนังสือ (หลายเล่มได้) → กดบันทึก
+Staff เปิดหน้ายืม → เลือกผู้ยืม + หนังสือ (หลายเล่มได้) → กดบันทึก
 
 Step 1 → ตรวจ input
          ├── เลือกผู้ยืมแล้วหรือยัง?
          ├── เลือกหนังสืออย่างน้อย 1 เล่มหรือยัง?
          └── จำนวนวันยืม 1-30
 
-Step 2 → ตรวจว่าผู้ยืมเป็น member
-         (admin/staff ไม่สามารถยืมในนามตัวเองได้)
+Step 2 → ตรวจว่าผู้ยืมเป็น member/staff (ไม่ใช่ admin)
+         (dropdown แสดงทั้ง member + staff)
 
 Step 3 → เปิด transaction (เริ่มทำงานแบบ "ทั้งหมดหรือไม่เลย")
 

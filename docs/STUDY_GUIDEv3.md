@@ -50,8 +50,8 @@ book_borrowing/
 │   ├── borrows.php          รายการยืม + ปุ่มคืน
 │   ├── borrow_form.php      บันทึกการยืม (multi-book)
 │   ├── reservations.php     จอง + อนุมัติ/ยกเลิก
-│   ├── members.php          รายการสมาชิก
-│   ├── member_form.php      เพิ่ม/แก้ไขสมาชิก
+│   ├── members.php          รายการผู้ใช้ (member + staff)
+│   ├── member_form.php      เพิ่ม/แก้ไขผู้ใช้ + เปลี่ยน role
 │   ├── categories.php       หมวดหมู่ (inline CRUD)
 │   ├── payments.php         ค้างชำระ + ประวัติชำระ
 │   ├── reports.php          รายงาน 6 ประเภท + CSV [admin only]
@@ -399,7 +399,7 @@ return $stmt->fetch() ?: null;
 ### 3.3 Flow: Create Borrow (ยืมหนังสือ)
 
 #### Goal
-Staff บันทึกการยืมหนังสือให้ member (รองรับหลายเล่ม) โดยลด stock + สร้าง borrow record
+Staff บันทึกการยืมหนังสือให้ผู้ยืม (member/staff) (รองรับหลายเล่ม) โดยลด stock + สร้าง borrow record
 
 #### Entry Point
 `admin/borrow_form.php` | Method: `POST`
@@ -409,7 +409,7 @@ Staff บันทึกการยืมหนังสือให้ member 
 | Input | Type | Validation |
 |-------|------|------------|
 | `csrf_token` | string | ต้องตรง |
-| `user_id` | int | > 0, ต้องเป็น member |
+| `user_id` | int | > 0, ต้องเป็น member/staff (ไม่ใช่ admin) |
 | `book_ids[]` | array | ไม่ว่าง, แต่ละ id > 0 |
 | `borrow_days` | int | 1–30, default: DEFAULT_BORROW_DAYS (7) |
 
@@ -427,7 +427,7 @@ Staff บันทึกการยืมหนังสือให้ member 
 4. Validate inputs
 5. BorrowService::createBorrow($userId, $bookIds, $borrowDays)
    ├── validate: userId, bookIds, borrowDays
-   ├── UserRepository::findMemberById() → ตรวจเป็น member
+   ├── UserRepository::findMemberById() → ตรวจเป็น member/staff (ไม่ใช่ admin)
    ├── beginTransaction()
    ├── UserRepository::lockById() ← lock user row ก่อน
    ├── BorrowRepository::countActiveBorrowsForUpdate() ← ตรวจ quota
@@ -488,7 +488,7 @@ Staff บันทึกการยืมหนังสือให้ member 
 **Happy Path:**
 ```
 1. Login staff → /admin/borrow_form.php
-2. เลือก member ที่ยังไม่ยืม + book ที่ available > 0
+2. เลือกผู้ยืมที่ยังไม่ยืม + book ที่ available > 0
 3. กด Submit
 4. ✅ redirect borrows.php + "สำเร็จ 1 เล่ม"
 5. ✅ DB: books.available ลด 1, borrows มี row ใหม่
@@ -496,7 +496,7 @@ Staff บันทึกการยืมหนังสือให้ member 
 
 **Failure — Quota:**
 ```
-1. เลือก member ที่ยืมครบ 3 เล่ม
+1. เลือกผู้ยืมที่ยืมครบ 3 เล่ม
 2. ✅ error "ถึงจำนวนสูงสุดแล้ว"
 ```
 
@@ -1319,7 +1319,7 @@ SESSION_LIFETIME           // อายุ session (3600 วินาที)
 |------|----------|
 | Forgot/Reset password | ใช้ token + email, PasswordResetRepository |
 | Update profile | คล้าย register แต่มี ownership check, email ห้ามเปลี่ยน |
-| Delete book/member | Integrity checks (ห้ามลบถ้ามียืม/จอง active) |
+| Delete book/user | Integrity checks (ห้ามลบถ้ามียืม/จอง, ลบได้เฉพาะ member/staff) |
 | Cancel reservation (user) | `api/cancel_reservation.php` → redirect, ต้องคืน stock |
 | Reports + CSV/PDF | Read-only, ใช้ report_helper.php mapping |
 | Settings | Admin-only, upsert ใน settings table |

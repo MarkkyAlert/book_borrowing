@@ -36,23 +36,22 @@
 | 9 | **Expire จอง (cron)** | `cron/expire_reservations.php` | `ReservationService::expireOverdueReservations()` | `findExpiredForUpdate()`, loop: `updateStatus()` + `incrementAvailable()` | ✅ TX | ✅ FOR UPDATE | N/A (cron) | ✅ `status='pending'` guard | N/A | N/A | **✅ ครบ** |
 | 10 | **Reset Password** | `reset_password.php` | `AuthService::resetPassword()` | `findValidToken()`, `updatePassword()`, `markUsed()` | ✅ TX | ❌ ไม่มี FOR UPDATE | ✅ token one-time-use | ✅ `used=0` + `expires_at > NOW()` | ✅ | ✅ redirect | **⚠️ ดูรายละเอียดด้านล่าง** |
 | 11 | **ลบหนังสือ** | `admin/books.php` | `BookService::deleteBook()` | `findByIdForUpdate()`, `countActiveByBook()`, `countByBook()`, `countPendingByBook()`, `delete()` | ✅ TX | ✅ book lock | ❌ ไม่มี | ✅ 3 guards ก่อนลบ | ✅ | ✅ redirect | **⚠️ ขาด idempotency** |
-| 12 | **ลบสมาชิก** | `admin/member_form.php` | `MemberService::deleteMember()` | `countByUser()`, `countPendingByUser()`, `deleteMember()` | ❌ ไม่มี TX | ❌ ไม่มี lock | ❌ ไม่มี | ✅ 2 guards + `role='member'` | ✅ | ✅ redirect | **🔴 ขาด TX — ดูรายละเอียดด้านล่าง** |
+| 12 | **ลบผู้ใช้** | `admin/members.php` | `MemberService::deleteMember()` | `countByUser()`, `countPendingByUser()`, `deleteMember()` | ✅ TX | ❌ ไม่มี lock | ✅ | ✅ 2 guards + `role IN ('member','staff')` | ✅ | ✅ redirect | **✅ แก้แล้ว — มี TX + role guard** |
 
 ---
 
 #### รายละเอียดจุดเสี่ยง A1
 
-**🔴 #12 — `deleteMember()` ไม่มี Transaction**
+**✅ #12 — `deleteMember()` [แก้แล้ว] เพิ่ม Transaction + role guard**
 
 ```
 📍 ไฟล์: app/Services/MemberService.php → deleteMember()
 ```
 
-- **ปัญหา:** Guard #1 (countByUser) ผ่าน → Guard #2 (countPendingByUser) ผ่าน → ระหว่างนั้น admin คนอื่นสร้าง borrow ให้ member นี้ → DELETE ทำงาน → borrows กลายเป็น orphan (FK CASCADE ลบ borrows ทิ้ง → stock ไม่ถูกคืน)
-- **Failure mode:** stock หาย ถ้า member มี active borrow ที่ถูก CASCADE DELETE
-- **ความเสี่ยง:** ต่ำ (ต้องเกิดพร้อมกันพอดี) แต่ถ้าเกิด = stock เพี้ยนถาวร
-- **วิธีตรวจ:** เปิด 2 tab: Tab A = หน้าลบ member, Tab B = ยืมหนังสือให้ member → กด Tab B ก่อน → กด Tab A → ตรวจ stock
-- **แนวทางแก้ (ไม่แก้ logic):** เพิ่มคอมเมนต์เตือนว่าควรใช้ TX + lock ในอนาคต
+- **แก้ไข:** เพิ่ม `beginTransaction()` + `commit()` + `rollBack()` ครอบ guard + DELETE
+- **Role guard:** เปลี่ยนจาก `role='member'` เป็น `role IN ('member','staff')` เพื่อรองรับ role management
+- **ลบจากหน้า:** `admin/members.php` (เดิมอยู่ที่ member_form.php)
+- **ความเสี่ยงที่เหลือ:** ยังไม่ lock user row (แต่ BorrowService::createBorrow lock อยู่แล้ว → serializes race)
 
 **⚠️ #8 — `markExpiredReservations()` ไม่มี FOR UPDATE**
 

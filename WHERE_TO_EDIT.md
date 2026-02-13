@@ -73,7 +73,7 @@
 | Dashboard | `admin/index.php` |
 | จัดการหนังสือ | `admin/books.php` |
 | ฟอร์มเพิ่ม/แก้หนังสือ | `admin/book_form.php` |
-| จัดการสมาชิก | `admin/members.php` |
+| จัดการผู้ใช้ (member + staff) | `admin/members.php` |
 | ฟอร์มเพิ่ม/แก้สมาชิก | `admin/member_form.php` |
 | รายการยืม-คืน | `admin/borrows.php` |
 | ฟอร์มยืมหนังสือ | `admin/borrow_form.php` |

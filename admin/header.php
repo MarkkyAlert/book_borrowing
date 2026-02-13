@@ -233,7 +233,7 @@ if (!$user) {
                 
                 <a class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-primary-100 hover:text-white <?= in_array($currentPage, ['members.php', 'member_form.php']) ? 'active' : 'border-l-4 border-transparent' ?>" href="<?= APP_URL ?>/admin/members.php">
                     <i class="bi bi-people text-lg"></i>
-                    <span>สมาชิก</span>
+                    <span>ผู้ใช้</span>
                 </a>
                 
                 <?php if (isAdmin()): ?>
@@ -308,7 +308,7 @@ if (!$user) {
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/book_labels.php">พิมพ์บาร์โค้ด</a>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/reservations.php">รายการจอง</a>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/payments.php">ประวัติการเงิน</a>
-                    <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/members.php">สมาชิก</a>
+                    <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/members.php">ผู้ใช้</a>
                     <?php if (isAdmin()): ?>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/reports.php">รายงาน</a>
                     <a class="block px-4 py-2 text-primary-100 hover:bg-primary-800 rounded" href="<?= APP_URL ?>/admin/settings.php">ตั้งค่าระบบ</a>

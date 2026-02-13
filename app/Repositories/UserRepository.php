@@ -24,7 +24,7 @@
  * 📍 Entrypoints:
  * - AuthService      → findByEmail() (login), create() (register), updatePassword() (reset)
  * - MemberService    → findMemberById(), create(), update(), deleteMember(), emailExists()
- * - admin/members.php → findMembers() (แสดงรายการสมาชิก)
+ * - admin/members.php → findMembers() (แสดงรายการผู้ใช้ member+staff)
  * - DashboardService → countMembers(), countNewThisMonth()
  * - BorrowService    → lockById() (row lock ก่อนยืม)
  *
@@ -73,7 +73,7 @@ class UserRepository
      * @return array [{id, name, email, phone, role, created_at}, ...]
      *
      * 🛡️ Security: SELECT เฉพาะ column (ไม่รวม password) + prepared statement
-     * ✅ Use case: findAllMembers() เรียกต่อด้วย role='member'
+     * ✅ Use case: ดึง users ตาม role/search filter ทั่วไป
      */
     public function findAll(array $filters = []): array
     {
@@ -113,18 +113,23 @@ class UserRepository
 
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ดึงสมาชิกทั้งหมด (role='member' เท่านั้น)
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ทั้งหมด (member + staff, ไม่รวม admin)
      * ==========================================================================
-     * Shortcut ของ findAll(['role' => 'member'])
      *
-     * 📤 Output: @return array รายการสมาชิก (ไม่รวม password)
-     * ✅ Use case: admin/borrow_form.php → dropdown เลือกสมาชิก
+     * 📤 Output: @return array รายการผู้ใช้ (ไม่รวม password)
+     * ✅ Use case: admin/borrow_form.php → dropdown เลือกผู้ยืม
      */
     public function findAllMembers(): array
     {
-        // 📌 Shortcut: เรียก findAll() พร้อมกรอง role='member'
-        // 🧠 แยกเมธอดเพื่อความสะดวก — ไม่ต้องส่ง filter ทุกครั้ง
-        return $this->findAll(['role' => 'member']);
+        // � SQL: ดึง member + staff (ไม่รวม admin) เรียงตามชื่อ
+        // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
+        $stmt = $this->pdo->query("
+            SELECT id, name, email, phone, role, created_at
+            FROM users
+            WHERE role IN ('member', 'staff')
+            ORDER BY name
+        ");
+        return $stmt->fetchAll();
     }
 
     /**
@@ -184,29 +189,29 @@ class UserRepository
 
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ดึงสมาชิกตาม ID (เฉพาะ role='member' ไม่คืน password)
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ตาม ID (เฉพาะ member/staff ไม่คืน password)
      * ==========================================================================
      *
      * 📥 Input: @param int $id User ID
      * 📤 Output: @return array|null {id, name, email, phone, role, created_at} หรือ null
      *
      * 🧠 เหตุผล:
-     * - ทำไมแยกจาก findById()? เพราะกรอง role='member' ด้วย
-     *   ป้องกันการดึงข้อมูล admin/staff ผ่านเมธอดนี้
+     * - ทำไมแยกจาก findById()? เพราะกรอง role ป้องกันแก้ไข admin ผ่านเมธอดนี้
+     * - รวม staff เพราะ admin อาจ promote member → staff แล้วต้องแก้ไข/demote กลับได้
      *
      * ✅ Use case: admin/member_form.php, admin/member_card.php
      */
     public function findMemberById(int $id): ?array
     {
-        // 📝 SQL: ดึงสมาชิกตาม ID (เฉพาะ role='member')
-        // 🛡️ AND role='member' ป้องกันดึงข้อมูล admin/staff ผ่านเมธอดนี้
+        // 📝 SQL: ดึงผู้ใช้ตาม ID (member + staff)
+        // 🛡️ role IN (...) ป้องกันดึง/แก้ไข admin ผ่านเมธอดนี้
         // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
         $stmt = $this->pdo->prepare("
             SELECT id, name, email, phone, role, created_at 
-            FROM users WHERE id = ? AND role = 'member'
+            FROM users WHERE id = ? AND role IN ('member', 'staff')
         ");
         $stmt->execute([$id]);
-        // 📤 คืน member data หรือ null (ถ้า id ไม่ใช่ member → null)
+        // 📤 คืน user data หรือ null (ถ้า id เป็น admin → null)
         return $stmt->fetch() ?: null;
     }
 
@@ -262,7 +267,7 @@ class UserRepository
      *
      * 📥 Input:
      * @param int   $id   User ID
-     * @param array $data {name, email, phone?} - มาจาก MemberService, AuthService
+     * @param array $data {name, email, phone?, role?} - มาจาก MemberService, AuthService
      *
      * 📤 Output: @return bool true = สำเร็จ
      *
@@ -276,18 +281,26 @@ class UserRepository
         // 📝 SQL: UPDATE ข้อมูล user (ไม่รวม password)
         // 🧠 แยก update password ออกเป็น updatePassword() ต่างหาก
         //    ป้องกัน update profile แล้วทับ password โดยไม่ตั้งใจ
-        $stmt = $this->pdo->prepare("
-            UPDATE users SET name = ?, email = ?, phone = ?
-            WHERE id = ?
-        ");
-
-        // 🚀 bind: [$name, $email, $phone, $id]
-        return $stmt->execute([
+        $sets = ['name = ?', 'email = ?', 'phone = ?'];
+        $params = [
             $data['name'],              // 1. ชื่อ
             $data['email'],             // 2. อีเมล
             $data['phone'] ?? null,     // 3. เบอร์โทร (null ถ้าไม่ระบุ)
-            $id                         // 4. WHERE id = ?
-        ]);
+        ];
+
+        // 🏷️ role update (optional — เฉพาะเมื่อ admin ส่งมา)
+        if (isset($data['role'])) {
+            $sets[] = 'role = ?';
+            $params[] = $data['role'];
+        }
+
+        $params[] = $id; // WHERE id = ?
+        $stmt = $this->pdo->prepare("
+            UPDATE users SET " . implode(', ', $sets) . "
+            WHERE id = ?
+        ");
+
+        return $stmt->execute($params);
     }
 
     /**
@@ -430,7 +443,7 @@ class UserRepository
 
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ดึงรายการสมาชิกพร้อม filters, sorting และสถิติการยืม
+     * 🎯 จุดประสงค์: ดึงรายการผู้ใช้ (member+staff) พร้อม filters, sorting และสถิติการยืม
      * ==========================================================================
      * เมธอดหลักสำหรับหน้า admin/members.php
      *
@@ -440,6 +453,7 @@ class UserRepository
      * 📥 Input:
      * @param array $filters {
      *     search?: string  — ค้นใน name, email, phone (LIKE)
+     *     role?: string    — 'member' | 'staff' (กรองตาม role)
      *     status?: string  — 'has_borrow' | 'no_borrow' (HAVING)
      *     sort?: string    — 'newest', 'oldest', 'az', 'za', 'most_borrows'
      * }
@@ -457,9 +471,16 @@ class UserRepository
      */
     public function findMembers(array $filters = []): array
     {
-        // 📝 เริ่มจาก role='member' เสมอ (กรองเฉพาะสมาชิก)
-        $where = ["role = 'member'"];
+        // 📝 แสดง member + staff (ไม่รวม admin)
+        $where = ["role IN ('member', 'staff')"];
         $params = [];
+
+        // 🏷️ Filter: กรองตาม role (member | staff)
+        $roleFilter = $filters['role'] ?? '';
+        if (in_array($roleFilter, ['member', 'staff'])) {
+            $where[] = "role = ?";
+            $params[] = $roleFilter;
+        }
 
         // 🔍 Filter: ค้นหาใน name, email, phone (LIKE)
         if (!empty($filters['search'])) {
@@ -516,28 +537,28 @@ class UserRepository
 
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ลบสมาชิก (เฉพาะ role='member' ปลอดภัยกว่า delete())
+     * 🎯 จุดประสงค์: ลบผู้ใช้ (เฉพาะ member/staff — ป้องกันลบ admin)
      * ==========================================================================
      *
-     * 📥 Input: @param int $id Member ID
+     * 📥 Input: @param int $id User ID
      * 📤 Output: @return bool true = สำเร็จ
      *
      * 🧠 เหตุผล:
-     * - ทำไมแยกจาก delete()? เพราะเพิ่ม AND role='member' ป้องกันลบ admin/staff โดยไม่ตั้งใจ
+     * - ทำไมแยกจาก delete()? เพราะกรอง role ป้องกันลบ admin โดยไม่ตั้งใจ
      *
      * ⚠️ Edge case: ถ้ามี borrow/reservation อยู่ → FK constraint → PDOException
      *    ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
      *
-     * ✅ Use case: admin/member_form.php → MemberService::deleteMember() → deleteMember()
+     * ✅ Use case: admin/members.php → MemberService::deleteMember() → deleteMember()
      */
     public function deleteMember(int $id): bool
     {
-        // 📝 SQL: ลบเฉพาะ member (กรอง role='member')
-        // 🛡️ AND role='member' ป้องกันลบ admin/staff โดยไม่ตั้งใจ
+        // 📝 SQL: ลบเฉพาะ member/staff (ป้องกันลบ admin)
+        // 🛡️ role IN (...) ป้องกันลบ admin โดยไม่ตั้งใจ
         //    แม้ ID จะตรงกับ admin → DELETE 0 rows (ไม่ลบ)
         // ⚠️ ถ้ามี borrow/reservation ค้าง → FK constraint → PDOException
         //    ควรเรียกผ่าน MemberService::deleteMember() ที่ตรวจเงื่อนไขก่อน
-        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'member'");
+        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ? AND role IN ('member', 'staff')");
         return $stmt->execute([$id]);
     }
 

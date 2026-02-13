@@ -12,7 +12,7 @@
 **A:** เป็น **ระบบยืมคืนหนังสือบนเว็บ** ที่เขียนด้วย PHP + MySQL พร้อมใช้งานทันที ฟีเจอร์หลักประกอบด้วย:
 
 - จัดการหนังสือ (เพิ่ม แก้ไข ลบ นำเข้าจาก CSV)
-- จัดการสมาชิก (สมัคร แก้ไข พิมพ์บัตรสมาชิก นำเข้าจาก CSV)
+- จัดการผู้ใช้ (สมัคร แก้ไข เปลี่ยน role พิมพ์บัตรสมาชิก นำเข้าจาก CSV)
 - ยืม-คืนหนังสือ พร้อมคำนวณค่าปรับอัตโนมัติ
 - จองหนังสือออนไลน์
 - Dashboard สถิติ + รายงาน + Export PDF/CSV
@@ -52,7 +52,7 @@
 - **Layered Architecture** — Controller → Service → Repository → Database
 - **Security** — CSRF, XSS prevention, SQL Injection, Rate Limiting, Password Hashing
 - **Transaction & Locking** — ป้องกัน race condition ในระบบยืม-คืน-จอง
-- **CRUD + Validation** — หนังสือ, สมาชิก, หมวดหมู่
+- **CRUD + Validation** — หนังสือ, ผู้ใช้ (member+staff), หมวดหมู่
 
 โค้ดมี comment ภาษาไทยอธิบายทุกจุดสำคัญ + มีเอกสารประกอบหลายไฟล์
 

@@ -354,7 +354,7 @@ INSERT INTO books (id, title, author, quantity, available, category_id) VALUES
 | **Precondition** | user_id=100 เป็น Admin, user_id=101 เป็น Staff |
 | **Steps** | 1. Staff พยายามยืมหนังสือให้ user_id=100 (Admin) |
 | **Input** | `user_id=100, book_ids=[200]` |
-| **Expected Result** | Error: "ไม่พบสมาชิกที่เลือก" (เพราะ findMemberById กรอง role='member') |
+| **Expected Result** | Error: "ไม่พบสมาชิกที่เลือก" (เพราะ findMemberById กรอง role IN member/staff — admin ไม่ได้อยู่ใน list) |
 | **DB Verification** | ไม่มี borrow record สำหรับ user_id=100 |
 
 ---

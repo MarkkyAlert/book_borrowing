@@ -25,7 +25,7 @@ book_borrowing/
 │   ├── index.php            # Dashboard
 │   ├── books.php            # จัดการหนังสือ
 │   ├── book_form.php        # เพิ่ม/แก้ไขหนังสือ
-│   ├── members.php          # จัดการสมาชิก
+│   ├── members.php          # จัดการผู้ใช้ (member + staff)
 │   ├── member_form.php      # เพิ่ม/แก้ไขสมาชิก
 │   ├── borrows.php          # จัดการการยืม
 │   ├── borrow_form.php      # บันทึกการยืม

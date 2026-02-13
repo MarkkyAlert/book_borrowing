@@ -322,16 +322,16 @@ $result = $borrowService->createBorrow($userId, [1, 2, 3], 7);
 
 | หัวข้อ | รายละเอียด |
 |--------|------------|
-| **Purpose** | อัปเดตสมาชิก |
+| **Purpose** | อัปเดตผู้ใช้ (+ เปลี่ยน role ถ้า admin ส่งมา) |
 | **Where Used** | `admin/member_form.php` |
-| **Inputs** | `$id: int`, `$data: ['name', 'email', 'phone?']` |
-| **Side Effects** | UPDATE `users` |
+| **Inputs** | `$id: int`, `$data: ['name', 'email', 'phone?', 'role?']` |
+| **Side Effects** | UPDATE `users` (role whitelist: member/staff) |
 
 ### 5.3 deleteMember()
 
 | หัวข้อ | รายละเอียด |
 |--------|------------|
-| **Purpose** | ลบสมาชิก |
+| **Purpose** | ลบผู้ใช้ (member/staff, ไม่รวม admin) |
 | **Where Used** | `admin/members.php` |
 | **Business Rules** | ห้ามลบถ้ามีประวัติการยืม |
 

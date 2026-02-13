@@ -1,14 +1,15 @@
 <?php
 /**
- * Members Management - จัดการสมาชิก (รายการ)
+ * User Management - จัดการผู้ใช้ (member + staff)
  * 
  * ⭐ สำหรับคนมาใหม่:
- * - หน้านี้แสดงรายการสมาชิก + filter/sort + link ไป member_form.php
- * - เพิ่ม/แก้ไข/ลบ อยู่ที่ member_form.php
+ * - หน้านี้แสดงรายการผู้ใช้ทุก role (member + staff, ไม่รวม admin)
+ * - เพิ่ม/แก้ไข/เปลี่ยน role อยู่ที่ member_form.php, ลบอยู่ที่หน้านี้
  * - สิทธิ์: staff ขึ้นไป
  * 
  * 📂 Flow:
- * GET → MemberService::getMembers(filters) → แสดงรายการ (พร้อม borrow stats)
+ * 1. GET → MemberService::getMembers(filters) → แสดงรายการ (พร้อม borrow stats)
+ * 2. POST action=delete → MemberService::deleteMember() → redirect (PRG)
  */
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
@@ -22,26 +23,57 @@ use App\Services\MemberService;
 $pdo = getDB();
 $memberService = new MemberService($pdo);
 
+// ── POST: ลบผู้ใช้ (ทำก่อน fetch data — PRG pattern) ──
+// 🧠 ดัดแปลงจาก books.php — ใช้แพทเทิร์นเดียวกัน
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    // 🛡️ [SECURITY] CSRF
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
+        redirect('members.php');
+    }
+    
+    $id = (int) ($_POST['id'] ?? 0);
+    
+    // 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดลบซ้ำ)
+    $idempotencyKey = 'delete_member_' . $id;
+    if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+        setFlash('info', 'รายการนี้ถูกลบไปแล้ว');
+        redirect('members.php');
+    }
+    
+    try {
+        $memberService->deleteMember($id);
+        // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
+        $_SESSION['processed_actions'][$idempotencyKey] = time();
+        setFlash('success', 'ลบผู้ใช้สำเร็จ');
+    } catch (Exception $e) {
+        setFlash('error', $e->getMessage());
+    }
+    redirect('members.php');
+}
+
 // 📥 รับ filter/sort จาก query string
 $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';    // has_borrow | no_borrow | ''
+$role = $_GET['role'] ?? '';        // member | staff | ''
 $sort = $_GET['sort'] ?? 'newest'; // newest | oldest | az | most_borrows
 
-// 📊 ดึงสมาชิกพร้อม borrow stats (active_borrows, total_borrows) ผ่าน Service
+// 📊 ดึงผู้ใช้พร้อม borrow stats (active_borrows, total_borrows) ผ่าน Service
 $members = $memberService->getMembers([
     'search' => $search,
     'status' => $status,
+    'role' => $role,
     'sort' => $sort
 ]);
 
-$pageTitle = 'จัดการสมาชิก';
+$pageTitle = 'จัดการผู้ใช้';
 require_once __DIR__ . '/header.php';
 ?>
 
 <!-- Actions Bar -->
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
     <div>
-        <h3 class="text-lg font-bold text-gray-800">จัดการสมาชิก</h3>
+        <h3 class="text-lg font-bold text-gray-800">จัดการผู้ใช้</h3>
         <p class="text-sm text-gray-500">ทั้งหมด <?= count($members) ?> คน</p>
     </div>
     <div class="flex gap-2">
@@ -64,7 +96,15 @@ require_once __DIR__ . '/header.php';
             <label class="block text-xs font-medium text-gray-700 mb-1">ค้นหา</label>
             <input type="text" class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="search" value="<?= e($search) ?>" placeholder="ชื่อ, อีเมล, เบอร์โทร...">
         </div>
-        <div class="md:col-span-3">
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-700 mb-1">สิทธิ์</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="role">
+                <option value="">ทั้งหมด</option>
+                <option value="member" <?= $role === 'member' ? 'selected' : '' ?>>สมาชิก</option>
+                <option value="staff" <?= $role === 'staff' ? 'selected' : '' ?>>เจ้าหน้าที่</option>
+            </select>
+        </div>
+        <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">สถานะ</label>
             <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="status">
                 <option value="">ทั้งหมด</option>
@@ -72,7 +112,7 @@ require_once __DIR__ . '/header.php';
                 <option value="no_borrow" <?= $status === 'no_borrow' ? 'selected' : '' ?>>ปกติ (ไม่ได้ยืม)</option>
             </select>
         </div>
-        <div class="md:col-span-3">
+        <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">เรียงลำดับ</label>
             <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="sort">
                 <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>สมัครล่าสุด</option>
@@ -96,7 +136,7 @@ require_once __DIR__ . '/header.php';
         <?php if (empty($members)): ?>
             <div class="text-center py-12 text-gray-400">
                 <i class="bi bi-people text-6xl mb-4 inline-block text-gray-300"></i>
-                <h4 class="text-lg font-medium text-gray-600">ไม่พบสมาชิก</h4>
+                <h4 class="text-lg font-medium text-gray-600">ไม่พบผู้ใช้</h4>
                 <p class="text-sm">ลองปรับเปลี่ยนคำค้นหา</p>
             </div>
         <?php else: ?>
@@ -105,6 +145,7 @@ require_once __DIR__ . '/header.php';
                     <tr>
                         <th class="px-6 py-4 font-medium" width="50">#</th>
                         <th class="px-6 py-4 font-medium">ชื่อ-นามสกุล</th>
+                        <th class="px-6 py-4 font-medium">สิทธิ์</th>
                         <th class="px-6 py-4 font-medium">อีเมล</th>
                         <th class="px-6 py-4 font-medium">เบอร์โทร</th>
                         <th class="px-6 py-4 font-medium text-center">กำลังยืม</th>
@@ -124,6 +165,17 @@ require_once __DIR__ . '/header.php';
                                     </div>
                                     <div class="font-medium text-gray-900"><?= e($member['name']) ?></div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <?php if ($member['role'] === 'staff'): ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                        <i class="bi bi-shield-check mr-1"></i>เจ้าหน้าที่
+                                    </span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                        สมาชิก
+                                    </span>
+                                <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 text-gray-600"><?= e($member['email']) ?></td>
                             <td class="px-6 py-4 text-gray-600 font-mono text-xs"><?= e($member['phone'] ?: '-') ?></td>
@@ -159,6 +211,20 @@ require_once __DIR__ . '/header.php';
                                     <a href="member_form.php?id=<?= $member['id'] ?>" class="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors" title="แก้ไข">
                                         <i class="bi bi-pencil-square"></i>
                                     </a>
+                                    <?php if ($member['active_borrows'] == 0): ?>
+                                        <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบสมาชิกคนนี้?', {title: 'ลบสมาชิก', confirmText: 'ลบ', confirmClass: 'danger'})">
+                                            <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id" value="<?= $member['id'] ?>">
+                                            <button type="submit" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <button class="p-1.5 text-gray-300 rounded-lg cursor-not-allowed" disabled title="ไม่สามารถลบได้ เนื่องจากกำลังยืมหนังสืออยู่">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>

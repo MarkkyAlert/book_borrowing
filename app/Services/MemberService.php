@@ -5,8 +5,8 @@
  * ==========================================================================
  * 🎯 ไฟล์นี้ทำอะไร?
  * ==========================================================================
- * Service นี้จัดการ CRUD สมาชิก (role='member'):
- * - สร้าง/แก้ไข/ลบ + import CSV
+ * Service นี้จัดการ CRUD ผู้ใช้ (member + staff, ไม่รวม admin):
+ * - สร้าง/แก้ไข/ลบ + import CSV + เปลี่ยน role
  * - generate random password ถ้าไม่ระบุ
  * - validate + duplicate check
  *
@@ -17,7 +17,7 @@
  *
  * 📍 Entrypoints:
  * - admin/members.php      → getMembers()
- * - admin/member_form.php  → createMember(), updateMember(), updatePassword()
+ * - admin/member_form.php  → createMember(), updateMember(role?), updatePassword()
  * - api/add_member.php     → createMember() (quick add)
  * - register.php           → createMember() (ผ่าน AuthService)
  * - admin/import_members   → importMember()
@@ -26,6 +26,7 @@
  * - createMember(): hash password ก่อน INSERT เสมอ
  * - emailExists(): single source of truth สำหรับ duplicate check
  * - deleteMember(): ตรวจ borrow history + pending reservation ก่อนลบ
+ * - updateMember(): role whitelist เฉพาะ member/staff (ป้องกัน privilege escalation)
  *
  * ⚠️ ห้ามแก้:
  * - createMember() ต้อง hash password ก่อน save
@@ -69,19 +70,19 @@ class MemberService
      * 🎯 จุดประสงค์: ดึงรายการสมาชิก + filters (pass-through)
      * ==========================================================================
      *
-     * 📥 Input: @param array $filters {search?, status?, sort?}
-     * 📤 Output: @return array รายการสมาชิก
+     * 📥 Input: @param array $filters {search?, status?, role?, sort?}
+     * 📤 Output: @return array รายการผู้ใช้ (member + staff)
      * ✅ Use case: admin/members.php
      */
     public function getMembers(array $filters = []): array
     {
-        // 📝 Pass-through → findMembers (role='member' + search/status/sort)
+        // 📝 Pass-through → findMembers (member + staff + search/status/role/sort)
         return $this->userRepo->findMembers($filters);
     }
 
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ดึงสมาชิกตาม ID (เฉพาะ role='member')
+     * 🎯 จุดประสงค์: ดึงผู้ใช้ตาม ID (เฉพาะ member/staff)
      * ==========================================================================
      *
      * 📥 Input: @param int $id
@@ -90,7 +91,7 @@ class MemberService
      */
     public function getMemberById(int $id): ?array
     {
-        // 📝 Pass-through → findMemberById (เฉพาะ role='member')
+        // 📝 Pass-through → findMemberById (เฉพาะ member/staff, ไม่รวม admin)
         return $this->userRepo->findMemberById($id);
     }
 
@@ -151,7 +152,7 @@ class MemberService
      *
      * 🔄 Flow: findMemberById → check email duplicate (exclude self) → update
      *
-     * 📥 Input: @param int $id, @param array $data {name, email, phone?}
+     * 📥 Input: @param int $id, @param array $data {name, email, phone?, role?}
      * 📤 Output: @return bool true = สำเร็จ
      * @throws Exception ถ้าไม่พบ / email ซ้ำ
      * ✅ Use case: admin/member_form.php POST (edit mode)
@@ -173,11 +174,18 @@ class MemberService
         }
 
         // 📝 Step 3: UPDATE (ไม่รวม password — แยกเป็น updatePassword())
-        return $this->userRepo->update($id, [
+        $updateData = [
             'name' => trim($data['name']),
             'email' => trim($data['email']),
             'phone' => trim($data['phone'] ?? '')
-        ]);
+        ];
+
+        // 🏷️ role update (optional — เฉพาะเมื่อ admin ส่งมา, whitelist ป้องกัน privilege escalation)
+        if (isset($data['role']) && in_array($data['role'], ['member', 'staff'])) {
+            $updateData['role'] = $data['role'];
+        }
+
+        return $this->userRepo->update($id, $updateData);
     }
 
     /**
@@ -196,7 +204,7 @@ class MemberService
      * - CASCADE DELETE จะลบ reservation แต่ไม่คืน stock
      * - TX ป้องกัน race condition ระหว่าง guard check กับ DELETE
      *
-     * ✅ Use case: admin/member_form.php (action=delete — ปัจจุบัน UI ยังไม่เปิดใช้)
+     * ✅ Use case: admin/members.php (action=delete)
      */
     public function deleteMember(int $id): bool
     {
@@ -218,7 +226,7 @@ class MemberService
                 throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
             }
 
-            // 📝 ผ่าน guard แล้ว → ลบ (AND role='member' ป้องกันลบ admin)
+            // 📝 ผ่าน guard แล้ว → ลบ (role IN member/staff ป้องกันลบ admin)
             $result = $this->userRepo->deleteMember($id);
 
             $this->pdo->commit();

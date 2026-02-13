@@ -120,7 +120,7 @@ class BorrowService
             throw new Exception('จำนวนวันยืมต้องอยู่ระหว่าง 1-30 วัน');
         }
 
-        // 📝 Step 2: ตรวจว่า user เป็น member (ไม่ใช่ admin/staff)
+        // 📝 Step 2: ตรวจว่า user เป็น member/staff (ไม่ใช่ admin)
         $user = $this->userRepo->findMemberById($userId);
         if (!$user) {
             throw new Exception('ไม่พบสมาชิกที่เลือก');

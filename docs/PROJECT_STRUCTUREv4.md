@@ -167,7 +167,7 @@ book_borrowing/
 
 | Repository | ตารางหลัก | หน้าที่เด่น |
 |------------|-----------|------------|
-| `UserRepository` | `users` | CRUD, findByEmail, findAllMembers, countByRole |
+| `UserRepository` | `users` | CRUD, findByEmail, findAllMembers (member+staff), countByRole |
 | `BookRepository` | `books` | CRUD, findAll (filter/sort), increment/decrementAvailable, findByIdForUpdate (row lock) |
 | `BorrowRepository` | `borrows` | สร้างการยืม, คืนหนังสือ, countActiveBorrows (FOR UPDATE), findOverdue |
 | `ReservationRepository` | `reservations` | สร้าง/ยกเลิก/อนุมัติ (state guards), expireOverdue (lazy expiration), countPending |

@@ -4,18 +4,20 @@
  * 
  * ⭐ สำหรับคนมาใหม่:
  * - หน้านี้ทำ 2 อย่าง: สร้างสมาชิกใหม่ หรือ แก้ไขข้อมูลสมาชิก (รวมเปลี่ยนรหัสผ่าน)
+ * - admin เท่านั้นที่เห็น dropdown เปลี่ยน role (member ↔ staff)
  * - ใช้ MemberService เป็น single source of truth สำหรับ business logic
- * - สิทธิ์: staff ขึ้นไป
+ * - สิทธิ์: staff ขึ้นไป (แต่เปลี่ยน role ได้เฉพาะ admin)
  * 
  * 📂 Flow:
  * 1. GET ?id=X      → โหลดข้อมูลสมาชิกเข้า form (edit mode)
  * 2. GET (ไม่มี id) → form ว่าง (create mode)
  * 3. POST (id=0)    → createMember() (ถ้าไม่กรอกรหัสผ่าน Service จะ auto-generate)
- * 4. POST (id>0)    → updateMember() + updatePassword() ถ้ากรอกรหัสผ่านใหม่
+ * 4. POST (id>0)    → updateMember(role?) + updatePassword() ถ้ากรอกรหัสผ่านใหม่
  * 
  * ⚠️ ระวัง:
  * - createMember() อาจ auto-generate password — ต้องแจ้ง staff
- * - การลบสมาชิกไม่ได้อยู่ในหน้านี้
+ * - การลบสมาชิกไม่ได้อยู่ในหน้านี้ (อยู่ที่ members.php)
+ * - role whitelist: member, staff เท่านั้น (Service ป้องกัน privilege escalation)
  */
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
@@ -66,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $member['email'] = trim($_POST['email'] ?? '');
     $member['phone'] = trim($_POST['phone'] ?? '');
     $password = $_POST['password'] ?? '';
+    $role = $_POST['role'] ?? null;
     
     $member['id'] = (int) ($_POST['id'] ?? 0);
     $isEdit = $member['id'] > 0;
@@ -81,11 +84,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             if ($isEdit) {
                 // [WRITE] อัปเดตข้อมูลสมาชิก ผ่าน Service (ตรวจ email ซ้ำให้)
-                $memberService->updateMember($member['id'], [
+                $updateData = [
                     'name' => $member['name'],
                     'email' => $member['email'],
                     'phone' => $member['phone']
-                ]);
+                ];
+                // 🏷️ admin เท่านั้นที่เปลี่ยน role ได้ (Service whitelist ซ้ำอีกชั้น)
+                if (isAdmin() && $role !== null) {
+                    $updateData['role'] = $role;
+                }
+                $memberService->updateMember($member['id'], $updateData);
                 
                 // 🔑 อัปเดตรหัสผ่านเฉพาะถ้ากรอก — Service จะ validate + hash ให้
                 if (!empty($password)) {
@@ -188,6 +196,28 @@ require_once __DIR__ . '/header.php';
                         </div>
                     </div>
                     
+                    <?php if (isAdmin() && $isEdit): ?>
+                    <div class="md:col-span-2">
+                        <label for="role" class="block text-sm font-medium text-gray-700 mb-1">
+                            สิทธิ์การใช้งาน
+                        </label>
+                        <div class="relative rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="bi bi-shield-lock text-gray-400"></i>
+                            </div>
+                            <select id="role" name="role"
+                                    class="pl-10 block w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11">
+                                <option value="member" <?= ($member['role'] ?? 'member') === 'member' ? 'selected' : '' ?>>สมาชิก (Member)</option>
+                                <option value="staff" <?= ($member['role'] ?? 'member') === 'staff' ? 'selected' : '' ?>>เจ้าหน้าที่ (Staff)</option>
+                            </select>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            <i class="bi bi-info-circle mr-1"></i>
+                            เจ้าหน้าที่สามารถเข้าถึงระบบจัดการ (admin panel) ได้
+                        </p>
+                    </div>
+                    <?php endif; ?>
+
                     <div class="md:col-span-2">
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
                             <?= $isEdit ? 'รหัสผ่านใหม่ (ว่างไว้ถ้าไม่ต้องการเปลี่ยน)' : 'รหัสผ่าน' ?> 

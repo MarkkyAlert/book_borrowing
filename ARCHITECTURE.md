@@ -184,7 +184,7 @@ book_borrowing/
 │       ├── BorrowService         → ยืม, คืน, ค่าปรับ
 │       ├── ReservationService    → จอง, อนุมัติ, ยกเลิก, หมดอายุ
 │       ├── BookService           → CRUD หนังสือ
-│       ├── MemberService         → CRUD สมาชิก + import
+│       ├── MemberService         → CRUD ผู้ใช้ (member+staff) + role management + import
 │       ├── HomeService           → หน้าแรก (public)
 │       ├── DashboardService      → สถิติ admin
 │       └── ReportService         → รายงานเชิงลึก
