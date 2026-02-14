@@ -172,7 +172,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <div>
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
                             รหัสผ่าน <span class="text-red-500">*</span>

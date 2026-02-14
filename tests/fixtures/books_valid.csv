@@ -1,0 +1,4 @@
+Title,Author,ISBN,Category,Quantity
+Test Import Book 1,Author One,978-1111111111,Fiction,5
+Test Import Book 2,Author Two,978-2222222222,NewCategory,2
+Test Import Book 3,Author Three,,General,10

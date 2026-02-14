@@ -11,12 +11,13 @@ SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
 USE `book_borrowing`;
 
 -- ล้างข้อมูลเดิม (ถ้ามี) - ใช้ DELETE เพราะ TRUNCATE ติด FK
+-- ⚠️ เก็บ admin (id=1) ไว้ เพื่อไม่ให้รหัสผ่านที่ตั้งผ่าน install.php หาย
 DELETE FROM `payments` WHERE 1=1;
 DELETE FROM `reservations` WHERE 1=1;
 DELETE FROM `borrows` WHERE 1=1;
 DELETE FROM `books` WHERE 1=1;
 DELETE FROM `categories` WHERE 1=1;
-DELETE FROM `users` WHERE 1=1;
+DELETE FROM `users` WHERE id != 1;
 
 -- Reset AUTO_INCREMENT
 ALTER TABLE `categories` AUTO_INCREMENT = 1;

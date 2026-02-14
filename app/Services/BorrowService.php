@@ -1,4 +1,5 @@
 <?php
+
 /**
  * BorrowService - Business Logic สำหรับการยืม-คืนหนังสือ
  *
@@ -90,9 +91,10 @@ class BorrowService
      * @param int|null $borrowDays 1-30 (null = DEFAULT_BORROW_DAYS)
      *
      * 📤 Output:
-     * @return array {success, borrowed[], skipped[], due_date, message}
+     * @return array {success: true, borrowed[], skipped: [], due_date, message}
+     *              (skipped จะว่างเสมอ เพราะใช้ atomic — ถ้าเล่มใดพัง throw Exception)
      *
-     * @throws Exception ถ้า user ไม่ใช่ member / bookIds ว่าง / เกินโควต้า
+     * @throws Exception ถ้า user ไม่ใช่ member / bookIds ว่าง / เกินโควต้า / หนังสือเล่มใดยืมไม่ได้ (atomic rollback)
      *
      * 🛡️ Security:
      * - lockById() ล็อค user row ก่อน
@@ -106,16 +108,16 @@ class BorrowService
         // 📝 ใช้ค่า default จาก config.php ถ้าไม่ระบุ
         //    ⚙️ แก้จำนวนวันยืม → config.php → DEFAULT_BORROW_DAYS
         $borrowDays = $borrowDays ?? DEFAULT_BORROW_DAYS;
-        
+
         // 📝 Step 1: Validate input (ก่อนเปิด transaction)
         if ($userId <= 0) {
             throw new Exception('กรุณาเลือกผู้ยืม');
         }
-        
+
         if (empty($bookIds)) {
             throw new Exception('กรุณาเลือกหนังสืออย่างน้อย 1 เล่ม');
         }
-        
+
         if ($borrowDays < 1 || $borrowDays > 30) {
             throw new Exception('จำนวนวันยืมต้องอยู่ระหว่าง 1-30 วัน');
         }
@@ -155,31 +157,31 @@ class BorrowService
             }
 
             // 📝 Step 7: วน loop ยืมทีละเล่ม (ภายใน transaction เดียวกัน)
+            //    🛡️ [ATOMIC] ถ้าเล่มใดยืมไม่ได้ → throw Exception → rollback ทั้งหมด
             $borrowedBooks = [];
-            $skippedBooks = [];
 
             foreach ($bookIds as $bookId) {
                 // 🔄 borrowSingleBook: lock book → check available → decrement → insert
                 $result = $this->borrowSingleBook($userId, $bookId, $borrowDate, $dueDate);
-                
+
                 if ($result['success']) {
                     $borrowedBooks[] = $result['title'];
                 } else {
-                    $skippedBooks[] = $result['reason'];
+                    // 🛡️ [ATOMIC] เล่มใดพัง → rollback ทั้งหมด (ไม่ใช่ skip)
+                    throw new Exception('ไม่สามารถยืมได้: ' . $result['reason']);
                 }
             }
 
             $this->pdo->commit();
 
-            // 📤 คืนผลรวม: สำเร็จกี่เล่ม ข้ามกี่เล่ม กำหนดคืนเมื่อไหร่
+            // 📤 คืนผลรวม: สำเร็จทุกเล่ม (atomic — ไม่มี skipped)
             return [
-                'success' => count($borrowedBooks) > 0,
+                'success' => true,
                 'borrowed' => $borrowedBooks,
-                'skipped' => $skippedBooks,
+                'skipped' => [],
                 'due_date' => $dueDate,
-                'message' => $this->buildBorrowMessage($borrowedBooks, $skippedBooks, $dueDate)
+                'message' => $this->buildBorrowMessage($borrowedBooks, [], $dueDate)
             ];
-
         } catch (Exception $e) {
             // ❌ rollback ทั้งหมด → stock ไม่ถูกหัก + ไม่มี borrow record
             $this->pdo->rollBack();
@@ -249,7 +251,6 @@ class BorrowService
                 'paid' => $payNow && $fine['amount'] > 0,
                 'message' => $this->buildReturnMessage($fine, $payNow)
             ];
-
         } catch (Exception $e) {
             // ❌ rollback → status ยังเป็น borrowing + stock ไม่ถูกคืน
             $this->pdo->rollBack();
@@ -369,41 +370,40 @@ class BorrowService
     public function payFine(int $borrowId, ?int $recordedBy = null): array
     {
         $this->pdo->beginTransaction();
-        
+
         try {
             // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE, ทุก status)
             //    ใช้ AnyStatus เพราะต้องหา borrow ที่ returned แล้ว (ไม่ใช่ borrowing)
             //    ป้องกัน 2 คนกดชำระพร้อมกัน
             $borrow = $this->borrowRepo->findByIdForUpdateAnyStatus($borrowId);
-            
+
             if (!$borrow) {
                 throw new Exception('ไม่พบรายการยืม');
             }
-            
+
             // 📝 Step 2: ตรวจว่ามีค่าปรับหรือไม่
             if ($borrow['fine_amount'] <= 0) {
                 throw new Exception('รายการนี้ไม่มีค่าปรับ');
             }
-            
+
             // 📝 Step 3: ตรวจว่าชำระแล้วหรือยัง (ภายใต้ lock)
             //    🛡️ UNIQUE constraint บน borrow_id เป็นด่านสุดท้าย
             $existingPayment = $this->paymentRepo->findByBorrowId($borrowId);
             if ($existingPayment) {
                 throw new Exception('รายการนี้ชำระค่าปรับแล้ว');
             }
-            
+
             // 📝 Step 4: บันทึก payment
             $this->paymentRepo->create($borrowId, $borrow['fine_amount'], $recordedBy);
-            
+
             $this->pdo->commit();
-            
+
             // 📤 คืนผล: สำเร็จ + จำนวนเงิน
             return [
                 'success' => true,
                 'amount' => $borrow['fine_amount'],
                 'message' => 'รับชำระค่าปรับ ' . number_format($borrow['fine_amount']) . ' บาท เรียบร้อยแล้ว'
             ];
-            
         } catch (Exception $e) {
             // ❌ rollback → ไม่มี payment record
             $this->pdo->rollBack();
@@ -469,15 +469,9 @@ class BorrowService
      */
     private function buildBorrowMessage(array $borrowed, array $skipped, string $dueDate): string
     {
-        // 📝 สร้างข้อความแจ้งผล — แสดงเล่มที่สำเร็จ + เล่มที่ข้าม
-        if (empty($borrowed)) {
-            return 'ไม่สามารถยืมหนังสือได้: ' . implode(', ', $skipped);
-        }
-
+        // 📝 สร้างข้อความแจ้งผล
+        //    🛡️ [ATOMIC] skipped จะว่างเสมอ — ถ้าเล่มใดพังจะ throw Exception ก่อนถึงตรงนี้
         $message = "บันทึกการยืมสำเร็จ " . count($borrowed) . " เล่ม";
-        if (!empty($skipped)) {
-            $message .= " (ข้าม: " . implode(', ', $skipped) . ")";
-        }
         $message .= " | กำหนดคืน: " . date('d/m/Y', strtotime($dueDate));
 
         return $message;
