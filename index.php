@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Homepage - หน้าแรก (public, ไม่ต้อง login)
  * 
@@ -68,7 +69,7 @@ require_once __DIR__ . '/includes/header.php';
                     แหล่งรวมความรู้ที่เข้าถึงได้ทุกที่ทุกเวลา ค้นหาหนังสือที่คุณต้องการ ตรวจสอบสถานะ และยืมคืนได้ทันที
                 </p>
                 <div class="flex flex-wrap gap-4 pt-4">
-                    <a href="#search-section" class="bg-white text-primary-900 hover:bg-gray-50 px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg hover:shadow-white/20 hover:-translate-y-1">
+                    <a href="javascript:void(0)" onclick="var el=document.getElementById('search-section');window.scrollTo({top:el.getBoundingClientRect().top+window.pageYOffset-80,behavior:'smooth'})" class="bg-white text-primary-900 hover:bg-gray-50 px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg hover:shadow-white/20 hover:-translate-y-1">
                         <i class="bi bi-search mr-2"></i>ค้นหาหนังสือ
                     </a>
                     <?php if (!isLoggedIn()): ?>
@@ -78,7 +79,7 @@ require_once __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                 </div>
             </div>
-            
+
             <div class="hidden lg:block">
                 <div class="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl shadow-2xl transform rotate-2 hover:rotate-0 transition-all duration-500">
                     <div class="grid grid-cols-2 gap-6">
@@ -108,7 +109,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 </div>
             </div>
-            
+
             <!-- Mobile Stats -->
             <div class="lg:hidden grid grid-cols-2 gap-4">
                 <div class="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-xl text-white">
@@ -124,10 +125,10 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20" id="search-section">
-    
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+
     <!-- Search & Filter Card -->
-    <div class="bg-white rounded-2xl shadow-xl -mt-16 relative z-20 border border-gray-100 overflow-hidden mb-6">
+    <div id="search-section" class="bg-white rounded-2xl shadow-xl -mt-16 relative z-20 border border-gray-100 overflow-hidden mb-6" style="scroll-margin-top: 5rem">
         <div class="p-1 bg-gradient-to-r from-primary-400 via-blue-500 to-purple-500"></div>
         <div class="p-6 md:p-8">
             <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center">
@@ -136,7 +137,7 @@ require_once __DIR__ . '/includes/header.php';
                 </span>
                 ค้นหาและกรองหนังสือ
             </h3>
-            
+
             <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <div class="md:col-span-5">
                     <label class="block text-sm font-medium text-gray-700 mb-2">คำค้นหา</label>
@@ -144,16 +145,15 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="bi bi-search text-gray-400"></i>
                         </div>
-                        <input 
-                            type="text" 
-                            name="search" 
+                        <input
+                            type="text"
+                            name="search"
                             value="<?= e($search) ?>"
                             class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-shadow sm:text-sm"
-                            placeholder="ชื่อหนังสือ, ผู้แต่ง..."
-                        >
+                            placeholder="ชื่อหนังสือ, ผู้แต่ง...">
                     </div>
                 </div>
-                
+
                 <div class="md:col-span-3">
                     <label class="block text-sm font-medium text-gray-700 mb-2">หมวดหมู่</label>
                     <div class="relative">
@@ -173,7 +173,7 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700 mb-2">สถานะ</label>
                     <select name="status" class="block w-full pl-3 pr-8 py-3 border border-gray-300 rounded-xl leading-5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-shadow sm:text-sm">
@@ -181,7 +181,7 @@ require_once __DIR__ . '/includes/header.php';
                         <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>ว่าง</option>
                     </select>
                 </div>
-                
+
                 <div class="md:col-span-2 flex items-end">
                     <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-4 rounded-xl focus:outline-none focus:shadow-outline transition duration-150 ease-in-out shadow-md shadow-primary-500/30 flex justify-center items-center">
                         <i class="bi bi-search mr-2"></i> ค้นหา
@@ -192,7 +192,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <?php displayFlash(); ?>
-    
+
     <!-- Results Header -->
     <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
         <h2 class="text-2xl font-bold text-gray-800 flex items-center">
@@ -204,16 +204,16 @@ require_once __DIR__ . '/includes/header.php';
                 <?= count($books) ?> เล่ม
             </span>
         </h2>
-        
+
         <button id="clear-filters" type="button" class="hidden text-sm text-gray-500 hover:text-red-600 transition-colors flex items-center bg-white px-4 py-2 rounded-lg border border-gray-200 hover:border-red-300 shadow-sm">
             <i class="bi bi-x-circle mr-2"></i> ล้างตัวกรองทั้งหมด
         </button>
     </div>
-    
+
     <!-- Books Grid Container -->
     <div id="book-grid-container" class="min-h-[300px] relative">
         <?php require __DIR__ . '/includes/book_grid.php'; ?>
-        
+
         <!-- Loading Overlay -->
         <div id="grid-loading" class="hidden absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl transition-opacity duration-300">
             <div class="flex flex-col items-center">
@@ -225,130 +225,133 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const searchForm = document.querySelector('form');
-    const searchInput = document.querySelector('input[name="search"]');
-    const categorySelect = document.querySelector('select[name="category"]');
-    const statusSelect = document.querySelector('select[name="status"]');
-    const gridContainer = document.getElementById('book-grid-container');
-    const resultCount = document.getElementById('result-count');
-    const clearBtn = document.getElementById('clear-filters');
-    const loadingOverlay = document.getElementById('grid-loading');
-    
-    let debounceTimer;
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchForm = document.querySelector('form');
+        const searchInput = document.querySelector('input[name="search"]');
+        const categorySelect = document.querySelector('select[name="category"]');
+        const statusSelect = document.querySelector('select[name="status"]');
+        const gridContainer = document.getElementById('book-grid-container');
+        const resultCount = document.getElementById('result-count');
+        const clearBtn = document.getElementById('clear-filters');
+        const loadingOverlay = document.getElementById('grid-loading');
 
-    // Prevent default form submission
-    searchForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        fetchBooks();
-    });
+        let debounceTimer;
 
-    // Inputs listener (Only toggle clear button, NO FETCH)
-    searchInput.addEventListener('input', function() {
-        toggleClearButton();
-    });
-
-    categorySelect.addEventListener('change', () => {
-        toggleClearButton();
-    });
-
-    statusSelect.addEventListener('change', () => {
-        toggleClearButton();
-    });
-    
-    // Clear filters
-    clearBtn.addEventListener('click', function() {
-        searchInput.value = '';
-        categorySelect.value = '';
-        statusSelect.value = '';
-        toggleClearButton();
-        fetchBooks();
-    });
-    
-    // Initial check
-    toggleClearButton();
-
-    function toggleClearButton() {
-        if (searchInput.value || categorySelect.value || statusSelect.value) {
-            clearBtn.classList.remove('hidden');
-            clearBtn.style.display = 'flex'; // Ensure flex display
-        } else {
-            clearBtn.classList.add('hidden');
-            clearBtn.style.display = 'none';
-        }
-    }
-
-    function fetchBooks() {
-        // Show loading
-        loadingOverlay.classList.remove('hidden');
-        
-        // Build URL
-        const params = new URLSearchParams({
-            search: searchInput.value,
-            category: categorySelect.value,
-            status: statusSelect.value
+        // Prevent default form submission
+        searchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetchBooks();
         });
-        
-        // Update URL without reload (History API)
-        const newUrl = `${window.location.pathname}?${params.toString()}`;
-        window.history.pushState({path: newUrl}, '', newUrl);
 
-        // Fetch API
-        fetch(`api/search_books.php?${params.toString()}`)
-            .then(response => response.text())
-            .then(html => {
-                // Update grid content (keep loading overlay wrapper)
-                // We need to carefully replace only the grid content, not the overlay
-                
-                // Create temp wrapper
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
-                
-                // Extract grid or empty message
-                // The API returns exactly what includes/book_grid.php outputs
-                
-                // Remove existing content except loading overlay
-                const children = Array.from(gridContainer.children);
-                children.forEach(child => {
-                    if (child.id !== 'grid-loading') {
-                        child.remove();
-                    }
-                });
-                
-                // Append new content before loading overlay
-                while (tempDiv.firstChild) {
-                    gridContainer.insertBefore(tempDiv.firstChild, loadingOverlay);
-                }
-                
-                // Update result count
-                // We can't easily parse PHP count from JS without API returning JSON
-                // So let's approximate or update API to return count header
-                // For now, let's count elements with class 'group'
-                const count = gridContainer.querySelectorAll('.group').length;
-                resultCount.textContent = `${count} เล่ม`;
-                
-                // Hide loading
-                loadingOverlay.classList.add('hidden');
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                loadingOverlay.classList.add('hidden');
+        // Inputs listener (Only toggle clear button, NO FETCH)
+        searchInput.addEventListener('input', function() {
+            toggleClearButton();
+        });
+
+        categorySelect.addEventListener('change', () => {
+            toggleClearButton();
+        });
+
+        statusSelect.addEventListener('change', () => {
+            toggleClearButton();
+        });
+
+        // Clear filters
+        clearBtn.addEventListener('click', function() {
+            searchInput.value = '';
+            categorySelect.value = '';
+            statusSelect.value = '';
+            toggleClearButton();
+            fetchBooks();
+        });
+
+        // Initial check
+        toggleClearButton();
+
+        function toggleClearButton() {
+            if (searchInput.value || categorySelect.value || statusSelect.value) {
+                clearBtn.classList.remove('hidden');
+                clearBtn.style.display = 'flex'; // Ensure flex display
+            } else {
+                clearBtn.classList.add('hidden');
+                clearBtn.style.display = 'none';
+            }
+        }
+
+        function fetchBooks() {
+            // Show loading
+            loadingOverlay.classList.remove('hidden');
+
+            // Build URL
+            const params = new URLSearchParams({
+                search: searchInput.value,
+                category: categorySelect.value,
+                status: statusSelect.value
             });
-    }
-});
+
+            // Update URL without reload (History API)
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.pushState({
+                path: newUrl
+            }, '', newUrl);
+
+            // Fetch API
+            fetch(`api/search_books.php?${params.toString()}`)
+                .then(response => response.text())
+                .then(html => {
+                    // Update grid content (keep loading overlay wrapper)
+                    // We need to carefully replace only the grid content, not the overlay
+
+                    // Create temp wrapper
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+
+                    // Extract grid or empty message
+                    // The API returns exactly what includes/book_grid.php outputs
+
+                    // Remove existing content except loading overlay
+                    const children = Array.from(gridContainer.children);
+                    children.forEach(child => {
+                        if (child.id !== 'grid-loading') {
+                            child.remove();
+                        }
+                    });
+
+                    // Append new content before loading overlay
+                    while (tempDiv.firstChild) {
+                        gridContainer.insertBefore(tempDiv.firstChild, loadingOverlay);
+                    }
+
+                    // Update result count
+                    // We can't easily parse PHP count from JS without API returning JSON
+                    // So let's approximate or update API to return count header
+                    // For now, let's count elements with class 'group'
+                    const count = gridContainer.querySelectorAll('.group').length;
+                    resultCount.textContent = `${count} เล่ม`;
+
+                    // Hide loading
+                    loadingOverlay.classList.add('hidden');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingOverlay.classList.add('hidden');
+                });
+        }
+    });
 </script>
 </div>
 
 <footer class="bg-gray-900 text-gray-400 py-12 text-sm">
     <div class="max-w-7xl mx-auto px-4 text-center">
         <div class="mb-6 flex justify-center">
-             <div class="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center text-white text-2xl">
+            <div class="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center text-white text-2xl">
                 <i class="bi bi-book-half"></i>
-             </div>
+            </div>
         </div>
         <p>&copy; <?= date('Y') ?> <?= APP_NAME ?>. All rights reserved.</p>
         <p class="mt-2 text-gray-600">ออกแบบและพัฒนาด้วย ❤️</p>
     </div>
 </footer>
 </body>
+
 </html>

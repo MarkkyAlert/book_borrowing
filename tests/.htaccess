@@ -1,0 +1,2 @@
+# Block all web access to test files
+Require all denied
