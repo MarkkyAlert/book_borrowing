@@ -137,7 +137,7 @@ function displayFlash(): void
             default => 'bi-info-circle-fill'
         };
 
-        echo '<div class="' . $colorClass . ' border-l-4 p-3 sm:p-4 mb-4 sm:mb-6 rounded-r-lg shadow-sm flex items-start gap-2 sm:gap-3 relative z-30 overflow-hidden" role="alert">';
+        echo '<div class="' . $colorClass . ' border-l-4 p-3 sm:p-4 mb-4 sm:mb-6 rounded-r-lg shadow-sm flex items-start gap-2 sm:gap-3 relative overflow-hidden" role="alert">';
         echo '<div class="flex-shrink-0 mt-0.5"><i class="bi ' . $icon . '"></i></div>';
         
         // 📝 isHtml=true → ไม่ escape (เชื่อ server), false → escape (เชื่อ user)

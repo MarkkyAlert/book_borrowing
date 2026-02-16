@@ -350,8 +350,8 @@ require_once __DIR__ . '/header.php';
 <div id="addMemberModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
     <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="addMemberBackdrop"></div>
 
-    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-        <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="addMemberPanel">
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="addMemberPanel">
 
             <div class="bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-4 sm:px-6">
                 <div class="flex items-center justify-between">
@@ -393,8 +393,9 @@ require_once __DIR__ . '/header.php';
             </div>
 
             <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
-                <button type="button" class="inline-flex w-full justify-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition-all sm:w-auto shadow-emerald-500/30" id="saveMemberBtn">
-                    <i class="bi bi-check-lg mr-1.5 text-lg"></i>บันทึกสมาชิก
+                <button type="button" class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition-all sm:w-auto shadow-emerald-500/30" id="saveMemberBtn">
+                    <i class="bi bi-check-lg text-base leading-none"></i>
+                    <span class="leading-none">บันทึกสมาชิก</span>
                 </button>
                 <button type="button" class="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto" onclick="closeAddMemberModal()">
                     ยกเลิก
@@ -499,7 +500,7 @@ require_once __DIR__ . '/header.php';
 
                         // Show success toast
                         const toast = document.createElement('div');
-                        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-50 flex items-center';
+                        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-20 flex items-center';
                         toast.innerHTML = '<i class="bi bi-check-circle-fill mr-2"></i> เพิ่มสมาชิก "' + response.member.name + '" สำเร็จ';
                         document.body.appendChild(toast);
 
@@ -542,8 +543,7 @@ require_once __DIR__ . '/header.php';
                 $.ajax({
                     url: 'borrow_form.php',
                     method: 'POST',
-                    // 🛡️ [BUG FIX] ต้องส่ง csrf_token ด้วย — server เช็ค CSRF ที่ line 49
-                    //    เดิมไม่ส่ง → validateCSRFToken('') = false → scan ไม่ทำงาน
+                    // 
                     data: {
                         action: 'scan',
                         type: 'user',
@@ -593,7 +593,7 @@ require_once __DIR__ . '/header.php';
                 $.ajax({
                     url: 'borrow_form.php',
                     method: 'POST',
-                    // 🛡️ [BUG FIX] ต้องส่ง csrf_token ด้วย — ป้องกัน scan ถูก reject
+                    // 
                     data: {
                         action: 'scan',
                         type: 'book',
@@ -636,7 +636,7 @@ require_once __DIR__ . '/header.php';
             var bgColor = type === 'success' ? 'bg-emerald-600' : (type === 'warning' ? 'bg-amber-500' : 'bg-red-500');
             var icon = type === 'success' ? 'bi-check-lg' : (type === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-x-lg');
 
-            var toast = $('<div class="fixed top-20 right-4 ' + bgColor + ' text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center text-sm font-medium animate-bounce-in">' +
+            var toast = $('<div class="fixed top-20 right-4 ' + bgColor + ' text-white px-4 py-2 rounded-lg shadow-lg z-20 flex items-center text-sm font-medium animate-bounce-in">' +
                 '<i class="bi ' + icon + ' mr-2"></i>' + msg + '</div>');
 
             $('body').append(toast);

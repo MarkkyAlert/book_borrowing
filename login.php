@@ -188,15 +188,6 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
             </div>
         </div>
-
-        <?php if (defined('APP_DEBUG') && APP_DEBUG): ?>
-            <!-- แสดง Demo Credentials เฉพาะ Debug Mode -->
-            <div class="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-center">
-                <p class="text-xs text-blue-600 font-medium">
-                    <span class="font-bold">Demo Admin:</span> <?= e(getenv('ADMIN_EMAIL') ?: 'admin@library.com') ?> / <?= e(getenv('ADMIN_DEFAULT_PASSWORD') ?: '123456') ?>
-                </p>
-            </div>
-        <?php endif; ?>
     </div>
 </div>
 
