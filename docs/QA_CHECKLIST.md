@@ -641,7 +641,6 @@
 | 19. Data Integrity | ✅ | — | 27/27: Stock, Fines, Quota, FK, Expiration, DB Constraints |
 | 20. UI/UX | ✅ | — | Mobile 375×812 responsive confirmed |
 
-> **ทดสอบโดย**: Antigravity Agent (Browser + PHP Automated)
 > **วันที่ทดสอบ**: 2026-02-14
 > **เวอร์ชัน**: v1.0
 > **ผลรวม**: 20/20 ข้อ ผ่าน (100%) ✅
