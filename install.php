@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Database Installation Script
  * เข้าถึง: {APP_URL}/install.php
@@ -17,9 +18,10 @@ $isInstalled = file_exists($lockFile);
 
 // ถ้าติดตั้งแล้ว แสดงข้อความเตือน
 if ($isInstalled) {
-    ?>
+?>
     <!DOCTYPE html>
     <html lang="th">
+
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,6 +29,7 @@ if ($isInstalled) {
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     </head>
+
     <body class="bg-light">
         <div class="container py-5">
             <div class="row justify-content-center">
@@ -58,8 +61,9 @@ if ($isInstalled) {
             </div>
         </div>
     </body>
+
     </html>
-    <?php
+<?php
     exit;
 }
 
@@ -123,6 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `cover_image` VARCHAR(255) DEFAULT NULL,
                 `quantity` INT NOT NULL DEFAULT 1,
                 `available` INT NOT NULL DEFAULT 1,
+                `is_visible` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'แสดงให้สาธารณะเห็น',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_available` (`available`),
@@ -245,19 +250,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         //    ใช้ password จาก form หรือสร้าง random (ถ้าเว้นว่างหรือสั้นเกินไป)
         $adminEmail = trim($_POST['admin_email'] ?? 'admin@library.com');
         $adminPlainPassword = $_POST['admin_password'] ?? '';
-        
+
         if (empty($adminPlainPassword) || strlen($adminPlainPassword) < MIN_PASSWORD_LENGTH) {
             // 🔐 สร้าง random password ที่ปลอดภัย (12 hex chars)
             $adminPlainPassword = bin2hex(random_bytes(6));
         }
-        
+
         // 🔒 hash password ด้วย bcrypt (PASSWORD_DEFAULT)
         $adminPassword = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
-        
+
         // ตรวจว่ามี admin อยู่แล้วหรือยัง (ป้องกันติดตั้งซ้ำสร้าง admin ซ้ำ)
         $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$adminEmail]);
-        
+
         if (!$stmt->fetch()) {
             $stmt = $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, ?, 'admin')");
             $stmt->execute(['ผู้ดูแลระบบ', $adminEmail, $adminPassword, '0812345678']);
@@ -282,12 +287,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ['วัยรุ่นพันล้าน', 'ท็อป จิรายุส', 'ธุรกิจ', 4],
             ['ฟิสิกส์มหัศจรรย์', 'รศ.ดร.เจษฎา', 'วิชาการ', 1],
         ];
-        
+
         foreach ($books as $book) {
             $stmt = $pdo->prepare("SELECT id FROM categories WHERE name = ?");
             $stmt->execute([$book[2]]);
             $cat = $stmt->fetch();
-            
+
             $stmt = $pdo->prepare("SELECT id FROM books WHERE title = ?");
             $stmt->execute([$book[0]]);
             if (!$stmt->fetch()) {
@@ -301,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 🔒 สร้าง lock file ป้องกันติดตั้งซ้ำ (จะถูกตรวจตอนเข้าหน้าครั้งถัดไป)
         //    ถ้าอยากติดตั้งใหม่ ให้ลบ .installed หรือเพิ่ม ?force=1
         file_put_contents($lockFile, date('Y-m-d H:i:s') . "\nInstalled successfully.");
-        
+
         $success = true;
         $messages[] = "";
         $messages[] = "🎉 ติดตั้งระบบเรียบร้อยแล้ว!";
@@ -309,7 +314,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $messages[] = "🔑 Password: " . $adminPlainPassword;
         $messages[] = "";
         $messages[] = "⚠️ กรุณาลบไฟล์ install.php เพื่อความปลอดภัย";
-
     } catch (PDOException $e) {
         $messages[] = "❌ เกิดข้อผิดพลาด: " . $e->getMessage();
     }
@@ -317,6 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -331,11 +336,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             justify-content: center;
         }
+
         .install-card {
             max-width: 600px;
             width: 100%;
             margin: 20px;
         }
+
         .message-box {
             background: #f8f9fa;
             border-radius: 8px;
@@ -345,6 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     </style>
 </head>
+
 <body>
     <div class="card install-card shadow-lg">
         <div class="card-header bg-primary text-white text-center py-4">
@@ -357,14 +365,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="bi bi-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
                     <h4 class="mt-3">พร้อมติดตั้งระบบ</h4>
                     <p class="text-muted">การติดตั้งจะสร้างฐานข้อมูลและตารางที่จำเป็น</p>
-                    
+
                     <div class="alert alert-info text-start">
                         <strong>ตั้งค่าการเชื่อมต่อ:</strong><br>
                         Host: <?= DB_HOST ?><br>
                         Database: <?= DB_NAME ?><br>
                         User: <?= DB_USER ?>
                     </div>
-                    
+
                     <form method="POST">
                         <div class="text-start mb-3">
                             <label class="form-label fw-bold">อีเมล Admin</label>
@@ -386,7 +394,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?= htmlspecialchars($msg) . "\n" ?>
                     <?php endforeach; ?>
                 </div>
-                
+
                 <?php if ($success): ?>
                     <div class="text-center mt-4">
                         <a href="index.php" class="btn btn-success btn-lg me-2">
@@ -396,7 +404,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <i class="bi bi-gear me-2"></i>เข้าหน้า Admin
                         </a>
                     </div>
-                    
+
                     <div class="alert alert-warning mt-4">
                         <i class="bi bi-shield-exclamation me-2"></i>
                         <strong>คำแนะนำ:</strong> ควรลบไฟล์ install.php หลังติดตั้งเสร็จ
@@ -412,4 +420,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 </body>
+
 </html>

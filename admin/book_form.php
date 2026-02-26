@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
     $book['description'] = trim($_POST['description'] ?? '');
     $book['quantity'] = max(0, (int) ($_POST['quantity'] ?? 1)); // ขั้นต่ำ 0 เล่ม (สำหรับซ่อนหนังสือที่หาย/ชำรุด)
+    $book['is_visible'] = isset($_POST['is_visible']) ? 1 : 0; // 👁️ การมองเห็น
     $isEdit = !empty($_POST['id']);
     $book['id'] = (int) ($_POST['id'] ?? 0);
 
@@ -152,7 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'category_id' => $book['category_id'],
             'description' => $book['description'] ?: null,
             'cover_image' => $coverImage,
-            'quantity' => $book['quantity']
+            'quantity' => $book['quantity'],
+            'is_visible' => $book['is_visible'] ?? 1
         ];
 
         try {
@@ -279,6 +281,22 @@ require_once __DIR__ . '/header.php';
                         <?php if ($isEdit && isset($book['available'])): ?>
                             <p class="mt-1 text-xs text-green-600 font-medium">ว่าง <?= $book['available'] ?> เล่ม</p>
                         <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- 👁️ Toggle: แสดง/ซ่อนหนังสือ -->
+                <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <label for="is_visible" class="block text-sm font-medium text-gray-700">แสดงให้ผู้ใช้ทั่วไปเห็น</label>
+                            <p class="text-xs text-gray-500 mt-0.5">ปิดเพื่อซ่อนหนังสือจากหน้าเว็บสาธารณะ (ยังเห็นในหน้า Admin)</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="is_visible" name="is_visible" value="1"
+                                class="sr-only peer"
+                                <?= ($book['is_visible'] ?? 1) ? 'checked' : '' ?>>
+                            <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                        </label>
                     </div>
                 </div>
 

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Books Management - จัดการหนังสือ (รายการ + ลบ)
  * 
@@ -33,16 +34,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
         redirect('books.php');
     }
-    
+
     $id = (int) ($_POST['id'] ?? 0);
-    
+
     // 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดลบซ้ำ)
     $idempotencyKey = 'delete_book_' . $id;
     if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
         setFlash('info', 'รายการนี้ถูกลบไปแล้ว');
         redirect('books.php');
     }
-    
+
     try {
         $bookService->deleteBook($id);
         // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
@@ -199,6 +200,11 @@ require_once __DIR__ . '/header.php';
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                         <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
                                         หมด
+                                    </span>
+                                <?php endif; ?>
+                                <?php if (empty($book['is_visible'])): ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 ml-1" title="ซ่อนจากหน้าเว็บสาธารณะ">
+                                        <i class="bi bi-eye-slash mr-1"></i>ซ่อน
                                     </span>
                                 <?php endif; ?>
                             </td>

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * BookRepository - Data Access Layer สำหรับหนังสือ
  *
@@ -181,8 +182,9 @@ class BookRepository
         // 📗 Filter: เฉพาะหนังสือที่มี stock (available > 0)
         // รองรับ 2 key เพราะหน้าต่างๆ ส่งมาคนละชื่อ
         // Support both 'available_only' and 'available' filter keys
-        if ((isset($filters['available_only']) && $filters['available_only']) 
-            || (isset($filters['available']) && $filters['available'])) {
+        if ((isset($filters['available_only']) && $filters['available_only'])
+            || (isset($filters['available']) && $filters['available'])
+        ) {
             $where[] = "b.available > 0";
         }
 
@@ -197,6 +199,11 @@ class BookRepository
                 'borrowed'     => $where[] = "b.available < b.quantity",  // มีคนยืมอยู่
                 default        => null, // ค่าอื่น → ไม่เพิ่มเงื่อนไข (ปลอดภัย)
             };
+        }
+
+        // 👁️ Filter: การมองเห็น (is_visible) — ซ่อนหนังสือจากหน้า public
+        if (isset($filters['visible_only']) && $filters['visible_only']) {
+            $where[] = "b.is_visible = 1";
         }
 
         // 🔗 ประกอบ WHERE clause จาก array → "WHERE cond1 AND cond2 AND ..."
@@ -387,8 +394,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available, is_visible)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -400,11 +407,12 @@ class BookRepository
             $data['title'],              // ชื่อหนังสือ (บังคับ)
             $data['author'],             // ผู้แต่ง (บังคับ)
             $data['isbn'] ?? null,       // ISBN (ไม่บังคับ — ใช้สแกน barcode)
-            $data['category_id'] ?? null,// หมวดหมู่ (ไม่บังคับ)
-            $data['description'] ?? null,// รายละเอียด (ไม่บังคับ)
-            $data['cover_image'] ?? null,// ชื่อไฟล์รูปปก (ไม่บังคับ)
+            $data['category_id'] ?? null, // หมวดหมู่ (ไม่บังคับ)
+            $data['description'] ?? null, // รายละเอียด (ไม่บังคับ)
+            $data['cover_image'] ?? null, // ชื่อไฟล์รูปปก (ไม่บังคับ)
             $quantity,                   // จำนวนทั้งหมด
-            $quantity                    // จำนวนที่ว่าง = จำนวนทั้งหมด
+            $quantity,                   // จำนวนที่ว่าง = จำนวนทั้งหมด
+            $data['is_visible'] ?? 1     // 👁️ การมองเห็น (default: แสดง)
         ]);
 
         // 📤 คืน ID ของหนังสือที่เพิ่งสร้าง (AUTO_INCREMENT)
@@ -438,7 +446,7 @@ class BookRepository
             UPDATE books SET 
                 title = ?, author = ?, isbn = ?, category_id = ?, 
                 description = ?, cover_image = COALESCE(?, cover_image), 
-                quantity = ?, available = ?
+                quantity = ?, available = ?, is_visible = ?
             WHERE id = ?
         ");
 
@@ -447,12 +455,13 @@ class BookRepository
             $data['title'],              // 1. ชื่อหนังสือ
             $data['author'],             // 2. ผู้แต่ง
             $data['isbn'] ?? null,       // 3. ISBN
-            $data['category_id'] ?? null,// 4. หมวดหมู่
-            $data['description'] ?? null,// 5. รายละเอียด
-            $data['cover_image'] ?? null,// 6. รูปปก (null = เก็บรูปเดิม)
+            $data['category_id'] ?? null, // 4. หมวดหมู่
+            $data['description'] ?? null, // 5. รายละเอียด
+            $data['cover_image'] ?? null, // 6. รูปปก (null = เก็บรูปเดิม)
             $data['quantity'],           // 7. จำนวนทั้งหมด
             $data['available'],          // 8. จำนวนที่ว่าง
-            $id                          // 9. WHERE id = ?
+            $data['is_visible'] ?? 1,    // 9. 👁️ การมองเห็น
+            $id                          // 10. WHERE id = ?
         ]);
     }
 
@@ -474,7 +483,7 @@ class BookRepository
         // 📝 SQL เริ่มต้น: ค้นหา ISBN ที่ตรงกัน
         $sql = "SELECT id FROM books WHERE isbn = ?";
         $params = [$isbn];
-        
+
         // 🧠 $excludeId ใช้ตอน edit — ยกเว้นหนังสือตัวเองออกจากการตรวจซ้ำ
         //    เช่น หนังสือ ID=5 มี ISBN "123" → ตอนแก้ไขหนังสือ ID=5
         //    ต้องยกเว้น ID=5 ออก ไม่งั้นจะบอกว่า "ISBN ซ้ำ" กับตัวเอง
@@ -482,7 +491,7 @@ class BookRepository
             $sql .= " AND id != ?";
             $params[] = $excludeId;
         }
-        
+
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         // 📤 fetch() !== false → เจอ = ISBN ซ้ำ (return true)

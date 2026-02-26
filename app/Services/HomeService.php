@@ -1,4 +1,5 @@
 <?php
+
 /**
  * HomeService - Business Logic สำหรับหน้าแรก (public, ไม่ต้อง login)
  *
@@ -43,7 +44,7 @@ class HomeService
     private CategoryRepository $categoryRepo;
     private UserRepository $userRepo;
     private ReservationRepository $reservationRepo;
-    
+
     // 🏗️ Constructor: สร้าง repo ทั้งหมด
     public function __construct(PDO $pdo)
     {
@@ -53,7 +54,7 @@ class HomeService
         $this->userRepo = new UserRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
     }
-    
+
     /**
      * ==========================================================================
      * 🎯 จุดประสงค์: ดึงหนังสือ + categories สำหรับหน้าแรก
@@ -76,19 +77,22 @@ class HomeService
         // �� แปลง request params เป็น repo filters
         //    กรองเฉพาะค่าที่ไม่ว่างออก (ป้องกันส่งค่าว่างไป DB)
         $bookFilters = [];
-        
+
         if (!empty($filters['search'])) {
             $bookFilters['search'] = $filters['search'];
         }
-        
+
         if (!empty($filters['category_id'])) {
             $bookFilters['category_id'] = (int) $filters['category_id'];
         }
-        
+
         if (!empty($filters['status']) && $filters['status'] === 'available') {
             $bookFilters['available'] = true;
         }
-        
+
+        // 👁️ ซ่อนหนังสือที่ถูกปิดการแสดงผลจากหน้า public
+        $bookFilters['visible_only'] = true;
+
         // 📤 คืนทั้ง books + categories ในครั้งเดียว
         //    ลด round-trip: หน้าแรกต้องใช้ทั้ง dropdown กรอง + รายการหนังสือ
         return [
@@ -96,7 +100,7 @@ class HomeService
             'categories' => $this->categoryRepo->findAll()
         ];
     }
-    
+
     /**
      * ==========================================================================
      * 🎯 จุดประสงค์: สถิติหน้าแรก (public dashboard)
@@ -110,15 +114,23 @@ class HomeService
         // 🔄 [LAZY EXPIRE] คืน stock ก่อนนับสถิติ (ให้ตัวเลข available ถูกต้อง)
         $this->reservationRepo->markExpiredReservations();
 
-        // 📝 รวมสถิติสำหรับแสดงหน้าแรก (public dashboard)
-        $bookStats = $this->bookRepo->getStatistics();
+        // 👁️ นับเฉพาะหนังสือที่เปิดให้เห็น (is_visible = 1) สำหรับหน้า public
+        $pdo = $this->pdo;
+        $row = $pdo->query("
+            SELECT 
+                COALESCE(SUM(quantity), 0) as total,
+                COALESCE(SUM(available), 0) as available
+            FROM books
+            WHERE is_visible = 1
+        ")->fetch();
+
         return [
-            'total_books' => $bookStats['total'],        // หนังสือทั้งหมด
-            'available_books' => $bookStats['available'],  // หนังสือว่าง
-            'total_members' => $this->userRepo->countMembers()  // สมาชิกทั้งหมด
+            'total_books' => (int) $row['total'],
+            'available_books' => (int) $row['available'],
+            'total_members' => $this->userRepo->countMembers()
         ];
     }
-    
+
     /**
      * ==========================================================================
      * 🎯 จุดประสงค์: ดึงหมวดหมู่ทั้งหมด (pass-through)

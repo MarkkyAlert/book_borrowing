@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Book Detail Page - รายละเอียดหนังสือ (public, ไม่ต้อง login)
  * 
@@ -25,6 +26,7 @@ if ($bookId <= 0) {
 
 use App\Services\BookService;
 use App\Repositories\BorrowRepository;
+
 $bookService = new BookService($pdo);
 $borrowRepo = new BorrowRepository($pdo);
 
@@ -32,6 +34,13 @@ $borrowRepo = new BorrowRepository($pdo);
 $book = $bookService->getBookById($bookId);
 
 if (!$book) {
+    setFlash('error', 'ไม่พบหนังสือที่ต้องการ');
+    redirect(APP_URL . '/index.php');
+}
+
+// 👁️ [SECURITY] ซ่อนหนังสือที่ถูกปิดการแสดงผลจากผู้ใช้ทั่วไป
+// Admin/Staff ยังเข้าดูหน้ารายละเอียดได้ (เพื่อตรวจสอบ)
+if (empty($book['is_visible']) && (!isLoggedIn() || !isAdmin())) {
     setFlash('error', 'ไม่พบหนังสือที่ต้องการ');
     redirect(APP_URL . '/index.php');
 }
@@ -68,22 +77,22 @@ require_once __DIR__ . '/includes/header.php';
             </li>
         </ol>
     </nav>
-    
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Book Image -->
         <div class="lg:col-span-1">
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden sticky top-24">
                 <div class="relative aspect-[3/4] bg-gray-100">
                     <?php if (!empty($book['cover_image'])): ?>
-                        <img src="<?= APP_URL ?>/uploads/covers/<?= e($book['cover_image']) ?>" 
-                             class="absolute inset-0 w-full h-full object-cover" 
-                             alt="<?= e($book['title']) ?>">
+                        <img src="<?= APP_URL ?>/uploads/covers/<?= e($book['cover_image']) ?>"
+                            class="absolute inset-0 w-full h-full object-cover"
+                            alt="<?= e($book['title']) ?>">
                     <?php else: ?>
                         <div class="absolute inset-0 flex items-center justify-center text-gray-300">
                             <i class="bi bi-book text-8xl"></i>
                         </div>
                     <?php endif; ?>
-                    
+
                     <!-- Status Overlay -->
                     <div class="absolute top-4 right-4">
                         <?php if ($book['available'] > 0): ?>
@@ -98,10 +107,10 @@ require_once __DIR__ . '/includes/header.php';
                         <?php endif; ?>
                     </div>
                 </div>
-                
+
                 <div class="p-6 bg-white border-t border-gray-100 space-y-4">
                     <!-- Reservation Status -->
-                    <?php 
+                    <?php
                     $userReserved = false;
                     $reservation = null;
                     if (isLoggedIn()) {
@@ -154,58 +163,58 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
 
                 <script>
-                function reserveBook(bookId) {
-                    modalConfirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน 2 วัน)', {
-                        title: 'ยืนยันการจอง',
-                        confirmText: 'จองเลย',
-                        confirmClass: 'primary'
-                    }).then(function(confirmed) {
-                        if (!confirmed) return;
+                    function reserveBook(bookId) {
+                        modalConfirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน 2 วัน)', {
+                            title: 'ยืนยันการจอง',
+                            confirmText: 'จองเลย',
+                            confirmClass: 'primary'
+                        }).then(function(confirmed) {
+                            if (!confirmed) return;
 
-                        // [UX] Disable button to prevent double-submit
-                        const btn = document.querySelector('[onclick*="reserveBook"]');
-                        if (btn) {
-                            btn.disabled = true;
-                            btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังจอง...';
-                        }
-
-                        fetch('api/reserve_book.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: 'book_id=' + bookId + '&csrf_token=<?= generateCSRFToken() ?>'
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                modalSuccess(data.message).then(() => location.reload());
-                            } else {
-                                // [FIX High #5] Refresh page on error to get fresh data
-                                modalError(data.message || 'เกิดข้อผิดพลาด').then(() => location.reload());
+                            // [UX] Disable button to prevent double-submit
+                            const btn = document.querySelector('[onclick*="reserveBook"]');
+                            if (btn) {
+                                btn.disabled = true;
+                                btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังจอง...';
                             }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            modalError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่').then(() => {
-                                // Re-enable button on network error
-                                if (btn) {
-                                    btn.disabled = false;
-                                    btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
-                                }
-                            });
+
+                            fetch('api/reserve_book.php', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                    },
+                                    body: 'book_id=' + bookId + '&csrf_token=<?= generateCSRFToken() ?>'
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        modalSuccess(data.message).then(() => location.reload());
+                                    } else {
+                                        // [FIX High #5] Refresh page on error to get fresh data
+                                        modalError(data.message || 'เกิดข้อผิดพลาด').then(() => location.reload());
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                    modalError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่').then(() => {
+                                        // Re-enable button on network error
+                                        if (btn) {
+                                            btn.disabled = false;
+                                            btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
+                                        }
+                                    });
+                                });
                         });
-                    });
-                }
+                    }
                 </script>
             </div>
         </div>
-        
+
         <!-- Book Details -->
         <div class="lg:col-span-2 space-y-6">
             <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100">
                 <h1 class="text-3xl font-bold text-gray-900 mb-6 leading-tight"><?= e($book['title']) ?></h1>
-                
+
                 <div class="space-y-4 mb-8">
                     <div class="flex items-start p-4 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary-100 transition-colors shadow-sm">
                         <div class="flex-shrink-0 p-2 bg-blue-100 text-blue-600 rounded-lg">
@@ -216,7 +225,7 @@ require_once __DIR__ . '/includes/header.php';
                             <p class="text-lg font-semibold text-gray-900"><?= e($book['author']) ?></p>
                         </div>
                     </div>
-                    
+
                     <div class="flex items-start p-4 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary-100 transition-colors shadow-sm">
                         <div class="flex-shrink-0 p-2 bg-purple-100 text-purple-600 rounded-lg">
                             <i class="bi bi-bookmark-fill text-xl"></i>
@@ -228,20 +237,20 @@ require_once __DIR__ . '/includes/header.php';
                             </p>
                         </div>
                     </div>
-                    
+
                     <?php if ($book['isbn']): ?>
-                    <div class="flex items-start p-4 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary-100 transition-colors shadow-sm">
-                        <div class="flex-shrink-0 p-2 bg-pink-100 text-pink-600 rounded-lg">
-                            <i class="bi bi-upc-scan text-xl"></i>
+                        <div class="flex items-start p-4 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary-100 transition-colors shadow-sm">
+                            <div class="flex-shrink-0 p-2 bg-pink-100 text-pink-600 rounded-lg">
+                                <i class="bi bi-upc-scan text-xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-gray-500">ISBN</p>
+                                <p class="text-lg font-semibold text-gray-900 font-mono"><?= e($book['isbn']) ?></p>
+                            </div>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">ISBN</p>
-                            <p class="text-lg font-semibold text-gray-900 font-mono"><?= e($book['isbn']) ?></p>
-                        </div>
-                    </div>
                     <?php endif; ?>
                 </div>
-                
+
                 <?php if ($book['description']): ?>
                     <div class="prose prose-blue max-w-none">
                         <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center">
@@ -253,7 +262,7 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
                 <?php endif; ?>
-                
+
                 <!-- Actions -->
                 <div class="mt-8 flex flex-wrap gap-4 pt-6 border-t border-gray-100">
                     <a href="index.php" class="flex-1 sm:flex-none px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:text-primary-600 transition-colors flex items-center justify-center">
@@ -266,7 +275,7 @@ require_once __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                 </div>
             </div>
-            
+
             <!-- Borrow History (Admin only) -->
             <?php if (isAdmin()): ?>
                 <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
@@ -276,7 +285,7 @@ require_once __DIR__ . '/includes/header.php';
                             ประวัติการยืมล่าสุด
                         </h3>
                     </div>
-                    
+
                     <?php if (empty($borrowHistory)): ?>
                         <div class="p-8 text-center text-gray-500">
                             <i class="bi bi-inbox text-4xl mb-2 block text-gray-300"></i>

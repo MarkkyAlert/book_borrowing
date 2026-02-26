@@ -113,6 +113,11 @@ class ReservationService
                 throw new Exception('ไม่พบหนังสือ');
             }
 
+            // 👁️ [SECURITY] ป้องกันจองหนังสือที่ถูกซ่อน
+            if (empty($book['is_visible'])) {
+                throw new Exception('หนังสือนี้ไม่เปิดให้จองในขณะนี้');
+            }
+
             // 📝 Step 3: ตรวจ stock (ภายใต้ lock)
             if ($book['available'] <= 0) {
                 throw new Exception('หนังสือหมด ไม่สามารถจองได้');

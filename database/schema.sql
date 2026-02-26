@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS `books` (
     `cover_image` VARCHAR(255) DEFAULT NULL COMMENT 'ชื่อไฟล์รูปปก',
     `quantity` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนทั้งหมด',
     `available` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนที่ว่าง',
+    `is_visible` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'แสดงให้สาธารณะเห็น',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_available` (`available`),

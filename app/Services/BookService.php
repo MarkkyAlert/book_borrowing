@@ -1,4 +1,5 @@
 <?php
+
 /**
  * BookService - Business Logic สำหรับการจัดการหนังสือ
  *
@@ -168,14 +169,14 @@ class BookService
             //    สูตร: available_ใหม่ = available_เดิม + (quantity_ใหม่ - quantity_เดิม)
             $oldQuantity = $book['quantity'];
             $newQuantity = $data['quantity'] ?? $oldQuantity;
-            
+
             // 🛡️ [DATA INTEGRITY] ห้ามลด quantity ต่ำกว่าจำนวนที่ออกอยู่ (ยืม+จอง)
             //    เช่น quantity=10, available=3 → currentlyOut=7 → ลดเป็น 6 ไม่ได้ (ติดลบ)
             $currentlyOut = $oldQuantity - $book['available'];
             if ($newQuantity < $currentlyOut) {
                 throw new \Exception("ไม่สามารถลดจำนวนเป็น {$newQuantity} ได้ เพราะมีหนังสือออกอยู่ {$currentlyOut} เล่ม (ยืม/จอง)");
             }
-            
+
             // 📝 Step 3: คำนวณ available ใหม่
             //    max(0, ...) ป้องกันติดลบ (safety net)
             $quantityDiff = $newQuantity - $oldQuantity;
@@ -190,12 +191,12 @@ class BookService
                 'description' => $data['description'] ?? null,
                 'cover_image' => $data['cover_image'] ?? null,
                 'quantity' => $newQuantity,
-                'available' => $newAvailable
+                'available' => $newAvailable,
+                'is_visible' => $data['is_visible'] ?? 1
             ]);
 
             $this->pdo->commit();
             return $result;
-
         } catch (\Exception $e) {
             $this->pdo->rollBack();
             error_log("[BookService::updateBook] bookId={$id} error: " . $e->getMessage());
@@ -259,7 +260,6 @@ class BookService
             }
 
             return true;
-
         } catch (Exception $e) {
             // ❌ rollback → หนังสือยังอยู่
             $this->pdo->rollBack();
