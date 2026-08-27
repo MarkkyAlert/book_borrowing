@@ -139,10 +139,26 @@ APP_DEBUG=false
 
 ถ้าต้องการข้อมูล demo เต็ม (มีสมาชิก, ยืม/คืน, จอง, ค่าปรับ):
 
+**วิธีที่ 1 — phpMyAdmin**
+
 1. เปิด http://localhost/phpmyadmin
-2. เลือก database `book_borrowing` จากเมนูซ้าย
+2. **เลือก database ที่ติดตั้งไว้จากเมนูซ้าย** (ค่าเริ่มต้นคือ `book_borrowing` — ถ้าตั้ง `DB_NAME` ใน `.env` เป็นชื่ออื่นให้เลือกชื่อนั้น)
 3. กดแท็บ **Import** → เลือกไฟล์ `database/sample_data.sql` → กด **Go**
-4. รหัสผ่านทุก account ในข้อมูลตัวอย่าง: **`123456`**
+
+**วิธีที่ 2 — Command line**
+
+```
+mysql -u root -p ชื่อฐานข้อมูล < database/sample_data.sql
+```
+
+> ⚠️ ไฟล์ `sample_data.sql` **ไม่ระบุชื่อฐานข้อมูลในตัวเอง** จึงต้องเลือก database ก่อนเสมอ
+> (ออกแบบแบบนี้เพื่อให้ใช้ได้กับทุกค่า `DB_NAME` ไม่ใช่แค่ `book_borrowing`)
+
+**รหัสผ่าน**
+
+- ทุก account ในข้อมูลตัวอย่าง: **`123456`**
+- ยกเว้น `admin@library.com` ที่ยังใช้รหัสที่ตั้งไว้ตอน `install.php` — ไฟล์ตัวอย่างจะไม่ทับรหัส admin
+- ⚠️ ห้ามนำข้อมูลชุดนี้ขึ้น production
 
 | Email | บทบาท |
 |-------|--------|

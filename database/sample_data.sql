@@ -1,14 +1,22 @@
 -- =====================================================
 -- ระบบยืมคืนหนังสือ - Sample Data
 -- =====================================================
--- ข้อมูลตัวอย่างสำหรับทดสอบระบบ
--- รันไฟล์นี้หลังจาก schema.sql
+-- ข้อมูลตัวอย่างสำหรับทดสอบ/เดโมระบบ
+-- รันไฟล์นี้หลังจาก schema.sql หรือหลังติดตั้งด้วย install.php
+--
+-- ⚠️ ไฟล์นี้ "ไม่ระบุชื่อฐานข้อมูล" — ต้องเลือก database เองก่อนรัน
+--    เพื่อให้ใช้ได้กับทุกค่า DB_NAME ที่ตั้งไว้ใน .env (ไม่ใช่แค่ book_borrowing)
+--
+--    phpMyAdmin : เลือก database จากเมนูซ้าย → แท็บ Import → เลือกไฟล์นี้ → Go
+--    Command line: mysql -u root -p ชื่อฐานข้อมูล < database/sample_data.sql
+--
+-- 🔑 รหัสผ่านของทุกบัญชีในไฟล์นี้คือ 123456
+--    (ยกเว้น admin id=1 ที่ยังใช้รหัสเดิมที่ตั้งไว้ตอน install.php — ไฟล์นี้ไม่ทับ)
+--    ⚠️ ห้ามใช้ข้อมูลชุดนี้บน production
 -- =====================================================
 
 SET NAMES utf8mb4;
 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
-
-USE `book_borrowing`;
 
 -- ล้างข้อมูลเดิม (ถ้ามี) - ใช้ DELETE เพราะ TRUNCATE ติด FK
 -- ⚠️ เก็บ admin (id=1) ไว้ เพื่อไม่ให้รหัสผ่านที่ตั้งผ่าน install.php หาย
@@ -32,11 +40,11 @@ ALTER TABLE `reservations` AUTO_INCREMENT = 1;
 -- กำหนด ID ชัดเจนเพื่อให้ FK ทำงานถูกต้อง
 -- =====================================================
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `phone`, `role`) VALUES
-(1, 'ผู้ดูแลระบบ', 'admin@library.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0812345678', 'admin'),
-(2, 'เจ้าหน้าที่ห้องสมุด', 'staff@library.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0898765432', 'staff'),
-(3, 'สมชาย ใจดี', 'somchai@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0891234567', 'member'),
-(4, 'สมหญิง รักเรียน', 'somying@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0897654321', 'member'),
-(5, 'วิชัย อ่านเก่ง', 'wichai@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '0823456789', 'member')
+(1, 'ผู้ดูแลระบบ', 'admin@library.com', '$2y$10$FX2Fjq4K3Y3FhTG9.A6u5O3DokKMrSYOnaL/nagfD.xF7VQBpaUyu', '0812345678', 'admin'),
+(2, 'เจ้าหน้าที่ห้องสมุด', 'staff@library.com', '$2y$10$FX2Fjq4K3Y3FhTG9.A6u5O3DokKMrSYOnaL/nagfD.xF7VQBpaUyu', '0898765432', 'staff'),
+(3, 'สมชาย ใจดี', 'somchai@example.com', '$2y$10$FX2Fjq4K3Y3FhTG9.A6u5O3DokKMrSYOnaL/nagfD.xF7VQBpaUyu', '0891234567', 'member'),
+(4, 'สมหญิง รักเรียน', 'somying@example.com', '$2y$10$FX2Fjq4K3Y3FhTG9.A6u5O3DokKMrSYOnaL/nagfD.xF7VQBpaUyu', '0897654321', 'member'),
+(5, 'วิชัย อ่านเก่ง', 'wichai@example.com', '$2y$10$FX2Fjq4K3Y3FhTG9.A6u5O3DokKMrSYOnaL/nagfD.xF7VQBpaUyu', '0823456789', 'member')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `role` = VALUES(`role`);
 
 -- =====================================================
@@ -116,16 +124,6 @@ INSERT INTO `borrows` (`user_id`, `book_id`, `borrow_date`, `due_date`, `return_
 (3, 4, DATE_SUB(CURDATE(), INTERVAL 50 DAY), DATE_SUB(CURDATE(), INTERVAL 36 DAY), DATE_SUB(CURDATE(), INTERVAL 21 DAY), 'returned', 300);
 
 -- =====================================================
--- Update Book Availability (ปรับ stock ตามการยืม)
--- =====================================================
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 1;
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 2;
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 3;
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 4;
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 6;
-UPDATE `books` SET `available` = `available` - 1 WHERE `id` = 9;
-
--- =====================================================
 -- Sample Payments (การชำระค่าปรับ)
 -- =====================================================
 -- หมายเหตุ: borrow_id ต้องตรงกับ borrows ที่มีค่าปรับและชำระแล้ว
@@ -152,6 +150,27 @@ INSERT INTO `reservations` (`user_id`, `book_id`, `status`, `expires_at`, `creat
 -- จองยกเลิก
 INSERT INTO `reservations` (`user_id`, `book_id`, `status`, `expires_at`, `created_at`) VALUES
 (3, 8, 'cancelled', DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 4 DAY));
+
+-- =====================================================
+-- Update Book Availability (คำนวณ stock ใหม่จากข้อมูลจริง)
+-- =====================================================
+-- ⚠️ บล็อกนี้ต้องอยู่ "ท้ายสุด" — หลัง borrows และ reservations ถูก insert ครบแล้ว
+--
+-- 🧠 กฎของระบบ (ดู ReservationService::createReservation):
+--      available = quantity − (จำนวนที่ยืมค้าง) − (จำนวนการจองที่ยัง pending)
+--    การจอง "หัก stock ทันทีตั้งแต่กดจอง" ไม่ใช่ตอนอนุมัติ
+--    → ข้อมูลตัวอย่างจึงต้องหักส่วนของ pending reservation ด้วย ไม่งั้น available จะเกินจริง
+--
+-- 🛡️ คำนวณจาก COUNT ของข้อมูลจริง แทนการไล่ลบทีละ id
+--    เพิ่ม/แก้แถว borrows หรือ reservations ด้านบนได้เลย stock จะถูกต้องเสมอ
+--    (วิธีเดิมใช้ `available = available - 1 WHERE id = ...` แบบ hard-code
+--     ซึ่งลืมหักของ reservation ทำให้ available ของหนังสือ 2 เล่มเกินจริงไป 1)
+UPDATE `books` b
+SET b.`available` = b.`quantity`
+    - (SELECT COUNT(*) FROM `borrows` br
+        WHERE br.`book_id` = b.`id` AND br.`status` = 'borrowing')
+    - (SELECT COUNT(*) FROM `reservations` r
+        WHERE r.`book_id` = b.`id` AND r.`status` = 'pending');
 
 -- =====================================================
 -- เสร็จสิ้น
