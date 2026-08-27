@@ -16,7 +16,9 @@
 | รายการ | สถานะ | หลักฐาน |
 |--------|-------|---------|
 | Escape output | ✅ 🧪 | `e()` = `htmlspecialchars(ENT_QUOTES, UTF-8)` — ใช้ 152 จุด; probe `?search=<script>alert(1)</script>` → ออกมาเป็น `&lt;script&gt;` |
-| จุดที่ echo ตัวแปรดิบ | ✅ | ตรวจแล้ว ทุกจุดเป็นตัวเลข/boolean/ค่าจาก array ที่ hard-code (เช่น tab label) ไม่มี user input |
+| จุดที่ echo ตัวแปรดิบ (ฝั่ง PHP) | ✅ | ตรวจแล้ว ทุกจุดเป็นตัวเลข/boolean/ค่าจาก array ที่ hard-code (เช่น tab label) ไม่มี user input |
+| **การประกอบ HTML ฝั่ง JavaScript** | ✅ 🧪 | `admin/members.php` ใช้ `escapeHtml()` · `admin/book_labels.php` เคยใช้ `innerHTML` กับชื่อหนังสือตรง ๆ → **XSS จริง** แก้เป็น `textContent` แล้ว (ดู F-22) · ทดสอบด้วย payload `<img src=x onerror=...>` |
+| Session timeout | ✅ 🧪 | ตั้ง `SESSION_LIFETIME=5` แล้วรอเกิน → เด้งกลับ login พร้อม "กรุณาเข้าสู่ระบบก่อน" |
 | CSV Formula Injection | ✅ 🧪 | `csvSafeValue()` ใน `includes/report_helper.php` เติม `'` นำหน้าค่าที่ขึ้นต้นด้วย `= + - @ \t \r` ก่อน `fputcsv()` — ทดสอบด้วยชื่อหนังสือ `=cmd\|' /C calc'!A0` แล้วออกมาเป็น `'=cmd...` (ดู F-16) |
 | การจัดรูปแบบตัวเลขในรายงาน | ✅ 🧪 | ตัดสินจากชื่อคอลัมน์ (`REPORT_COUNT_COLUMNS`/`REPORT_MONEY_COLUMNS`) ไม่ใช้ `is_numeric()` — กันเบอร์โทรถูกแปลงเป็นตัวเลข (ดู F-15) |
 | `setFlash()` แบบ HTML (`$isHtml=true`) | ⚠️ | ใช้ 2 จุด: `admin/import_books.php:141`, `admin/import_members.php:113` — ข้อความสรุปผล import ถูก render เป็น HTML ดิบ จุดเดียวที่มีค่าจากผู้ใช้แทรกได้คือ `ISBN` จากไฟล์ CSV — **ใส่ `e()` ครอบแล้ว** (`import_books.php`) · ข้อความอื่นทั้งหมดเป็นข้อความคงที่ · กติกา: **ห้ามเพิ่ม user input ลง `$skippedDetails` โดยไม่ `e()` ก่อน** |

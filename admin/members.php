@@ -283,6 +283,18 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// 📅 แปลง YYYY-MM-DD ที่ API คืนมา เป็น DD/MM/YYYY ให้ตรงกับทั้งระบบ (formatDate ฝั่ง PHP)
+//    🔴 [F-19] ห้ามย้ายการแปลงนี้ไปไว้ใน api/member_history.php หรือ Repository!
+//       เพราะโค้ดตรวจ "เกินกำหนด" ด้านล่างใช้ new Date(item.due_date) ซึ่ง
+//       parse "2026-07-28" ได้ แต่ "28/07/2026" จะกลายเป็น Invalid Date
+//       → เงื่อนไขเป็น false เสมอ รายการที่เกินกำหนดจะแสดงเป็น "กำลังยืม" แบบเงียบ ๆ
+//       จึงต้องแปลงตอนแสดงผลเท่านั้น และให้ค่าดิบไปถึงการคำนวณ
+function formatDateTH(isoDate) {
+    if (!isoDate) return '-';
+    const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(isoDate);
+}
+
 function openHistoryModal(id) {
     const memberRow = document.querySelector(`[onclick="openHistoryModal(${id})"]`);
     const memberName = memberRow ? memberRow.closest('tr').querySelector('.font-medium.text-gray-900')?.textContent?.trim() : '';
@@ -318,9 +330,9 @@ function openHistoryModal(id) {
                 }
                 html += `<tr class="hover:bg-gray-50/50">
                     <td class="px-6 py-3 font-medium text-gray-900 line-clamp-1 max-w-[200px]">${escapeHtml(item.book_title)}</td>
-                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.borrow_date || '-')}</td>
-                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.due_date || '-')}</td>
-                    <td class="px-6 py-3 text-gray-500">${escapeHtml(item.return_date || '-')}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(formatDateTH(item.borrow_date))}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(formatDateTH(item.due_date))}</td>
+                    <td class="px-6 py-3 text-gray-500">${escapeHtml(formatDateTH(item.return_date))}</td>
                     <td class="px-6 py-3"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">${statusText}</span></td>
                 </tr>`;
             });

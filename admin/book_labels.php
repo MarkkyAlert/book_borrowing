@@ -168,13 +168,26 @@ function generateLabels() {
         const qty = document.querySelector(`input[name="qty[${bookId}]"]`)?.value || 1;
         
         for (let i = 0; i < qty; i++) {
+            // 🛡️ [SECURITY] สร้าง element ทีละตัวแล้วใส่ค่าด้วย textContent
+            //    ห้ามใช้ innerHTML กับ title/isbn เด็ดขาด — ค่ามาจากฐานข้อมูล
+            //    ถ้าชื่อหนังสือมี <img src=x onerror=...> จะรันทันทีที่กดพิมพ์
+            //    (เจ้าหน้าที่ตั้งชื่อหนังสือได้ และ import CSV ก็เข้าทางนี้ได้)
             const label = document.createElement('div');
             label.className = 'label';
-            label.innerHTML = `
-                <div class="title">${title}</div>
-                <svg class="barcode-${bookId}"></svg>
-                <div class="code">${isbn}</div>
-            `;
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'title';
+            titleEl.textContent = title;
+
+            // 📝 svg ต้องสร้างใน namespace ของ SVG ไม่งั้น JsBarcode วาดไม่ขึ้น
+            const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svgEl.setAttribute('class', `barcode-${bookId}`);
+
+            const codeEl = document.createElement('div');
+            codeEl.className = 'code';
+            codeEl.textContent = isbn;
+
+            label.append(titleEl, svgEl, codeEl);
             grid.appendChild(label);
         }
     });
