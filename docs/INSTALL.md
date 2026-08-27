@@ -211,6 +211,40 @@ chmod 755 logs/
 chmod 600 .env
 ```
 
+**ถ้าอัปโหลดรูปปกไม่ได้ (บันทึกแล้วรูปไม่ขึ้น)** แปลว่า web server รันคนละ user กับเจ้าของไฟล์
+เจอบ่อยกับ XAMPP บน macOS/Linux ที่ Apache รันเป็น `daemon` หรือ `www-data`
+ส่วน shared hosting ส่วนใหญ่ PHP รันเป็น user ของบัญชีคุณอยู่แล้ว จึงใช้ 755 ได้เลย
+
+ตรวจว่า Apache รันเป็นใคร:
+
+```bash
+ps -eo user,comm | grep httpd
+```
+
+**ถ้าเป็น user เดียวกับเจ้าของไฟล์** → 755 พอแล้ว ไม่ต้องทำอะไรเพิ่ม
+
+**ถ้าเป็นคนละ user** เลือกทางใดทางหนึ่ง (เรียงจากปลอดภัยที่สุด):
+
+1. **โอนเจ้าของโฟลเดอร์ให้ web server** (ต้องใช้ sudo)
+   ```bash
+   sudo chown -R daemon uploads/covers    # เปลี่ยน daemon เป็น user ของ Apache
+   chmod 755 uploads/covers
+   ```
+
+2. **ให้สิทธิ์เฉพาะ user นั้นด้วย ACL** — ไม่ต้องใช้ sudo และไม่เปิดให้คนอื่น
+   ```bash
+   # macOS
+   chmod +a "daemon allow add_file,delete,add_subdirectory,delete_child,file_inherit,directory_inherit" uploads/covers
+   # Linux
+   setfacl -R -m u:www-data:rwx -m d:u:www-data:rwx uploads/covers
+   ```
+
+3. **777** — ใช้ได้แต่**ไม่แนะนำ** เพราะเปิดให้ทุก user บนเครื่องเขียนไฟล์ลงโฟลเดอร์ที่เว็บเสิร์ฟออกไป
+   ถ้าจำเป็นต้องใช้ ให้ใช้เฉพาะเครื่อง dev ห้ามใช้บน production
+
+> `logs/` ไม่ต้องให้ web server เขียน — มีแค่ `cron/*.php` ที่เขียน `logs/cron.log`
+> ซึ่งรันผ่าน CLI ในนามเจ้าของ crontab จึงใช้ 755 ได้เสมอ
+
 ### ขั้นที่ 5 — รันตัวติดตั้ง
 
 1. เปิด browser ไปที่ `https://yourdomain.com/book_borrowing/install.php`

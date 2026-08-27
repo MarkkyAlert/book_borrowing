@@ -110,6 +110,24 @@
 
 ❌ Audit log ระดับระบบ · ❌ 2FA · ❌ Password history / expiry · ❌ Account lockout ถาวร · ❌ CSP / security headers (`X-Frame-Options`, `X-Content-Type-Options`) · ❌ HTTPS บังคับในโค้ด (ต้องตั้งที่ web server) · ❌ ตรวจ virus ไฟล์อัปโหลด
 
+## 10.5 สิทธิ์โฟลเดอร์ที่เขียนได้ 🧪
+
+| โฟลเดอร์ | ใครต้องเขียน | สิทธิ์ที่ตั้งไว้บนเครื่องนี้ |
+|----------|--------------|---------------------------|
+| `uploads/covers/` | Apache (อัปโหลด/ลบรูปปก) | `755` + ACL ให้ user `daemon` เฉพาะตัว |
+| `logs/` | `cron/*.php` ผ่าน CLI เท่านั้น | `755` (owner เขียน) |
+| `uploads/` | ไม่มีใครเขียนโดยตรง | `755` |
+
+**ทำไมไม่ใช้ 777:** โฟลเดอร์ `uploads/covers/` ถูก web server เสิร์ฟออกไปตรง ๆ
+777 = ทุก process/ทุก user บนเครื่องเขียนไฟล์ลงไปได้ ซึ่งรวมถึงโค้ดอื่นที่ถูกเจาะ
+(`uploads/.htaccess` ปิดการรัน PHP ไว้แล้ว แต่ไม่ควรพึ่งด่านเดียว)
+
+**ทดสอบแล้วว่ายังทำงานครบหลังลดสิทธิ์:** อัปโหลดรูปปกผ่านฟอร์มจริง · เสิร์ฟรูปผ่าน HTTP (200)
+· แทนที่รูปแล้วลบรูปเก่า · ลบหนังสือแล้วลบไฟล์ปก · daemon ลบไฟล์ที่ user อื่นเป็นเจ้าของได้ (ACL `delete_child`)
+· cron เขียน `logs/cron.log` ได้
+
+⚠️ สิทธิ์ไฟล์ไม่ได้ถูกเก็บใน git — ติดตั้งเครื่องใหม่ต้องตั้งเองตาม `docs/INSTALL.md` ขั้นที่ 4
+
 ## 11. เช็คลิสต์ก่อนขึ้น Production
 
 - [ ] `.env` → `APP_DEBUG=false`
@@ -119,5 +137,6 @@
 - [ ] ลบ `install.php`
 - [ ] ตรวจว่า `database/` และ `tests/` เข้าถึงจากเว็บไม่ได้ (มี `.htaccess` ให้แล้ว — ถ้า host ปิด `AllowOverride` ต้องลบโฟลเดอร์ทิ้ง)
 - [ ] ตรวจว่า `.htaccess` ทำงาน (host ต้องเปิด `AllowOverride`)
+- [ ] ตรวจว่า `uploads/covers/` และ `logs/` **ไม่ใช่ 777** — ให้สิทธิ์เฉพาะ user ของ web server (ดู §10.5)
 - [ ] ตั้ง cron 2 ตัว
 - [ ] บังคับ HTTPS + เพิ่ม security headers ที่ web server

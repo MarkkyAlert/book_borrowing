@@ -30,7 +30,8 @@ Browser
 | `cron/` | 2 งานตามเวลา (CLI-guarded) | ✅ |
 | `docs/` | เอกสาร 11 ไฟล์ + `samples/` CSV | ✅ |
 | `tests/` | 30+ test scripts + `fixtures/` (CSV + `seed_test_data.php` ชุดข้อมูล L1) + `logs/` — บล็อกจาก web ทั้งโฟลเดอร์ | ✅ |
-| `uploads/covers/`, `logs/` | ต้องเขียนได้ (777 บน macOS XAMPP เพราะ Apache = user `daemon`) | — |
+| `uploads/covers/` | Apache ต้องเขียน/ลบได้ (อัปโหลดรูปปก) — 755 + ให้สิทธิ์ user ของ Apache เฉพาะตัว ไม่ต้องใช้ 777 | — |
+| `logs/` | เขียนโดย `cron/*.php` ผ่าน CLI เท่านั้น — 755 พอ web server ไม่ต้องเขียน | — |
 
 ## 3. Service Layer (8)
 
