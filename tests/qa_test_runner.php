@@ -38,6 +38,25 @@ $testMemberEmail = "qa_member_{$TIMESTAMP}@test.com";
 $results = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0, 'details' => []];
 
 // ============================================================
+// PREPARE — ล้าง rate limit ที่ค้างจากการรันรอบก่อน
+// ============================================================
+// 🧠 เหตุผล: ชุดทดสอบสมัครสมาชิกใหม่ + ขอรีเซ็ตรหัสผ่านทุกรอบ
+//    ซึ่งนับรวมใน rate limit ของ IP เดียวกัน (RATE_LIMIT_MAX_ATTEMPTS = 5 ต่อ 15 นาที)
+//    รันติดกันเกิน 5 รอบใน 15 นาที → สมัครสมาชิกถูกบล็อก → เทสต์ที่ต้องใช้ session
+//    ของ user คนนั้นพังยกชุด (HP-01, HP-02, VL-08…) ทั้งที่โค้ดไม่มีปัญหา
+//
+// 🛡️ ลบเฉพาะ key ที่ชุดทดสอบสร้างเองบน loopback + key ของการจอง
+//    ไม่แตะ rate limit ของ IP อื่น เผื่อรันบน DB ที่แชร์กับคนอื่น
+try {
+    require_once __DIR__ . '/../includes/db.php';
+    $prep = getDB();
+    $prep->exec("DELETE FROM rate_limits WHERE key_name LIKE '%\_::1' OR key_name LIKE '%\_127.0.0.1' OR key_name LIKE 'reserve\_%'");
+} catch (\Exception $e) {
+    echo "  ⚠️ ล้าง rate_limits ไม่สำเร็จ: " . $e->getMessage() . "\n";
+    echo "     ถ้าเทสต์กลุ่ม HP-01/HP-02 พัง ให้ลอง: DELETE FROM rate_limits;\n";
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 
