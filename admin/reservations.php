@@ -76,11 +76,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── GET: ดึงรายการจองตาม filter ──
 // 📥 default แสดงเฉพาะ "pending" — staff สนใจรายการที่รอดำเนินการเป็นหลัก
 $statusFilter = $_GET['status'] ?? 'pending';
+$page = (int) ($_GET['page'] ?? 1);
+
 $filters = [];
 if ($statusFilter !== 'all') {
     $filters['status'] = $statusFilter;
 }
+
+// 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
+$pagination = paginate($reservationRepo->countAll($filters), $page, ITEMS_PER_PAGE);
+$filters['limit']  = $pagination['per_page'];
+$filters['offset'] = $pagination['offset'];
+
 $reservations = $reservationRepo->findAll($filters);
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วเด้งกลับไปดู "รออนุมัติ"
+$paginationParams = ['status' => $statusFilter];
 
 $pageTitle = 'จัดการการจอง';
 require_once __DIR__ . '/header.php';
@@ -203,5 +214,8 @@ require_once __DIR__ . '/header.php';
         </div>
     <?php endif; ?>
 </div>
+
+<?php // 📄 แถบเลือกหน้า (ไม่แสดงถ้ามีหน้าเดียว) ?>
+<?php require __DIR__ . '/../includes/pagination.php'; ?>
 
 <?php require_once __DIR__ . '/footer.php'; ?>

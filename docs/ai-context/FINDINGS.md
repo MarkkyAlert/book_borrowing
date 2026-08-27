@@ -19,7 +19,7 @@
 
 **ปัญหา:** หนังสือที่ตั้ง "ซ่อนจากผู้ใช้ทั่วไป" ไม่แสดงตอนโหลดหน้าแรก แต่ **โผล่ทันทีเมื่อผู้ใช้พิมพ์ค้นหา** (หน้าแรกยิง AJAX ไป `api/search_books.php` แล้วแทนที่ทั้ง grid)
 
-**Root cause:** `index.php` เรียกผ่าน `HomeService::getBooks()` ซึ่งใส่ `visible_only = true` (`app/Services/HomeService.php:101`) แต่ `api/search_books.php:58` เรียก `BookRepository::findAll($filters)` ตรง ๆ โดยไม่ใส่ `visible_only` — ฟีเจอร์ `is_visible` เพิ่งเพิ่มใน commit `1453c01` และตกหล่นเส้นทางนี้
+**Root cause:** `index.php` เรียกผ่าน `HomeService::getBooks()` ซึ่งใส่ `visible_only = true` (`app/Services/HomeService.php:101`) แต่ `api/search_books.php` (โค้ดเดิมก่อนแก้) เรียก `BookRepository::findAll($filters)` ตรง ๆ โดยไม่ใส่ `visible_only` — ฟีเจอร์ `is_visible` เพิ่งเพิ่มใน commit `1453c01` และตกหล่นเส้นทางนี้
 
 **ยืนยันแล้ว (ทดสอบจริงบนเครื่องนี้):**
 ```
@@ -395,13 +395,13 @@ fputcsv($output, array_map('csvSafeValue', $row));
 **Root cause:**
 - `BorrowRepository::findByUserId()` ใช้ `SELECT b.*` → คอลัมน์ `borrow_date` / `due_date` / `return_date` เป็น DATE ดิบ
 - `api/member_history.php` คืนแถวนั้นเป็น JSON ตรง ๆ → `"borrow_date": "2026-07-28"`
-- `admin/members.php:321-323` เอาค่ามาแสดงตรง ๆ ผ่าน `escapeHtml(item.borrow_date)` ไม่ได้จัดรูปแบบ
+- `admin/members.php` เอาค่ามาแสดงตรง ๆ ผ่าน `escapeHtml(item.borrow_date)` ไม่ได้จัดรูปแบบ (ตอนนี้อยู่ที่ `:350` และห่อด้วย `formatDateTH()` แล้ว)
 
 **ผลกระทบ:** แค่รูปแบบไม่สม่ำเสมอ ข้อมูลถูกต้อง ไม่กระทบการทำงานหรือความปลอดภัย
 (ค่าถูก escape ด้วย `escapeHtml()` อยู่แล้ว)
 
 **⚠️ กับดักสำหรับคนที่จะแก้:** ห้ามไปแปลงวันที่ใน `api/member_history.php` หรือใน Repository
-เพราะบรรทัด `admin/members.php:312` ใช้ค่านี้คำนวณ badge "เกินกำหนด":
+เพราะบรรทัด `admin/members.php:341` ใช้ค่านี้คำนวณ badge "เกินกำหนด":
 
 ```js
 } else if (item.due_date && new Date(item.due_date) < new Date(new Date().toDateString())) {
@@ -595,6 +595,9 @@ if (!$stmt->fetch()) {
 | View | `includes/pagination.php` เป็นแถบเลือกหน้าที่ใช้ร่วมกันทั้ง 4 หน้า |
 | Config | `ITEMS_PER_PAGE` (default 20) และ `BOOKS_PER_PAGE` (default 12) ปรับได้ผ่าน `.env` |
 
+**หน้าที่แบ่งหน้าแล้ว 6 หน้า:** `index.php` · `admin/books.php` · `admin/borrows.php`
+· `admin/members.php` · `admin/payments.php` · `admin/reservations.php`
+
 **ทำไมไม่เปลี่ยนรูปแบบค่าที่ `findAll()` คืน:** ยังมีที่ที่ต้องได้ครบทุกแถวจริง ๆ
 (export CSV/PDF, พิมพ์ฉลากบาร์โค้ด, สคริปต์ทดสอบ) — ถ้าไม่ส่ง `limit` มาก็ยังดึงทั้งหมดเหมือนเดิม
 ผู้เรียกเดิมทุกจุดจึงไม่ต้องแก้อะไรเลย
@@ -615,10 +618,19 @@ if (!$stmt->fetch()) {
 6. **ป้าย "ทั้งหมด N"** ต้องใช้ `$pagination['total']` ไม่ใช่ `count($rows)` ซึ่งจะได้แค่จำนวนในหน้านั้น
 7. **หน้าแรกเป็น AJAX** — แถบเลือกหน้าจึงต้องอยู่ใน `includes/book_grid.php` (ไฟล์ที่ถูกแทนที่ทั้งก้อน)
    ไม่งั้นจะค้างเป็นของผลค้นหาชุดเก่า · ลิงก์ยังมี `href` จริงเป็น fallback ถ้า JS ไม่ทำงาน
-   · ค้นหาใหม่จะเด้งกลับหน้า 1 เสมอ
+   · ค้นหาใหม่จะเด้งกลับหน้า 1
+8. 🖨️ **ปุ่ม "พิมพ์รายงาน" ใน `admin/payments.php`** — เดิมพิมพ์ทั้งตารางเพราะหน้านี้ไม่เคยแบ่งหน้า
+   ถ้าแบ่งหน้าเฉย ๆ ปุ่มเดิมจะพิมพ์ได้แค่ 20 แถว = **ลดความสามารถแบบเงียบ ๆ**
+   จึงเพิ่มโหมด `?print=1` ที่ render ครบทุกแถวแล้วสั่งพิมพ์เอง (ปุ่มพาไปที่นั่น พร้อมคงคำค้นไว้)
+9. ⏱️ **`ReservationRepository` มี lazy-expire** — `findAll()` เรียก `markExpiredReservations()`
+   ก่อน query ถ้าปล่อยให้ `countAll()` นับก่อนแล้ว `findAll()` ค่อย expire จะได้ยอดไม่ตรงกับรายการ
+   (กรอง `status=pending` แล้วนับ N แต่แสดง N-1) → `countAll()` จึง expire ตั้งแต่ตอนนับ (เทสต์ PG-17) เสมอ
 
 **ไม่แตะ:** `admin/reports.php` (มี `LIMIT 50` อยู่แล้ว) · export CSV/PDF (ต้องได้ครบทุกแถว)
-· `admin/payments.php` และ `admin/reservations.php` (ยังโหลดทั้งชุด แต่ข้อมูลโตช้ากว่ามาก — ดู §1)
+
+⚠️ `admin/payments.php` ยังหนักกว่าหน้าอื่น (~306 KB) เพราะส่วน **"รายการค้างชำระ"** ด้านบน
+ไม่ได้แบ่งหน้า — แต่ `BorrowRepository::getUnpaidFinesList(50)` จำกัด 50 รายการอยู่แล้ว
+ขนาดจึง **คงที่** ไม่โตตามข้อมูล
 
 **ผลลัพธ์ที่วัดได้ (ข้อมูลชุดเดิม 2,029 เล่ม · 620 สมาชิก · 3,640 การยืม):**
 
@@ -628,11 +640,14 @@ if (!$stmt->fetch()) {
 | `admin/books.php` | 6,152 KB | **87 KB** |
 | `admin/borrows.php` | 7,777 KB | **72 KB** |
 | `admin/members.php` | 2,462 KB | **109 KB** |
+| `admin/payments.php` (1,803 การชำระ) | 3,469 KB | **306 KB** (คงที่ — ดูหมายเหตุด้านบน) |
 | DOM node (หน้าแรก) | 32,542 | **360** |
 | โหลดเสร็จใน Chrome | 3.1 วินาที | **0.32 วินาที** |
 
-**ทดสอบหลังแก้:** ชุดใหม่ `tests/test_pagination.php` 12/12 (Suite 2c ในชุดเต็ม)
-· ชุดเต็ม **126/126** ทั้งตอนมีข้อมูล 2,029 เล่มและตอน reset กลับเป็นชุดปกติ
+**ทดสอบหลังแก้:** ชุดใหม่ `tests/test_pagination.php` 17/17 (Suite 2c ในชุดเต็ม)
+· ชุดเต็ม **131/131** ทั้งตอนมีข้อมูล 2,029 เล่ม / 1,803 การชำระ และตอน reset กลับเป็นชุดปกติ
+· `?print=1` ยัง render ครบ 1,852 แถว ซ่อนแถบเลือกหน้า และสั่งพิมพ์ให้อัตโนมัติ
+· `?page=999` (เกินช่วง) → เด้งไปหน้าสุดท้าย · `?page=abc` → หน้า 1
 · เดินหน้าจริงใน browser: กดเลขหน้าแล้ว grid เปลี่ยนโดยไม่ reload · ค้นหาใหม่เด้งกลับหน้า 1
 · กดหน้า 2 ของผลค้นหาแล้วคำค้นยังอยู่ · เลขแถวในตารางแอดมินนับต่อ (หน้า 2 เริ่มที่ 21)
 

@@ -13,7 +13,7 @@
 | หมวดหมู่ (CRUD + นับจำนวนหนังสือ) | `admin/categories.php` → `CategoryRepository` |
 | ค้นหา/กรอง (คำค้น, หมวดหมู่, สถานะ stock, เรียงลำดับ) | `BookRepository::findAll()` |
 | ค้นหาสดแบบ AJAX บนหน้าแรก | `api/search_books.php` + `includes/book_grid.php` |
-| แบ่งหน้า (หน้าแรก + 3 หน้าแอดมิน) | `paginate()` ใน `includes/functions.php` + `includes/pagination.php` · จำนวนต่อหน้าปรับที่ `.env` |
+| แบ่งหน้า (6 หน้า: หน้าแรก + books/borrows/members/payments/reservations) | `paginate()` ใน `includes/functions.php` + `includes/pagination.php` · จำนวนต่อหน้าปรับที่ `.env` |
 | ซ่อน/แสดงหนังสือจากหน้า public | `is_visible` toggle ใน `admin/book_form.php` |
 | Import หนังสือจาก CSV (merge + auto-create category) | `admin/import_books.php`, ตัวอย่าง `docs/samples/books_sample.csv` |
 | พิมพ์ฉลาก Barcode (CODE128 จาก ISBN) | `admin/book_labels.php` |
@@ -38,6 +38,7 @@
 | รับค่าจาก Barcode Scanner (สแกนบัตรสมาชิก + สันหนังสือ) | `admin/borrow_form.php` AJAX `action=scan` |
 | คืนหนังสือ + คำนวณค่าปรับอัตโนมัติ | `admin/borrows.php` → `returnBook()` |
 | รับชำระค่าปรับ (ตอนคืน หรือ ทีหลัง) | `admin/borrows.php`, `admin/payments.php` |
+| พิมพ์รายงานการชำระทั้งหมด | `admin/payments.php?print=1` — render ครบทุกแถวแล้วสั่งพิมพ์ (ไม่ติด pagination) |
 | รายการเกินกำหนด / ค้างชำระ | `admin/borrows.php`, `admin/payments.php`, Dashboard |
 | ประวัติการยืมของสมาชิก (มุม staff) | `api/member_history.php` |
 | ประวัติของตัวเอง (มุม member) | `my_borrows.php` |

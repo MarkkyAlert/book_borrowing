@@ -93,13 +93,32 @@ foreach ($unpaidList as $item) {
 
 // 🔍 ค้นหาประวัติการชำระ
 $search = trim($_GET['search'] ?? '');
+$page = (int) ($_GET['page'] ?? 1);
+
+// 🖨️ โหมดพิมพ์ — ต้องได้ครบทุกแถว ไม่ใช่แค่หน้าที่เปิดอยู่
+// 🧠 ปุ่ม "พิมพ์รายงาน" เดิมพิมพ์ทั้งตารางเพราะหน้านี้ไม่เคยแบ่งหน้า
+//    พอแบ่งหน้าแล้วถ้าไม่ทำอะไร ปุ่มเดิมจะพิมพ์ได้แค่ 20 แถว = ลดความสามารถแบบเงียบ ๆ
+//    จึงให้ปุ่มพาไป ?print=1 ซึ่ง render ครบแล้วสั่งพิมพ์เอง
+$printMode = isset($_GET['print']);
+
 $filters = [];
 if (!empty($search)) {
     $filters['search'] = $search;
 }
 
-// 📜 ดึงประวัติการชำระทั้งหมด (พร้อม JOIN ชื่อสมาชิก, หนังสือ, ผู้บันทึก)
+// 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
+$pagination = paginate($paymentRepo->countAll($filters), $page, ITEMS_PER_PAGE);
+
+if (!$printMode) {
+    $filters['limit']  = $pagination['per_page'];
+    $filters['offset'] = $pagination['offset'];
+}
+
+// 📜 ดึงประวัติการชำระ (พร้อม JOIN ชื่อสมาชิก, หนังสือ, ผู้บันทึก)
 $payments = $paymentRepo->findAll($filters);
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วคำค้นหาย
+$paginationParams = ['search' => $search];
 
 $pageTitle = 'ประวัติการชำระเงิน';
 require_once __DIR__ . '/header.php';
@@ -321,9 +340,13 @@ require_once __DIR__ . '/header.php';
             ประวัติการรับชำระเงิน
         </h5>
         
-        <button onclick="window.print()" class="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-            <i class="bi bi-printer mr-1"></i>พิมพ์รายงาน
-        </button>
+        <?php // 🖨️ พาไปหน้าที่ render ครบทุกแถวก่อน แล้วค่อยสั่งพิมพ์ (ดู $printMode ด้านบน)
+        //    ใช้ <a> ไม่ใช่ <button> เพื่อให้เปิดแท็บใหม่/คัดลอกลิงก์ได้ตามปกติ
+        ?>
+        <a href="?<?= http_build_query(array_filter(['search' => $search, 'print' => 1])) ?>"
+           class="text-sm text-gray-500 hover:text-gray-700 transition-colors hide-on-print">
+            <i class="bi bi-printer mr-1"></i>พิมพ์รายงาน<?= $pagination['total'] > $pagination['per_page'] ? ' (ทุกหน้า)' : '' ?>
+        </a>
     </div>
 
     <!-- Search Box -->
@@ -400,7 +423,21 @@ require_once __DIR__ . '/header.php';
             </table>
         </div>
     <?php endif; ?>
+
+    <?php // 📄 แถบเลือกหน้า — ซ่อนตอนพิมพ์ (โหมดพิมพ์ render ครบทุกแถวอยู่แล้ว) ?>
+    <?php if (!$printMode): ?>
+        <div class="px-6 pb-6 hide-on-print">
+            <?php $paginationUnit = 'รายการ'; require __DIR__ . '/../includes/pagination.php'; ?>
+        </div>
+    <?php endif; ?>
 </div>
+
+<?php if ($printMode): ?>
+    <script>
+        // 🖨️ เข้ามาด้วย ?print=1 → สั่งพิมพ์ทันทีหลังหน้าโหลดเสร็จ (รูป/ฟอนต์วาดครบแล้ว)
+        window.addEventListener('load', () => window.print());
+    </script>
+<?php endif; ?>
 
 <!-- Pay Fine Confirmation Modal -->
 <div id="payModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

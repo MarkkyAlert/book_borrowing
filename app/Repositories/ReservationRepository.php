@@ -169,8 +169,80 @@ class ReservationRepository
     {
         // 🔄 [LAZY EXPIRE] expire รายการหมดอายุก่อนจะ query
         //    ทำให้ข้อมูลที่แสดงเป็นปัจจุบันเสมอ
+        //    📌 countAll() ก็เรียกตัวนี้ด้วย — ถ้าหน้าเรียกนับก่อน การ expire จะเกิดไปแล้ว
+        //       ตรงนี้จึงมักไม่มีอะไรให้ทำ (idempotent) แต่ต้องคงไว้เพราะมีที่เรียก findAll ตรง ๆ
         $this->markExpiredReservations();
-        
+
+        // 🔧 สร้างเงื่อนไข (ใช้ร่วมกับ countAll ให้ผลตรงกันเสมอ)
+        [$whereSQL, $params] = $this->buildListConditions($filters);
+
+        // 📄 แบ่งหน้า — ใส่ LIMIT/OFFSET เฉพาะตอนที่ผู้เรียกส่ง limit มาเท่านั้น
+        // 🧠 ไม่ส่ง limit = ดึงทั้งหมดเหมือนเดิม (สคริปต์/เทสต์ยังต้องได้ครบทุกแถว)
+        // 🛡️ [SECURITY] cast เป็น int + clamp → ปลอดภัยแม้ค่ามาจาก $_GET
+        $limitSQL = '';
+        if (isset($filters['limit'])) {
+            $limitSQL = 'LIMIT ? OFFSET ?';
+            $params[] = max(1, (int) $filters['limit']);
+            $params[] = max(0, (int) ($filters['offset'] ?? 0));
+        }
+
+        // 📝 SQL: ดึงการจอง + ข้อมูล user + book
+        // 🧠 `, r.id DESC` คือตัวตัดสินเมื่อ created_at เท่ากัน — ถ้าไม่มี การเรียงจะไม่คงที่
+        //    ทำให้กดหน้า 2 เจอรายการซ้ำจากหน้า 1 หรือบางรายการหายไปเลย
+        $stmt = $this->pdo->prepare("
+            SELECT r.*, u.name as user_name, u.email, b.title as book_title, b.cover_image
+            FROM reservations r
+            JOIN users u ON r.user_id = u.id
+            JOIN books b ON r.book_id = b.id
+            {$whereSQL}
+            ORDER BY r.created_at DESC, r.id DESC
+            {$limitSQL}
+        ");
+        $stmt->execute($params);
+        // 📤 คืน array การจองในหน้านั้น (หรือทั้งหมดถ้าไม่ได้ส่ง limit)
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนการจองที่ตรงเงื่อนไข (ไม่สนใจ LIMIT)
+     * ==========================================================================
+     * ✅ Use case: admin/reservations.php ต้องรู้ยอดรวมเพื่อคำนวณจำนวนหน้า
+     *
+     * ⚠️ ห้ามสับสนกับ countPending() ที่นับเฉพาะสถานะ pending สำหรับ dashboard
+     *
+     * 🧠 ต้อง expire ก่อนนับ ไม่ใช่ปล่อยให้ findAll() เป็นคนทำ:
+     *    หน้าเว็บเรียกนับก่อนแล้วค่อยดึงรายการ ถ้ารายการหมดอายุระหว่างนั้น
+     *    (กรอง status=pending) จะได้ "นับ N แต่แสดง N-1" ซึ่งทำให้จำนวนหน้าเพี้ยน
+     */
+    public function countAll(array $filters = []): int
+    {
+        $this->markExpiredReservations();
+
+        [$whereSQL, $params] = $this->buildListConditions($filters);
+
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM reservations r
+            JOIN users u ON r.user_id = u.id
+            JOIN books b ON r.book_id = b.id
+            {$whereSQL}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: แปลง $filters → WHERE clause + params
+     * ==========================================================================
+     * 🧠 ทำไมแยกออกมา: findAll() กับ countAll() ต้องกรองเหมือนกันเป๊ะ
+     *    ไม่งั้นจะเจออาการ "บอกว่ามี 137 รายการ แต่หน้าสุดท้ายว่างเปล่า"
+     *
+     * 🛡️ [SECURITY] ค่าทุกตัว bind ผ่าน ? → ปลอดภัยจาก SQL Injection
+     */
+    private function buildListConditions(array $filters): array
+    {
         // 📦 สร้างเงื่อนไข WHERE จาก filters
         $where = [];
         $params = [];
@@ -196,18 +268,7 @@ class ReservationRepository
         // 🔗 ประกอบ WHERE clause
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        // 📝 SQL: ดึงการจอง + ข้อมูล user + book
-        $stmt = $this->pdo->prepare("
-            SELECT r.*, u.name as user_name, u.email, b.title as book_title, b.cover_image
-            FROM reservations r
-            JOIN users u ON r.user_id = u.id
-            JOIN books b ON r.book_id = b.id
-            {$whereSQL}
-            ORDER BY r.created_at DESC
-        ");
-        $stmt->execute($params);
-        // 📤 คืน array การจองทั้งหมดที่ตรงเงื่อนไข
-        return $stmt->fetchAll();
+        return [$whereSQL, $params];
     }
 
     /**

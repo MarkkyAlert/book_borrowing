@@ -56,13 +56,13 @@ Browser
 
 | Method | ไฟล์ | ป้องกันอะไร |
 |--------|------|-------------|
-| `BookRepository::findByIdForUpdate()` | `app/Repositories/BookRepository.php:574` | 2 คนยืม/จองเล่มสุดท้ายพร้อมกัน |
-| `BorrowRepository::findByIdForUpdate()` | `:269` | คืนซ้ำ (บวก `WHERE status='borrowing'`) |
-| `BorrowRepository::findByIdForUpdateAnyStatus()` | `:304` | ชำระค่าปรับซ้ำ |
-| `BorrowRepository::countActiveBorrowsForUpdate()` | `:444` | นับโควตาแบบล็อก |
+| `BookRepository::findByIdForUpdate()` | `app/Repositories/BookRepository.php:631` | 2 คนยืม/จองเล่มสุดท้ายพร้อมกัน |
+| `BorrowRepository::findByIdForUpdate()` | `:317` | คืนซ้ำ (บวก `WHERE status='borrowing'`) |
+| `BorrowRepository::findByIdForUpdateAnyStatus()` | `:352` | ชำระค่าปรับซ้ำ |
+| `BorrowRepository::countActiveBorrowsForUpdate()` | `:492` | นับโควตาแบบล็อก |
 | `UserRepository::lockById()` | `app/Repositories/UserRepository.php:430` | ยืม+จองพร้อมกันทำให้เกินโควตา |
-| `ReservationRepository::findPendingForUpdate()` | `app/Repositories/ReservationRepository.php:432` | อนุมัติ/ยกเลิกซ้ำ |
-| `ReservationRepository::findExpiredForUpdate()` | `:462` | cron ชนกับ lazy-expire |
+| `ReservationRepository::findPendingForUpdate()` | `app/Repositories/ReservationRepository.php:493` | อนุมัติ/ยกเลิกซ้ำ |
+| `ReservationRepository::findExpiredForUpdate()` | `:523` | cron ชนกับ lazy-expire |
 
 ## 5. Map: Page/API → Service → Repository
 

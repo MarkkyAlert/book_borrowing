@@ -9,7 +9,7 @@
 |----------|-----------|
 | Monolith เครื่องเดียว | ไม่มี failover / load balancer / cache layer |
 | ค้นหาใช้ `LIKE '%คำ%'` | ใช้ index ไม่ได้ (ยังไม่มี FULLTEXT) — แต่**ไม่ใช่คอขวดที่ระดับพันเล่ม** ดู §1.1 |
-| ~~ไม่มี pagination~~ | **แก้แล้ว (F-21)** — `index.php`, `admin/books.php`, `admin/borrows.php`, `admin/members.php` แบ่งหน้าแล้ว ดู §1.1 |
+| ~~ไม่มี pagination~~ | **แก้แล้ว (F-21)** — แบ่งหน้าครบ 6 หน้าที่เคยโหลดทั้งชุด (`index.php`, `admin/books`, `borrows`, `members`, `payments`, `reservations`) ดู §1.1 |
 
 ## 1.1 รับได้กี่เล่ม — วัดจริงแล้ว 🧪 (อัปเดตหลังทำ pagination)
 
@@ -50,6 +50,13 @@
 | `admin/members.php` | 104 KB | 890 KB | 2,462 KB | **109 KB** |
 | `admin/reports.php` | 81 KB | 121 KB | 121 KB ✅ | 121 KB ✅ (ไม่ต้องแก้) |
 | ค้นหา AJAX (`api/search_books.php`) | — | — | — | **35 KB** |
+| `admin/payments.php` (1,803 การชำระ) | — | — | 3,469 KB | **306 KB** ⚠️ |
+| `admin/reservations.php` | — | — | — | **39 KB** |
+
+⚠️ `admin/payments.php` ยังใหญ่กว่าหน้าอื่นเพราะส่วน **"รายการค้างชำระ"** ด้านบนไม่ได้แบ่งหน้า
+แต่ `getUnpaidFinesList(50)` จำกัด 50 รายการอยู่แล้ว ขนาดจึง**คงที่** ไม่โตตามข้อมูล
+· ปุ่ม "พิมพ์รายงาน" พาไป `?print=1` ซึ่ง render ครบทุกแถวโดยตั้งใจ (3.4 MB ที่ 1,803 รายการ)
+เป็นการกดเองครั้งเดียวเพื่อพิมพ์ ไม่ใช่การโหลดหน้าปกติ
 
 `reports.php` แทบไม่โตตั้งแต่แรก เพราะ query มี `LIMIT 50` — เป็นตัวอย่างที่ทำถูกอยู่แล้ว
 

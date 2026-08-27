@@ -234,14 +234,71 @@ class PaymentRepository
      */
     public function findAll(array $filters = []): array
     {
-        // 📝 SQL: ดึงรายการชำระทั้งหมด พร้อมข้อมูลสมาชิก/หนังสือ/เจ้าหน้าที่
+        // 🔧 สร้าง SQL ส่วน FROM/JOIN/WHERE (ใช้ร่วมกับ countAll ให้ผลตรงกันเสมอ)
+        [$fromWhere, $params] = $this->buildListQuery($filters);
+
+        // 📄 แบ่งหน้า — ใส่ LIMIT/OFFSET เฉพาะตอนที่ผู้เรียกส่ง limit มาเท่านั้น
+        // 🧠 ไม่ส่ง limit = ดึงทั้งหมดเหมือนเดิม (ปุ่ม "พิมพ์รายงาน" ต้องได้ครบทุกแถว)
+        // 🛡️ [SECURITY] cast เป็น int + clamp → ปลอดภัยแม้ค่ามาจาก $_GET
+        $limitSQL = '';
+        if (isset($filters['limit'])) {
+            $limitSQL = 'LIMIT ? OFFSET ?';
+            $params[] = max(1, (int) $filters['limit']);
+            $params[] = max(0, (int) ($filters['offset'] ?? 0));
+        }
+
+        // 🧠 `, p.id DESC` คือตัวตัดสินเมื่อ created_at เท่ากัน (ชำระหลายรายการในวินาทีเดียว)
+        //    ถ้าไม่มี MySQL เรียงไม่คงที่ → กดหน้า 2 เจอรายการซ้ำหรือตกหล่น
+        $stmt = $this->pdo->prepare("
+            SELECT p.*, p.created_at as payment_date, b.borrow_date, b.return_date,
+                   u.name as member_name,
+                   bk.title as book_title,
+                   staff.name as staff_name
+            {$fromWhere}
+            ORDER BY p.created_at DESC, p.id DESC
+            {$limitSQL}
+        ");
+        $stmt->execute($params);
+        // 📤 คืน array ของรายการชำระในหน้านั้น (หรือทั้งหมดถ้าไม่ได้ส่ง limit)
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนรายการชำระที่ตรงเงื่อนไข (ไม่สนใจ LIMIT)
+     * ==========================================================================
+     * ✅ Use case: admin/payments.php ต้องรู้ยอดรวมเพื่อคำนวณจำนวนหน้า
+     *
+     * ⚠️ ห้ามสับสนกับ getTotalCollected() ที่รวม "จำนวนเงิน" — ตัวนี้นับ "จำนวนแถว"
+     *
+     * 🧠 ใช้ buildListQuery() ตัวเดียวกับ findAll() — ยอดนับกับรายการที่แสดง
+     *    จึงมาจากเงื่อนไขชุดเดียวกันเสมอ
+     */
+    public function countAll(array $filters = []): int
+    {
+        [$fromWhere, $params] = $this->buildListQuery($filters);
+
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) {$fromWhere}");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างส่วน FROM/JOIN/WHERE + params ที่ findAll กับ countAll ใช้ร่วมกัน
+     * ==========================================================================
+     * 🧠 ทำไมคืนทั้งก้อน FROM ไม่ใช่แค่ WHERE: เงื่อนไข search อ้างถึงคอลัมน์จากตารางที่ JOIN มา
+     *    (u.name, bk.title, staff.name) — ถ้าแยก WHERE ออกมาเดี่ยว ๆ query นับจะต้อง JOIN ซ้ำเอง
+     *    แล้วมีโอกาสหลุดไม่ตรงกัน
+     *
+     * 📤 Output: [$fromWhere, $params]
+     * 🛡️ [SECURITY] search bind ผ่าน ? ทั้งหมด
+     */
+    private function buildListQuery(array $filters): array
+    {
         // 🧠 JOIN 3 ชั้น: payments → borrows → users + books
         //    LEFT JOIN users staff เพราะ recorded_by อาจเป็น NULL (ไม่ระบุเจ้าหน้าที่)
         $sql = "
-            SELECT p.*, p.created_at as payment_date, b.borrow_date, b.return_date, 
-                   u.name as member_name, 
-                   bk.title as book_title,
-                   staff.name as staff_name
             FROM payments p
             JOIN borrows b ON p.borrow_id = b.id
             JOIN users u ON b.user_id = u.id
@@ -258,13 +315,7 @@ class PaymentRepository
             $params = [$search, $search, $search];
         }
 
-        // เรียงจากใหม่สุดก่อน
-        $sql .= " ORDER BY p.created_at DESC";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-        // 📤 คืน array ของรายการชำระ + ข้อมูลครบ
-        return $stmt->fetchAll();
+        return [$sql, $params];
     }
 }
 

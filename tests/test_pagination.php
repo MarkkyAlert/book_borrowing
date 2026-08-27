@@ -30,6 +30,8 @@ require_once __DIR__ . '/../bootstrap.php';
 use App\Repositories\BookRepository;
 use App\Repositories\BorrowRepository;
 use App\Repositories\UserRepository;
+use App\Repositories\PaymentRepository;
+use App\Repositories\ReservationRepository;
 use App\Services\HomeService;
 
 $results = ['passed' => 0, 'failed' => 0, 'total' => 0];
@@ -219,6 +221,57 @@ $hList  = count($userRepo->findMembers($hf));
 ($hCount === $hList)
     ? pass('PG-12', "filter 'กำลังยืมอยู่' (HAVING) → นับได้ $hCount ตรงกับรายการจริง")
     : fail('PG-12', "HAVING ทำให้ยอดนับผิด: count=$hCount list=$hList");
+
+// ═══════════════════════════════════════════════════
+// PG-13…PG-14: PaymentRepository
+// ═══════════════════════════════════════════════════
+echo "\n── ประวัติการชำระ (PaymentRepository) ──\n";
+$paymentRepo = new PaymentRepository($pdo);
+
+$countPayments = $paymentRepo->countAll();
+(count($paymentRepo->findAll()) === $countPayments)
+    ? pass('PG-13', "countAll() = findAll() = $countPayments รายการ")
+    : fail('PG-13', 'ยอดไม่ตรงกับรายการ');
+
+$walk = walkAllPages(
+    fn($l, $o) => $paymentRepo->findAll(['limit' => $l, 'offset' => $o]),
+    $countPayments,
+    3
+);
+(!$walk['dupes'] && count($walk['ids']) === $countPayments)
+    ? pass('PG-14', "เดินครบ {$walk['pages']} หน้าได้ $countPayments รายการ ไม่ซ้ำไม่ตกหล่น")
+    : fail('PG-14', 'ซ้ำ ' . count($walk['dupes']) . ' · ได้ ' . count($walk['ids']) . "/$countPayments");
+
+// ═══════════════════════════════════════════════════
+// PG-15…PG-17: ReservationRepository
+// ═══════════════════════════════════════════════════
+echo "\n── การจอง (ReservationRepository) ──\n";
+$reservationRepo = new ReservationRepository($pdo);
+
+$countRes = $reservationRepo->countAll();
+(count($reservationRepo->findAll()) === $countRes)
+    ? pass('PG-15', "countAll() = findAll() = $countRes รายการ")
+    : fail('PG-15', 'ยอดไม่ตรงกับรายการ');
+
+$walk = walkAllPages(
+    fn($l, $o) => $reservationRepo->findAll(['limit' => $l, 'offset' => $o]),
+    $countRes,
+    3
+);
+(!$walk['dupes'] && count($walk['ids']) === $countRes)
+    ? pass('PG-16', "เดินครบ {$walk['pages']} หน้าได้ $countRes รายการ ไม่ซ้ำไม่ตกหล่น")
+    : fail('PG-16', 'ซ้ำ ' . count($walk['dupes']) . ' · ได้ ' . count($walk['ids']) . "/$countRes");
+
+// 🧠 เคสสำคัญ: หน้า admin/reservations.php default กรอง status=pending
+//    countAll() ต้อง expire รายการหมดอายุก่อนนับ ไม่งั้นจะนับรวมของที่กำลังจะหลุดออกจากรายการ
+//    → "บอกว่ามี N แต่แสดง N-1"
+$pf = ['status' => 'pending'];
+$pCount = $reservationRepo->countAll($pf);
+$pList  = count($reservationRepo->findAll($pf));
+$stale  = (int) $pdo->query("SELECT COUNT(*) FROM reservations WHERE status = 'pending' AND expires_at < NOW()")->fetchColumn();
+($pCount === $pList && $stale === 0)
+    ? pass('PG-17', "filter pending → นับได้ $pCount ตรงกับรายการ · ไม่มีรายการหมดอายุค้างอยู่")
+    : fail('PG-17', "count=$pCount list=$pList · pending ที่หมดอายุแล้วยังค้าง $stale รายการ");
 
 // ── SUMMARY ──
 $pct = $results['total'] > 0 ? round($results['passed'] / $results['total'] * 100, 1) : 0;
