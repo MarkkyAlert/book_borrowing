@@ -70,11 +70,24 @@ function runSuite(string $name, string $file, string $extraArgs = ''): array {
         $failed = (int) $m[1];
     }
 
-    // 🧠 บางชุดเป็นสคริปต์รุ่นเก่าที่พิมพ์ ✅/❌ ทีละบรรทัด ไม่มีบรรทัดสรุปรวม
-    //    ถ้าไม่นับให้ จะขึ้นว่า "0/0 passed" ซึ่งอ่านแล้วเข้าใจผิดว่าไม่ได้รันอะไรเลย
-    //    จึงนับจากเครื่องหมายในผลลัพธ์แทน (ตัวเลขจะตรงกับจำนวนบรรทัดที่รายงานผล)
+    // 🧠 ชุดรุ่นเก่าไม่ได้พิมพ์บรรทัดสรุปแบบ "N/N passed" — ถ้าไม่ทำอะไรจะขึ้น "0/0 passed"
+    //    ซึ่งอ่านแล้วเข้าใจผิดว่าไม่ได้รันอะไรเลย จึงหาตัวเลขจากรูปแบบอื่นแทน
+    $clean = preg_replace('/\x1b\[[0-9;]*m/', '', $fullOutput);
+
+    // แบบที่ 2: "Passed: 17" + "Failed: 0" (แม่นกว่าการนับเครื่องหมาย)
+    if ($total === 0
+        && preg_match('/Passed:\s*(\d+)/i', $clean, $mp)
+        && preg_match('/Failed:\s*(\d+)/i', $clean, $mf)
+    ) {
+        $passed = (int) $mp[1];
+        $failed = (int) $mf[1];
+        $total  = $passed + $failed;
+    }
+
+    // แบบที่ 3 (ท้ายสุด): นับเครื่องหมาย ✅/❌ ในผลลัพธ์
+    // ⚠️ วิธีนี้ไม่แม่น — บางไฟล์พิมพ์ "Failed: 0 ❌" เป็นป้ายกำกับ แล้วจะถูกนับเป็นความล้มเหลว
+    //    จึงต้องลองแบบที่ 2 ก่อนเสมอ
     if ($total === 0) {
-        $clean  = preg_replace('/\x1b\[[0-9;]*m/', '', $fullOutput);
         $passed = preg_match_all('/✅|\[PASS\]/u', $clean);
         $failed = preg_match_all('/❌|\[FAIL\]/u', $clean);
         $total  = $passed + $failed;
@@ -153,6 +166,17 @@ $gapSuites = [
     'Member Management'          => 'test_member_management.php',
     'Reservations'               => 'test_reservations.php',
     'Reports Queries'            => 'reports_test.php',
+    // 📌 กลุ่มที่ตรวจแล้วว่ามีของที่ชุดอื่นไม่ได้ทดสอบ (2026-08-28)
+    'Category Management'        => 'test_category_management.php',   // CRUD หมวดหมู่ + ON DELETE SET NULL
+    'Settings (Service)'         => 'test_settings.php',              // อ่าน/เขียนค่าตั้งค่า + อักขระพิเศษ
+    'Settings (HTTP)'            => 'test_settings_http.php',         // validation สี/ชื่อ + สิทธิ์ staff
+    'Reservation Logic'          => 'test_reservation_logic.php',     // รวม IDOR — ไม่มีที่อื่นทดสอบ
+    'Borrow/Return Gap'          => 'test_borrow_return_gap_analysis.php', // ค่าปรับที่ขอบเขต + atomic rollback
+    'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
+    'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว
+    'Barcode Scan'               => 'barcode_test.php',               // สแกนหา user/book
+    'Dashboard & Reports'        => 'test_dashboard_reports.php',     // ความถูกต้องของสถิติ
+    'Import Flow'                => 'test_import_flow.php',           // BOM, ข้ามแถวเสีย, upsert สมาชิก
 ];
 foreach ($gapSuites as $label => $file) {
     $suiteResults[] = runSuite($label, __DIR__ . '/' . $file, escapeshellarg($adminPassword));
@@ -218,7 +242,11 @@ echo "║                   GRAND SUMMARY                         ║\n";
 echo "╠══════════════════════════════════════════════════════════╣\n";
 
 foreach ($suiteResults as $s) {
-    $icon = $s['exit_code'] === 0 ? '✅' : ($s['exit_code'] === -1 ? '⏭' : '❌');
+    // 🧠 ต้องดู failed ด้วย ไม่ใช่ exit code อย่างเดียว
+    //    ชุดรุ่นเก่าบางตัวพิมพ์ ❌ แต่ไม่ได้คืน exit code (จบด้วย 0 เสมอ)
+    //    ถ้าดูแค่ exit code จะขึ้น "✅ 2/3 passed (1 failed)" ซึ่งขัดกันเองและหลอกตา
+    $isFail = $s['exit_code'] !== 0 || $s['failed'] > 0;
+    $icon = $s['exit_code'] === -1 ? '⏭' : ($isFail ? '❌' : '✅');
     $line = sprintf("  %s %-30s %d/%d passed", $icon, $s['name'], $s['passed'], $s['total']);
     if ($s['failed'] > 0) $line .= " ({$s['failed']} failed)";
     echo "║" . str_pad($line, 57) . "║\n";

@@ -57,13 +57,13 @@ function curlGet($url)
 }
 
 // 1. Login
+// 🧠 เดิมฝังบัญชี qa_admin@library.com + รหัส password123 ไว้ตายตัว
+//    ซึ่งไม่มีอยู่จริงในระบบ → "Login Failed" ทุกครั้ง เทสต์นี้เลยไม่เคยทำงานเลยสักรอบ
+//    เปลี่ยนมาใช้บัญชี admin จริง และรับรหัสผ่านทาง argument แบบเดียวกับชุดอื่น
+$adminEmail    = ADMIN_EMAIL;
+$adminPassword = $argv[1] ?? 'password';
+
 echo "1. Logging in as Admin...\n";
-$res = curlPost($baseUrl . '/login.php', [
-    'email' => 'qa_admin@library.com',
-    'password' => 'password123',
-    'csrf_token' => 'mock_token_if_needed_but_login_page_generates_one'
-    // Wait, login needs CSRF. I need to GET login page first to parse token.
-]);
 
 // Helper to extract CSRF
 function getCSRF($html)
@@ -78,8 +78,8 @@ function getCSRF($html)
 $loginPage = curlGet($baseUrl . '/login.php');
 $token = getCSRF($loginPage);
 $res = curlPost($baseUrl . '/login.php', [
-    'email' => 'qa_admin@library.com',
-    'password' => 'password123',
+    'email' => $adminEmail,
+    'password' => $adminPassword,
     'csrf_token' => $token
 ]);
 
@@ -159,6 +159,39 @@ if (strpos($res['body'], 'นำเข้าเสร็จสิ้น') !== fa
     echo "✅ Member Upsert Success\n";
 } else {
     echo "❌ Member Import Failed\n";
+}
+
+// ── TEARDOWN ──
+// 🧹 เก็บกวาดข้อมูลที่ import เข้ามา (อ้างอิงจากไฟล์ใน tests/fixtures/*.csv)
+//    เดิมไม่มีส่วนนี้เลย → ทิ้งหนังสือ 6 เล่ม สมาชิก และหมวดหมู่ไว้ในฐานข้อมูลทุกครั้ง
+//    (ไม่สะสมเพิ่มเพราะ import ข้ามรายการซ้ำ แต่ก็ไม่ควรทิ้งขยะไว้ตั้งแต่แรก)
+try {
+    require_once __DIR__ . '/../includes/db.php';
+    $cleanupPdo = getDB();
+
+    $bookTitles  = ['Test Import Book 1', 'Test Import Book 2', 'Test Import Book 3',
+                    'BOM Book', 'Test Fail 2', 'Test Fail 3'];
+    $memberMails = ['import1@test.com', 'import2@test.com'];
+    $catNames    = ['Fiction', 'NewCategory', 'General', 'BOM Cat', 'Cat'];
+
+    $inBooks = implode(',', array_fill(0, count($bookTitles), '?'));
+    $inMails = implode(',', array_fill(0, count($memberMails), '?'));
+    $inCats  = implode(',', array_fill(0, count($catNames), '?'));
+
+    // 📌 ลบตามลำดับ FK: payments → reservations → borrows → books/users → categories
+    $bookIdSql = "SELECT id FROM books WHERE title IN ($inBooks)";
+    $cleanupPdo->prepare("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE book_id IN ($bookIdSql))")->execute($bookTitles);
+    $cleanupPdo->prepare("DELETE FROM reservations WHERE book_id IN ($bookIdSql)")->execute($bookTitles);
+    $cleanupPdo->prepare("DELETE FROM borrows WHERE book_id IN ($bookIdSql)")->execute($bookTitles);
+    $cleanupPdo->prepare("DELETE FROM books WHERE title IN ($inBooks)")->execute($bookTitles);
+    $cleanupPdo->prepare("DELETE FROM users WHERE email IN ($inMails)")->execute($memberMails);
+    // 🧠 ลบหมวดหมู่เฉพาะที่ยังไม่มีหนังสือผูกอยู่ (import สร้างหมวดหมู่ใหม่ให้อัตโนมัติ)
+    $cleanupPdo->prepare("DELETE FROM categories WHERE name IN ($inCats)
+                          AND id NOT IN (SELECT DISTINCT category_id FROM books WHERE category_id IS NOT NULL)")->execute($catNames);
+
+    echo "\n🧹 เก็บกวาดข้อมูลทดสอบแล้ว\n";
+} catch (Throwable $e) {
+    echo "\n⚠️ เก็บกวาดไม่ครบ: " . $e->getMessage() . "\n";
 }
 
 echo "\nDone.\n";

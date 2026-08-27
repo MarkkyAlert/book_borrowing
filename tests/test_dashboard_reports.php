@@ -81,10 +81,15 @@ $pdo->exec("UPDATE books SET available = 1 WHERE id = $bid2");
 echo "\n── VERIFY STATS ──\n";
 $newStats = $dashboardService->getCardStats();
 
-// Books: +3
+// Books: +17 (5 + 2 + 10)
+// 🧠 `total_books` คือ SUM(quantity) = "จำนวนเล่ม" ไม่ใช่ COUNT(*) = "จำนวนรายการ"
+//    (ดู BookRepository::getStatistics() — คืนทั้ง total=SUM และ titles=COUNT
+//     แต่ Dashboard กับหน้าแรกใช้ total เหมือนกันทั้งคู่ ตรวจแล้วว่าสอดคล้องกัน)
+//    เดิมเทสต์คาดว่า +3 (นับรายการ) จึง fail ทุกครั้ง — เป็นความเข้าใจผิดของเทสต์เอง
+$expectedCopies = 5 + 2 + 10;
 $diffBooks = $newStats['total_books'] - $initialStats['total_books'];
-if ($diffBooks == 3) echo "  ✅ PASS: Total Books +3\n";
-else echo "  ❌ FAIL: Total Books +$diffBooks (Expected 3)\n";
+if ($diffBooks == $expectedCopies) echo "  ✅ PASS: Total Books +$expectedCopies (นับเป็นเล่ม)\n";
+else echo "  ❌ FAIL: Total Books +$diffBooks (Expected $expectedCopies)\n";
 
 // Members: +2
 $diffMembers = $newStats['total_members'] - $initialStats['total_members'];
@@ -123,7 +128,11 @@ if ($foundOverdue) echo "  ✅ PASS: Overdue List includes Book2\n";
 else echo "  ❌ FAIL: Overdue List missing Book2\n";
 
 // Top Borrowers: User1 has 2 borrows (1 active, 1 returned). User2 has 1.
-$topUsers = $dashboardService->getTopBorrowers(5);
+// 🧠 เดิมขอมาแค่ 5 อันดับแล้วคาดว่าจะเจอ user ที่เพิ่งสร้าง — ใช้ได้เฉพาะบนฐานข้อมูลว่าง
+//    พอมีข้อมูลจริงอยู่แล้ว user ใหม่ที่ยืมแค่ 2 ครั้งย่อมไม่ติด 5 อันดับแรก → fail ตลอด
+//    ทั้งที่ฟังก์ชันทำงานถูก · เปลี่ยนเป็นตรวจ 2 อย่างที่ไม่ขึ้นกับข้อมูลอื่น:
+//    (1) นับของ user นี้ถูกต้องไหม  (2) ผลลัพธ์เรียงจากมากไปน้อยจริงไหม
+$topUsers = $dashboardService->getTopBorrowers(1000);
 $user1Stats = null;
 foreach ($topUsers as $u) {
     if ($u['id'] == $uid1) $user1Stats = $u;
@@ -132,6 +141,16 @@ if ($user1Stats && $user1Stats['borrow_count'] >= 2) {
     echo "  ✅ PASS: Top Borrower User1 count correct ({$user1Stats['borrow_count']})\n";
 } else {
     echo "  ❌ FAIL: Top Borrower User1 inaccurate\n";
+}
+
+// เรียงลำดับถูกต้องไหม (มากไปน้อย)
+$counts = array_map(fn($u) => (int) $u['borrow_count'], $topUsers);
+$sorted = $counts;
+rsort($sorted);
+if ($counts === $sorted) {
+    echo "  ✅ PASS: Top Borrowers เรียงจากมากไปน้อยถูกต้อง (" . count($counts) . " คน)\n";
+} else {
+    echo "  ❌ FAIL: Top Borrowers เรียงลำดับผิด\n";
 }
 
 
