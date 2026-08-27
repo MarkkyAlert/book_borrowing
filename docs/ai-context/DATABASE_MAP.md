@@ -96,7 +96,9 @@ key-value ธรรมดา ใช้จริงแค่ 3 key: `org_name`, `
 `books`: idx_available, idx_category, uq_isbn · `borrows`: idx_status, idx_user, idx_book, idx_due_date
 `reservations`: idx_status, idx_user, idx_book · `users`: idx_email, idx_role · `password_resets`: idx_email, idx_token, idx_expires · `rate_limits`: idx_key_name, idx_created_at
 
-> ยังไม่มี FULLTEXT index — การค้นหาใช้ `LIKE '%คำ%'` (`BookRepository.php:171`) ซึ่ง **ใช้ index ไม่ได้** จะช้าเมื่อหนังสือหลักหมื่นเล่มขึ้นไป
+> ยังไม่มี FULLTEXT index — การค้นหาใช้ `LIKE '%คำ%'` (`BookRepository.php:171`) ซึ่ง **ใช้ index ไม่ได้**
+> (`EXPLAIN` → `type=ALL`, `key=NULL`) · วัดจริงที่ 2,029 เล่มใช้เวลา 10.7 ms — ยังไม่ใช่คอขวด
+> คอขวดจริงคือขนาดหน้าเว็บเพราะไม่มี pagination ดู KNOWN_LIMITATIONS §1.1
 
 ## 6. การเปลี่ยน Schema — เช็คลิสต์
 

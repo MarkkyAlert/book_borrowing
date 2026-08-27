@@ -31,8 +31,9 @@
 |------|------|---------|---------|
 | **L0** ห้องสมุดปกติ | `database/sample_data.sql` | 5 users / 10 books / 13 borrows / 5 reservations — ไว้เดโมและดูหน้าจอ | เลือก DB แล้ว import |
 | **L1** ขอบ/กรณีพิเศษ | `tests/fixtures/seed_test_data.php` | 15 users / 19 books / 27 borrows / 7 reservations / 1 payment / 6 reset token — สภาพที่จงใจสร้างเพื่อทดสอบกฎธุรกิจที่ขอบ | `php tests/fixtures/seed_test_data.php` |
+| **L3** ปริมาณมาก (วัด perf) | `tests/fixtures/seed_bulk_data.php` | สร้างหนังสือ/สมาชิก/การยืมตามจำนวนที่สั่ง — ใช้ตอบว่า "รับได้กี่เล่ม" | `php tests/fixtures/seed_bulk_data.php --books=500 --members=200` |
 
-L1 กำกับข้อมูลของตัวเองด้วย `[TEST] ` และ `@test.local` → `--reset` ลบเฉพาะของตัวเอง ไม่แตะ L0 หรือข้อมูลลูกค้า
+L1/L3 กำกับข้อมูลของตัวเองด้วย `[TEST] ` / `[BULK] ` และ `@test.local` → `--reset` ลบเฉพาะของตัวเอง ไม่แตะ L0 หรือข้อมูลลูกค้า
 `--verify` ตรวจว่าสภาพข้อมูล 21 ข้อยังอยู่ครบหรือไม่ (บางสภาพถูก "ใช้ไป" ระหว่างทดสอบ เช่น การจองหมดอายุที่ถูก lazy expire → รันใหม่เพื่อคืนสภาพ)
 
 ## สถานะที่ตรวจสอบแล้วบนเครื่องนี้
