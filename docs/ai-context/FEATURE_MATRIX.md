@@ -14,6 +14,7 @@
 | ค้นหา/กรอง (คำค้น, หมวดหมู่, สถานะ stock, เรียงลำดับ) | `BookRepository::findAll()` |
 | ค้นหาสดแบบ AJAX บนหน้าแรก | `api/search_books.php` + `includes/book_grid.php` |
 | ค้นหาด้วย FULLTEXT (รองรับภาษาไทยด้วย trigram) | `books.search_tokens` + `buildSearchTokens()` · ยังคง `LIKE` กรองซ้ำ ผลลัพธ์เหมือนเดิมทุกประการ |
+| ใช้งานได้โดยไม่ต่ออินเทอร์เน็ต | ไลบรารีทั้งหมดอยู่ใน `assets/vendor/` · ยืนยันแล้วว่าไม่มีการเรียกออกภายนอกเลย (Suite 2e) |
 | แบ่งหน้า (6 หน้า: หน้าแรก + books/borrows/members/payments/reservations) | `paginate()` ใน `includes/functions.php` + `includes/pagination.php` · จำนวนต่อหน้าปรับที่ `.env` |
 | ซ่อน/แสดงหนังสือจากหน้า public | `is_visible` toggle ใน `admin/book_form.php` |
 | Import หนังสือจาก CSV (merge + auto-create category) | `admin/import_books.php`, ตัวอย่าง `docs/samples/books_sample.csv` |

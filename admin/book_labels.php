@@ -136,7 +136,7 @@ require_once __DIR__ . '/header.php';
 }
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/jsbarcode/JsBarcode.all.min.js"></script>
 <script>
 // เลือก/ยกเลิกทั้งหมด — ใช้กับ checkbox “เลือกทั้งหมด” ด้านบน
  function toggleAll(checkbox) {

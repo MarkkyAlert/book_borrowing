@@ -164,7 +164,13 @@ book_borrowing/
 ├── database/                      ← 📝 โครงสร้าง database
 │   ├── schema.sql                 ← ตารางทั้งหมด
 │   ├── sample_data.sql            ← ข้อมูลตัวอย่าง
-│   └── migrations/                ← สคริปต์อัปเดต database
+│   ├── migrate.php                ← อัปเดต database ของระบบที่ติดตั้งแล้ว
+│   ├── migrations/                ← สคริปต์อัปเดตแต่ละเวอร์ชัน
+│   └── rebuild_search_index.php   ← ซ่อม index ค้นหาหนังสือ
+│
+├── assets/vendor/                 ← 📦 ไลบรารีภายนอก (เก็บไว้ในเครื่อง)
+│                                     ทำให้ระบบใช้งานได้โดยไม่ต้องต่ออินเทอร์เน็ต
+│                                     🔴 ห้ามเปลี่ยนกลับไปใช้ CDN — ดู README ในโฟลเดอร์
 │
 ├── css/                           ← 🎨 ไฟล์ตกแต่งหน้าเว็บ
 ├── uploads/                       ← 📷 รูปปกหนังสือที่ upload

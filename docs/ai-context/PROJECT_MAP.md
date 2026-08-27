@@ -27,6 +27,7 @@ Browser
 | `app/Repositories/` | SQL ทั้งหมด (9 ไฟล์) | ⭐ แก้ query ที่นี่ |
 | `includes/` | config, db, functions, header/footer, partial (`book_grid.php`, `pagination.php`) | ⚠️ ระวัง |
 | `database/` | `schema.sql`, `sample_data.sql`, `migrate.php`, `migrations/`, `rebuild_search_index.php` | 🔒 CLI เท่านั้น (`.htaccess` กันทั้งโฟลเดอร์) |
+| `assets/vendor/` | ไลบรารีภายนอกที่เก็บไว้ในเครื่อง (Tailwind, Bootstrap, jQuery, Chart.js ฯลฯ) | 🔴 ห้ามเปลี่ยนกลับไปใช้ CDN — ลูกค้า intranet จะใช้ไม่ได้ |
 | `database/` | `schema.sql`, `sample_data.sql`, migration script (บล็อกจากเว็บทั้งโฟลเดอร์ + migration ต้องรันผ่าน CLI) | — |
 | `cron/` | 2 งานตามเวลา (CLI-guarded) | ✅ |
 | `docs/` | เอกสาร 11 ไฟล์ + `samples/` CSV | ✅ |

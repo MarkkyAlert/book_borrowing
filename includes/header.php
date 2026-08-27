@@ -26,15 +26,20 @@ $user = isLoggedIn() ? getCurrentUser() : null;
     <title><?= isset($pageTitle) ? e($pageTitle) . ' - ' : '' ?><?= APP_NAME ?></title>
 
     <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <?php // 🔌 [OFFLINE] asset ทุกตัวอยู่ในโปรเจกต์ ไม่พึ่งอินเทอร์เน็ต — ดู assets/vendor/README.md
+    //    ห้ามเปลี่ยนกลับไปใช้ CDN: ลูกค้าหลายรายเป็นห้องสมุด intranet ที่ไม่ต่อเน็ต
+    ?>
+    <link href="<?= APP_URL ?>/assets/vendor/fonts/sarabun.css" rel="stylesheet">
 
     <!-- Bootstrap Icons (Keep for icons compatibility) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/bootstrap-icons/bootstrap-icons.css">
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <?php // 🧠 Tailwind ตัวนี้คอมไพล์ในเบราว์เซอร์ (Play CDN) — เก็บไฟล์เดิมมาไว้เครื่อง
+    //    ไม่เปลี่ยนไปใช้ build step เพราะโปรเจกต์นี้ตั้งใจไม่มี Node/npm
+    //    ⚠️ ต้องโหลดก่อน tailwind.config ด้านล่างเสมอ
+    ?>
+    <script src="<?= APP_URL ?>/assets/vendor/tailwind/tailwind.js"></script>
     <script>
         tailwind.config = {
             theme: {

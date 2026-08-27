@@ -136,24 +136,29 @@ php database/rebuild_search_index.php
 | ไม่ใช่ real-time | ไม่มี WebSocket/SSE — หลายเครื่องเห็นตรงกันเพราะใช้ **DB กลางชุดเดียว** ต้อง reload เอง |
 | Session เก็บใน filesystem | scale หลาย server ต้องย้ายไป Redis/DB เอง |
 | ไม่มี multi-tenant / หลายสาขา | เพิ่มทีหลัง = เปลี่ยน data model ครั้งใหญ่ |
+## 2. ✅ ใช้งานออฟไลน์ได้ (แก้แล้ว — F-09)
 
-## 2. ขึ้นกับอินเทอร์เน็ต (สำคัญกับห้องสมุด intranet)
+**ระบบไม่พึ่งอินเทอร์เน็ตแล้ว** ไลบรารีทั้งหมดเก็บไว้ใน `assets/vendor/` (1.8 MB)
+เดิมโหลดจาก CDN 4 แหล่ง ซึ่งทำให้ห้องสมุด intranet **ติดตั้งแล้วใช้งานไม่ได้เลย**
 
-หน้าเว็บโหลด asset จาก CDN ทั้งหมด — **ถ้าเครื่องไม่ต่อเน็ต หน้าจะเพี้ยนและบางฟีเจอร์ใช้ไม่ได้**:
+| ไลบรารี | ใช้ที่ไหน | เก็บไว้ที่ |
+|---------|-----------|-----------|
+| Tailwind (Play CDN) | ทุกหน้า | `assets/vendor/tailwind/` |
+| Bootstrap 5.3.2 + Icons 1.11.1 | หน้า admin, install | `assets/vendor/bootstrap*/` |
+| ฟอนต์ Sarabun 300–700 | ทุกหน้า | `assets/vendor/fonts/` |
+| Chart.js | Dashboard | `assets/vendor/chartjs/` |
+| Select2 4.1.0-rc.0 | ฟอร์มยืม | `assets/vendor/select2/` |
+| flatpickr + locale ไทย | เลือกช่วงวันในรายงาน | `assets/vendor/flatpickr/` |
+| JsBarcode 3.11.0 | ฉลากหนังสือ + บัตรสมาชิก | `assets/vendor/jsbarcode/` |
+| QRCode.js 1.0.0 | บัตรสมาชิก | `assets/vendor/qrcode/` |
 
-| ไลบรารี | ใช้ที่ไหน | ถ้าโหลดไม่ได้ |
-|---------|-----------|---------------|
-| `cdn.tailwindcss.com` | ทุกหน้า public/member | หน้าเว็บไม่มี style เลย |
-| Bootstrap 5 + Bootstrap Icons | หน้า admin, install | style/ไอคอนหาย |
-| `fonts.googleapis.com` (Sarabun) | ทุกหน้า | fallback เป็นฟอนต์ระบบ |
-| Chart.js | Dashboard | กราฟไม่ขึ้น |
-| Select2 | ฟอร์มยืม | dropdown ค้นหาไม่ได้ |
-| flatpickr | เลือกวันที่ | ใช้ input ธรรมดาแทน |
-| **JsBarcode** | ฉลากหนังสือ + บัตรสมาชิก | **พิมพ์ barcode ไม่ได้** |
-| **QRCode.js** | บัตรสมาชิก | **QR ไม่ขึ้น** |
+ยืนยันแล้วด้วยเบราว์เซอร์จริง: `performance.getEntriesByType('resource')` **external = 0** ทุกหน้า
+· ชุดทดสอบ Suite 2e กันไม่ให้มีใครเผลอเพิ่ม CDN กลับเข้ามา
 
-> `cdn.tailwindcss.com` เป็น Play CDN ที่ผู้พัฒนา Tailwind ระบุว่าไม่เหมาะกับ production
-> **ถ้าลูกค้าใช้งานออฟไลน์: ต้อง self-host ไฟล์เหล่านี้ก่อน** (งานเล็ก แต่ต้องทำ)
+**⚠️ ยังใช้ Tailwind แบบคอมไพล์ในเบราว์เซอร์ (Play CDN)** ซึ่งผู้พัฒนา Tailwind
+ระบุว่าไม่เหมาะกับ production — หน้าเว็บต้องโหลด JS 400 KB แล้วคอมไพล์ CSS ตอนเปิดทุกครั้ง
+จงใจคงไว้เพราะเปลี่ยนเป็น CSS นิ่งต้องเพิ่ม Node/npm เข้ามาในโปรเจกต์ที่ตั้งใจไม่มี build step
+ถ้ายอมรับการเพิ่ม build step ได้ ตรงนี้คือจุดที่ปรับให้เบาลงได้มากที่สุด
 
 ## 3. ฟีเจอร์ที่คนมักเข้าใจผิดว่ามี
 

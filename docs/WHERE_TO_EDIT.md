@@ -108,10 +108,11 @@
 | ไฟล์ | หน้าที่ |
 |------|--------|
 | `css/style.css` | CSS หลักทั้งเว็บ (custom styles) |
-| `includes/header.php` | Tailwind config (สีหลัก) + CDN link |
+| `includes/header.php` | Tailwind config (สีหลัก) + ลิงก์ asset ในเครื่อง (`assets/vendor/`) |
 | `admin/header.php` | Tailwind config (สีหลัก) สำหรับ admin |
 
-💡 ระบบใช้ **Tailwind CSS (CDN)** — สีส่วนใหญ่ตั้งใน JavaScript config ในไฟล์ header ไม่ใช่ CSS ปกติ
+💡 ระบบใช้ **Tailwind CSS** — สีส่วนใหญ่ตั้งใน JavaScript config ในไฟล์ header ไม่ใช่ CSS ปกติ
+🔌 ไฟล์ไลบรารีเก็บไว้ใน `assets/vendor/` **ห้ามเปลี่ยนกลับไปใช้ CDN** (ลูกค้า intranet จะใช้ไม่ได้ — ดู `assets/vendor/README.md`)
 
 ---
 

@@ -136,7 +136,7 @@ require_once __DIR__ . '/header.php';
 ?>
 
 <!-- Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="<?= APP_URL ?>/assets/vendor/select2/select2.min.css" rel="stylesheet" />
 <style>
     /* Custom Select2 Styles for Tailwind */
     .select2-container .select2-selection--single,
@@ -408,7 +408,7 @@ require_once __DIR__ . '/header.php';
 <?php require_once __DIR__ . '/footer.php'; ?>
 
 <!-- Select2 JS -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/select2/select2.min.js"></script>
 <script>
     $(document).ready(function() {
         // Initialize Select2 with simple theme

@@ -53,8 +53,12 @@ if ($isInstalled) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ติดตั้งแล้ว - <?= APP_NAME ?></title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+        <?php // 🔌 [OFFLINE] ใช้ path สัมพัทธ์ ไม่ใช่ APP_URL
+        //    ตอนติดตั้งลูกค้าอาจยังไม่ได้ตั้ง APP_URL ให้ถูก แต่ install.php อยู่ราก
+        //    โปรเจกต์เสมอ path สัมพัทธ์จึงชี้ถูกแน่นอนไม่ว่าจะวางไว้ที่ไหน
+        ?>
+        <link href="assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+        <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     </head>
 
     <body class="bg-light">
@@ -392,8 +396,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ติดตั้งระบบ - <?= APP_NAME ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <?php // 🔌 [OFFLINE] path สัมพัทธ์ — ดูเหตุผลที่หน้า "ติดตั้งแล้ว" ด้านบน ?>
+    <link href="assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

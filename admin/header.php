@@ -43,17 +43,16 @@ if (!$user) {
     <title><?= isset($pageTitle) ? e($pageTitle) . ' - ' : '' ?>Admin | <?= APP_NAME ?></title>
     
     <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <?php // 🔌 [OFFLINE] asset ทุกตัวอยู่ในโปรเจกต์ — ดู assets/vendor/README.md ?>
+    <link href="<?= APP_URL ?>/assets/vendor/fonts/sarabun.css" rel="stylesheet">
     
 
     
     <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/bootstrap-icons/bootstrap-icons.css">
     
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="<?= APP_URL ?>/assets/vendor/tailwind/tailwind.js"></script>
     <script>
         tailwind.config = {
             theme: {

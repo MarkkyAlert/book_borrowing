@@ -508,7 +508,7 @@ require_once __DIR__ . '/header.php';
 </div>
 
 <!-- Chart.js Initialization -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/chartjs/chart.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Determine chart background colors based on CSS variables if possible, or hardcode Tailwind colors

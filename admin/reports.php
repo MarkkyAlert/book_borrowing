@@ -129,7 +129,7 @@ require_once __DIR__ . '/header.php';
 </div>
 
 <!-- Flatpickr CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/flatpickr/flatpickr.min.css">
 
 <!-- Date Range Filter -->
 <?php 
@@ -168,8 +168,8 @@ $endDateDisplay = date('d/m/Y', strtotime($endDate));
     </form>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/flatpickr/flatpickr.min.js"></script>
+<script src="<?= APP_URL ?>/assets/vendor/flatpickr/th.js"></script>
 <script>
 // Helper functions - ต้องประกาศก่อนใช้งาน
 function formatDateISO(date) {

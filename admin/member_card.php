@@ -44,12 +44,12 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
     <meta charset="UTF-8">
     <title>บัตรสมาชิก - <?= e($member['name']) ?></title>
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="<?= APP_URL ?>/assets/vendor/fonts/sarabun.css" rel="stylesheet">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/vendor/bootstrap-icons/bootstrap-icons.css">
     
     <!-- QRCode.js & JsBarcode -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <script src="<?= APP_URL ?>/assets/vendor/qrcode/qrcode.min.js"></script>
+    <script src="<?= APP_URL ?>/assets/vendor/jsbarcode/JsBarcode.all.min.js"></script>
     
     <style>
         :root {
