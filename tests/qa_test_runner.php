@@ -9,6 +9,10 @@
 
 date_default_timezone_set('Asia/Bangkok');
 
+// 📝 โหลด config เพื่ออ่านค่า rate limit ที่ตั้งไว้จริงใน .env
+//    (ไม่ hard-code จำนวนครั้ง — ลูกค้าปรับ RATE_LIMIT_MAX_ATTEMPTS ได้ test ต้องไม่พัง)
+require_once __DIR__ . '/../includes/config.php';
+
 $BASE_URL = 'http://localhost/book_borrowing';
 $TIMESTAMP = time();
 $LOG_FILE = __DIR__ . '/logs/qa_run_' . date('Y-m-d_His') . '.jsonl';
@@ -492,24 +496,29 @@ test('SC-05', 'GET', '/api/reserve_book.php', [], $userSession, 405);
 // SC-06 Member history API without admin
 test('SC-06', 'GET', '/api/member_history.php?user_id=1', [], $memberSess, [302, 403]);
 
-// SC-07 Login brute force (rate limit after 5+)
-echo "  ⏳ SC-07: Testing rate limit (6 attempts)...\n";
-for ($i = 0; $i < 6; $i++) {
+// SC-07 Login brute force (ต้องถูกบล็อกหลังผิดครบ RATE_LIMIT_MAX_ATTEMPTS ครั้ง)
+//   ⚠️ ใช้อีเมลปลอมเฉพาะเทสต์ ไม่ใช้ $ADMIN_EMAIL
+//      เพราะ rate limit key = login_md5(email) → ถ้ายิงใส่ admin จริง
+//      บัญชี admin จะถูกล็อกยาว RATE_LIMIT_WINDOW_MINUTES นาทีหลังรันเทสต์เสร็จ
+$rlEmail = "qa_ratelimit_{$TIMESTAMP}@test.com";
+$rlMax = RATE_LIMIT_MAX_ATTEMPTS;
+echo "  ⏳ SC-07: Testing rate limit ({$rlMax} attempts + 1)...\n";
+for ($i = 0; $i < $rlMax; $i++) {
     $r = http('GET', "$BASE_URL/login.php");
     http('POST', "$BASE_URL/login.php", [
-        'email'=>$ADMIN_EMAIL,'password'=>'wrong','csrf_token'=>csrf($r['body'])
+        'email'=>$rlEmail,'password'=>'wrong','csrf_token'=>csrf($r['body'])
     ], $r['session']);
 }
-// 7th attempt — should be rate-limited
+// ครั้งถัดไป — ต้องโดนบล็อกแล้ว
 $r = http('GET', "$BASE_URL/login.php");
 $rlSess = $r['session'];
 $rlTok = csrf($r['body']);
 test('SC-07', 'POST', '/login.php', [
-    'email'=>$ADMIN_EMAIL,'password'=>'wrong','csrf_token'=>$rlTok
-], $rlSess, 200, function($r) {
+    'email'=>$rlEmail,'password'=>'wrong','csrf_token'=>$rlTok
+], $rlSess, 200, function($r) use ($rlMax) {
     return (stripos($r['body'], 'หลายครั้ง') !== false || stripos($r['body'], 'rate') !== false
          || stripos($r['body'], 'รอ') !== false || stripos($r['body'], 'เกินไป') !== false)
-        ? true : 'No rate limit message after 6+ attempts';
+        ? true : "No rate limit message after {$rlMax}+ attempts";
 });
 
 // SC-08 Access after logout
@@ -523,6 +532,71 @@ test('SC-09', 'POST', '/api/reserve_book.php', ['book_id'=>1], null, 401);
 
 // SC-10 Add member API without admin
 test('SC-10', 'POST', '/api/add_member.php', ['name'=>'Hack','email'=>'h@h.com'], null, [302, 403, 401]);
+
+// ============================================================
+// TEARDOWN — ล้างข้อมูลที่ชุดทดสอบสร้างขึ้น
+// ============================================================
+// 🧠 เหตุผล: ถ้าไม่ล้าง จะเหลือ QA user/book/reservation ค้างใน DB
+//    โดยเฉพาะ reservation สถานะ pending ที่ "หัก stock ค้างไว้"
+//    → รันซ้ำหลายรอบแล้วตัวเลข available กับสถิติจะเพี้ยนสะสม
+// ⚠️ ต้องคืน stock ก่อนลบเสมอ (เลียนแบบ ReservationService::cancelReservation)
+echo "\n─── TEARDOWN: ล้างข้อมูลทดสอบ ───\n";
+
+require_once __DIR__ . '/../includes/db.php';
+
+try {
+    $pdo = getDB();
+    $pdo->beginTransaction();
+
+    // 1️⃣ หา user ที่ชุดทดสอบสร้าง (register + add_member API)
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email IN (?, ?)");
+    $stmt->execute([$TEST_USER_EMAIL, $testMemberEmail]);
+    $qaUserIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $restoredStock = 0;
+    if ($qaUserIds) {
+        $in = implode(',', array_fill(0, count($qaUserIds), '?'));
+
+        // 2️⃣ คืน stock จาก reservation ที่ยัง pending (หัก stock ไว้ตอนจอง)
+        $stmt = $pdo->prepare("SELECT book_id FROM reservations WHERE user_id IN ($in) AND status = 'pending'");
+        $stmt->execute($qaUserIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $bookId) {
+            $up = $pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ? AND available < quantity");
+            $up->execute([$bookId]);
+            $restoredStock += $up->rowCount();
+        }
+
+        // 3️⃣ คืน stock จาก borrow ที่ยังไม่คืน
+        $stmt = $pdo->prepare("SELECT book_id FROM borrows WHERE user_id IN ($in) AND status = 'borrowing'");
+        $stmt->execute($qaUserIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $bookId) {
+            $up = $pdo->prepare("UPDATE books SET available = available + 1 WHERE id = ? AND available < quantity");
+            $up->execute([$bookId]);
+            $restoredStock += $up->rowCount();
+        }
+
+        // 4️⃣ ลบตามลำดับ FK: reservations → borrows (payments ตาม CASCADE) → users
+        $pdo->prepare("DELETE FROM reservations WHERE user_id IN ($in)")->execute($qaUserIds);
+        $pdo->prepare("DELETE FROM borrows WHERE user_id IN ($in)")->execute($qaUserIds);
+        $pdo->prepare("DELETE FROM users WHERE id IN ($in)")->execute($qaUserIds);
+    }
+
+    // 5️⃣ ลบหนังสือ + หมวดหมู่ของรอบทดสอบนี้ (อ้างชื่อที่มี TIMESTAMP — ไม่แตะข้อมูลจริง)
+    $delBook = $pdo->prepare("DELETE FROM books WHERE title = ?");
+    $delBook->execute(["QA Book $TIMESTAMP"]);
+    $delCat = $pdo->prepare("DELETE FROM categories WHERE name = ?");
+    $delCat->execute([$testCategoryName]);
+
+    // 6️⃣ ล้าง rate_limits ของรอบนี้ (กันบล็อกค้างหลังรันเทสต์)
+    $pdo->prepare("DELETE FROM rate_limits WHERE key_name LIKE ?")->execute(['login_' . md5($rlEmail) . '%']);
+
+    $pdo->commit();
+    echo "  ✅ ลบ user " . count($qaUserIds) . " คน, หนังสือ {$delBook->rowCount()} เล่ม, หมวดหมู่ {$delCat->rowCount()} รายการ, คืน stock {$restoredStock} เล่ม\n";
+} catch (\Exception $e) {
+    if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+    echo "  ⚠️ Teardown ไม่สำเร็จ: " . $e->getMessage() . "\n";
+    echo "     กรุณาล้างข้อมูล QA_* / qa_* ใน DB ด้วยตนเอง\n";
+}
 
 // ============================================================
 // SUMMARY
