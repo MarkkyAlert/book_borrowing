@@ -48,9 +48,13 @@ try {
 
     // 3. Test Revenue Query
     $sql = "
-        SELECT DATE(payment_date) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
+        -- 🧠 ตาราง payments ไม่มีคอลัมน์ชื่อ payment_date
+        --    `payment_date` เป็นแค่ alias ที่ PaymentRepository::findAll() ตั้งให้ p.created_at
+        --    เดิมเขียน DATE(payment_date) ตรง ๆ ที่นี่ → Unknown column 'payment_date'
+        --    (ตรวจแล้วไม่ใช่บั๊กของระบบ — แอปใช้ alias ถูกต้อง เป็นเทสต์ที่ล้าสมัยเอง)
+        SELECT DATE(created_at) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
         FROM payments
-        GROUP BY DATE(payment_date)
+        GROUP BY DATE(created_at)
         ORDER BY payment_day DESC
         LIMIT 5
     ";

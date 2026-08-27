@@ -117,7 +117,10 @@ $bookId = $pdo->lastInsertId();
 // Borrow
 // Need to find an admin ID for `approveBorrow`. I'll just insert into borrows table directly to verify `MemberService::delete` constraint logic (borrowRepo->countByUser).
 // BorrowRepo counts ANY row in `borrows` table for user_id.
-$pdo->prepare("INSERT INTO borrows (book_id, user_id, borrow_date, due_date, status) VALUES (?, ?, NOW(), NOW(), 'borrowed')")
+// 🧠 ENUM ของคอลัมน์นี้คือ ('borrowing','returned') — ไม่มีคำว่า 'borrowed'
+//    เดิมเขียน 'borrowed' ทำให้ MySQL โยน "Data truncated for column 'status'"
+//    แล้วสคริปต์ตายเงียบ ๆ ตรงนี้ ไม่ได้ไปถึงส่วน CLEANUP → ทิ้งขยะไว้ทุกครั้งที่รัน
+$pdo->prepare("INSERT INTO borrows (book_id, user_id, borrow_date, due_date, status) VALUES (?, ?, NOW(), NOW(), 'borrowing')")
     ->execute([$bookId, $idA]);
 
 // Try Delete Member A (Has active borrow)
@@ -155,12 +158,18 @@ try {
 
 
 // 4. Cleanup
+// 🧹 ต้องทำงานเสมอ แม้เทสต์ด้านบนจะพังกลางคัน — ไม่งั้นจะทิ้งหนังสือที่ไม่มี
+//    search_tokens ไว้ แล้วชุด Search Index (SI-08) จะ fail ในรอบถัดไป
 echo "\n── CLEANUP ──\n";
-// Force cleanup (delete borrows first)
-$pdo->exec("DELETE FROM borrows WHERE user_id = $idA");
-$memberService->deleteMember($idA);
-$pdo->exec("DELETE FROM books WHERE id = $bookId");
-$pdo->exec("DELETE FROM users WHERE email LIKE '$prefix%'");
-
-echo "  Cleanup done\n";
+try {
+    // 📌 ลบตามลำดับ FK: payments → reservations → borrows → books → users
+    $pdo->exec("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE user_id = $idA OR book_id = $bookId)");
+    $pdo->exec("DELETE FROM reservations WHERE user_id = $idA OR book_id = $bookId");
+    $pdo->exec("DELETE FROM borrows WHERE user_id = $idA OR book_id = $bookId");
+    $pdo->exec("DELETE FROM books WHERE id = $bookId OR isbn = '978-MEM-TEST'");
+    $pdo->exec("DELETE FROM users WHERE email LIKE '$prefix%'");
+    echo "  Cleanup done\n";
+} catch (Throwable $e) {
+    echo "  ⚠️ Cleanup ไม่ครบ: " . $e->getMessage() . "\n";
+}
 echo "\n════════════════════════════════════════\n";

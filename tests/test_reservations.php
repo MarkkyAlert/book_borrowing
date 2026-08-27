@@ -46,9 +46,36 @@ function createTestBook($pdo, $isbn, $qty = 5)
     return $pdo->lastInsertId();
 }
 
-// Cleanup
-$pdo->exec("DELETE FROM reservations WHERE created_at > NOW() - INTERVAL 5 MINUTE");
-$pdo->exec("DELETE FROM borrows WHERE borrow_date > CURDATE() - INTERVAL 1 DAY"); // Dangerous but ok for test env
+/**
+ * 🧹 ลบเฉพาะข้อมูลที่ไฟล์นี้สร้างเอง (อ้างอิงจากรูปแบบ email / ISBN ด้านบน)
+ *
+ * 🔴 เดิมเขียนไว้แบบนี้ ซึ่งอันตรายมาก:
+ *      DELETE FROM reservations WHERE created_at > NOW() - INTERVAL 5 MINUTE
+ *      DELETE FROM borrows WHERE borrow_date > CURDATE() - INTERVAL 1 DAY
+ *    → ลบ "การจองที่เพิ่งเกิดใน 5 นาที" และ "การยืมของเมื่อวาน-วันนี้" **ทั้งหมด**
+ *      ไม่ว่าจะเป็นของใคร ถ้าใครเผลอรันไฟล์นี้บนฐานข้อมูลจริง ข้อมูลลูกค้าหายทันที
+ *      (ในโค้ดเดิมมีคอมเมนต์กำกับว่า "Dangerous but ok for test env" — แต่ไฟล์นี้
+ *       ถูกแพ็กไปกับสินค้าด้วย ชื่อไฟล์ก็ดูไม่มีพิษภัย)
+ *
+ * ✅ ตอนนี้ผูกกับรูปแบบชื่อของข้อมูลทดสอบเท่านั้น ไม่แตะข้อมูลอื่นเลย
+ */
+function cleanupReservationTestData(PDO $pdo): void
+{
+    // 📌 ลบตามลำดับ FK: payments → reservations → borrows → books/users
+    $bookFilter = "SELECT id FROM books WHERE isbn LIKE '978-RES-%' OR isbn LIKE '978-CAN-%'
+                   OR isbn LIKE '978-OOS-%' OR isbn LIKE '978-DUPE-%' OR isbn LIKE '978-EXP-%'";
+    $userFilter = "SELECT id FROM users WHERE email LIKE 'res_tester%@test.com'";
+
+    $pdo->exec("DELETE FROM payments WHERE borrow_id IN (
+                    SELECT id FROM borrows WHERE book_id IN ($bookFilter) OR user_id IN ($userFilter))");
+    $pdo->exec("DELETE FROM reservations WHERE book_id IN ($bookFilter) OR user_id IN ($userFilter)");
+    $pdo->exec("DELETE FROM borrows WHERE book_id IN ($bookFilter) OR user_id IN ($userFilter)");
+    $pdo->exec("DELETE FROM books WHERE id IN ($bookFilter)");
+    $pdo->exec("DELETE FROM users WHERE id IN ($userFilter)");
+}
+
+// 🧹 เคลียร์ของค้างจากรอบก่อน (เผื่อรอบก่อนพังกลางคัน)
+cleanupReservationTestData($pdo);
 
 echo "════════════════════════════════════════\n";
 echo " Section 13: Reservations Verification\n";
@@ -203,4 +230,9 @@ try {
 } catch (Exception $e) {
     echo "\n❌ FATAL ERROR: " . $e->getMessage() . "\n";
     echo $e->getTraceAsString();
+} finally {
+    // 🧹 เก็บกวาดเสมอ แม้เทสต์จะพังกลางคัน
+    //    ไม่งั้นจะทิ้งหนังสือที่ไม่มี search_tokens ไว้ แล้วชุด Search Index (SI-08) จะ fail
+    cleanupReservationTestData($pdo);
+    echo "\n🧹 เก็บกวาดข้อมูลทดสอบแล้ว\n";
 }

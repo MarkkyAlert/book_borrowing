@@ -33,6 +33,7 @@ echo "║  Suite 2b: Deadlock Retry Tests (helper logic)          ║\n";
 echo "║  Suite 2c: Pagination Tests (LIMIT/OFFSET correctness)  ║\n";
 echo "║  Suite 2d: Search Index Tests (FULLTEXT ภาษาไทย)        ║\n";
 echo "║  Suite 2e: Offline Assets Tests (ไม่พึ่ง CDN)           ║\n";
+echo "║  Suite 3:  Gap Analysis 8 ชุด (SQLi/XSS/integrity/…)     ║\n";
 echo "║  Suite 3: HTTP Integration Tests (curl via Apache)      ║\n";
 echo "║  Suite 4: Upload Security Tests (real files)            ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
@@ -58,12 +59,25 @@ function runSuite(string $name, string $file, string $extraArgs = ''): array {
     
     // Parse results from output
     $passed = 0; $failed = 0; $total = 0;
-    if (preg_match('/(\d+)\/(\d+)\s+passed\s+\((\d+\.?\d*)%\)/', $fullOutput, $m)) {
+    // 🧠 บางชุดพิมพ์ "RESULTS: 35/35 passed" เฉย ๆ ไม่มีเปอร์เซ็นต์ต่อท้าย
+    //    ทำให้เปอร์เซ็นต์เป็นส่วนที่ "มีก็ได้ ไม่มีก็ได้" — ไม่งั้นชุดพวกนั้นจะโชว์ 0/0
+    //    ทั้งที่ผ่านหมด ซึ่งอ่านแล้วเข้าใจผิดว่าไม่ได้รันอะไรเลย
+    if (preg_match('/(\d+)\/(\d+)\s+passed(?:\s+\((\d+\.?\d*)%\))?/i', $fullOutput, $m)) {
         $passed = (int) $m[1];
         $total = (int) $m[2];
     }
     if (preg_match('/(\d+)\s+FAILED/', $fullOutput, $m)) {
         $failed = (int) $m[1];
+    }
+
+    // 🧠 บางชุดเป็นสคริปต์รุ่นเก่าที่พิมพ์ ✅/❌ ทีละบรรทัด ไม่มีบรรทัดสรุปรวม
+    //    ถ้าไม่นับให้ จะขึ้นว่า "0/0 passed" ซึ่งอ่านแล้วเข้าใจผิดว่าไม่ได้รันอะไรเลย
+    //    จึงนับจากเครื่องหมายในผลลัพธ์แทน (ตัวเลขจะตรงกับจำนวนบรรทัดที่รายงานผล)
+    if ($total === 0) {
+        $clean  = preg_replace('/\x1b\[[0-9;]*m/', '', $fullOutput);
+        $passed = preg_match_all('/✅|\[PASS\]/u', $clean);
+        $failed = preg_match_all('/❌|\[FAIL\]/u', $clean);
+        $total  = $passed + $failed;
     }
     
     return [
@@ -115,6 +129,34 @@ $suiteResults[] = runSuite(
     'Offline Assets Tests',
     __DIR__ . '/test_offline_assets.php'
 );
+
+// ============================================================
+// Suite 3: กลุ่ม Gap Analysis — เดิมมีอยู่แต่ไม่ได้ต่อเข้าชุดหลัก
+// ============================================================
+// 🧠 ทำไมต้องต่อเข้ามา: ไฟล์พวกนี้มี 139 เคสที่ชุดหลักไม่ได้ครอบคลุม
+//    (SQL injection 3 จุด, XSS สะท้อนกลับ, CSRF token เปลี่ยนต่อ session,
+//     แยกสิทธิ์ staff/admin, email แก้ไม่ได้, data integrity, concurrency)
+//    แต่ไม่มีใครรัน → **เน่าไปแล้ว 2 ไฟล์** (fatal error ทั้งคู่ เพิ่งซ่อมไป 2026-08-28)
+//    ถ้าไม่ต่อเข้ามา ที่เหลือก็จะทยอยตายแบบเดียวกันโดยไม่มีใครรู้
+// ⏱️ ทั้งกลุ่มใช้เวลารวมประมาณ 3.5 วินาที และเก็บกวาดข้อมูลตัวเองครบทุกไฟล์
+//    (วัดแล้วด้วยการนับแถวใน 6 ตารางก่อน/หลังรัน)
+$gapSuites = [
+    'Security Gap Analysis'      => 'test_security_gap_analysis.php',
+    'Data Integrity'             => 'test_data_integrity.php',
+    'Concurrency Gap Analysis'   => 'test_concurrency_gap_analysis.php',
+    'Reservation Admin Gap'      => 'test_reservation_admin_gap_analysis.php',
+    'Payment Gap Analysis'       => 'test_payment_gap_analysis.php',
+    'Authentication Gap'         => 'test_authentication_gap_analysis.php',
+    'Book Management'            => 'test_book_management.php',
+    'Profile Security'           => 'test_profile_security.php',
+    // 📌 3 ตัวนี้เพิ่งซ่อม (2026-08-28) — เดิมทิ้งขยะไว้/query คอลัมน์ที่ไม่มีอยู่จริง
+    'Member Management'          => 'test_member_management.php',
+    'Reservations'               => 'test_reservations.php',
+    'Reports Queries'            => 'reports_test.php',
+];
+foreach ($gapSuites as $label => $file) {
+    $suiteResults[] = runSuite($label, __DIR__ . '/' . $file, escapeshellarg($adminPassword));
+}
 
 // Suite 3: HTTP Integration Tests
 // Check if Apache is running first
