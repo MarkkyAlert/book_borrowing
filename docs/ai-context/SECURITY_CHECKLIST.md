@@ -58,13 +58,22 @@
 
 ## 6. File Upload
 
+> ทดสอบด้วย **ไฟล์จริง** ครบทุกเคสแล้ว — `php tests/test_upload_security.php` (14 เคส, อยู่ใน Suite 4 ของ `run_all_tests.php`)
+
 | รายการ | สถานะ | หลักฐาน |
 |--------|-------|---------|
-| ตรวจ MIME จากเนื้อไฟล์ (ไม่เชื่อ `$_FILES['type']`) | ✅ | `finfo_file()` — `admin/book_form.php:111` |
-| จำกัดชนิด | ✅ | jpeg / png / gif / webp |
-| จำกัดขนาด | ✅ | 2 MB |
-| ตั้งชื่อไฟล์ใหม่จาก MIME (ไม่ใช้ชื่อเดิม) | ✅ | `:126-137` |
-| ปิดการรัน PHP ในโฟลเดอร์อัปโหลด | ✅ 🧪 | `uploads/.htaccess` (`php_flag engine off` + block `.php/.phtml/.phar`) |
+| ตรวจ MIME จากเนื้อไฟล์ (ไม่เชื่อ `$_FILES['type']`) | ✅ 🧪 | `finfo_file()` — `admin/book_form.php:111` |
+| ไฟล์ PHP เปลี่ยนนามสกุลเป็น `.jpg` | ✅ 🧪 | finfo เห็น `text/x-php` → ปฏิเสธ (UP-01) |
+| นามสกุลซ้อน `.php.jpg` | ✅ 🧪 | ปฏิเสธ (UP-02) |
+| HTML เปลี่ยนนามสกุลเป็น `.png` | ✅ 🧪 | finfo เห็น `text/html` → ปฏิเสธ (UP-03) |
+| SVG (เสี่ยง XSS, ไม่อยู่ใน allowlist) | ✅ 🧪 | ปฏิเสธ (UP-04) |
+| ไฟล์ว่าง 0 byte | ✅ 🧪 | finfo เห็น `application/x-empty` → ปฏิเสธ (UP-05) |
+| จำกัดขนาด 2 MB | ✅ 🧪 | ปฏิเสธไฟล์ 2.1 MB (UP-06) |
+| ตั้งชื่อไฟล์ใหม่จาก MIME (ไม่ใช้ชื่อเดิม) | ✅ 🧪 | `cover_<time>_<uniqid>.<ext>` (UP-08) |
+| **Polyglot** (PNG จริง + PHP ต่อท้าย) | ⚠️ 🧪 | **ผ่าน filter** เพราะ finfo เห็น PNG header — กันด้วยด่านถัดไปแทน (UP-09) |
+| ปิดการรัน PHP ในโฟลเดอร์อัปโหลด | ✅ 🧪 | polyglot เรียกผ่าน HTTP → ได้ไบต์ดิบตรงกับไฟล์บนดิสก์ทุกไบต์ ไม่ถูก execute (UP-10, UP-11) |
+| `.php` / `.phtml` ที่หลุดเข้าไปในโฟลเดอร์ | ✅ 🧪 | `uploads/.htaccess` → **403** ทั้งคู่ (UP-12, UP-13) |
+| `.php.png` (ลงท้าย `.png`) | ✅ 🧪 | เสิร์ฟเป็นข้อความดิบ ไม่ถูก execute (UP-14) |
 
 ## 7. การเข้าถึงไฟล์ (ทดสอบจริงบนเครื่องนี้ทุกบรรทัด 🧪)
 

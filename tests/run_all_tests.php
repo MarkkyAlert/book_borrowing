@@ -27,6 +27,7 @@ echo "╠═══════════════════════�
 echo "║  Suite 1: Service-Level Tests (PHP direct)              ║\n";
 echo "║  Suite 2: DB Constraint Tests (SQL direct)              ║\n";
 echo "║  Suite 3: HTTP Integration Tests (curl via Apache)      ║\n";
+echo "║  Suite 4: Upload Security Tests (real files)            ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
 
 $suiteResults = [];
@@ -105,6 +106,25 @@ if ($httpCode > 0) {
     echo "  Start Apache first, then re-run.\n";
     $suiteResults[] = [
         'name' => 'HTTP Integration Tests',
+        'passed' => 0, 'failed' => 0, 'total' => 0,
+        'exit_code' => -1, 'success' => false
+    ];
+}
+
+// Suite 4: Upload Security Tests — ต้องใช้ Apache เหมือน Suite 3
+//   ทดสอบด่านกรองไฟล์ด้วยไฟล์จริง + ยืนยันว่า uploads/.htaccess ยังกัน PHP อยู่
+if ($httpCode > 0) {
+    $suiteResults[] = runSuite(
+        'Upload Security Tests',
+        __DIR__ . '/test_upload_security.php',
+        escapeshellarg($adminPassword)
+    );
+} else {
+    echo "\n\033[1;33m▶ Running: Upload Security Tests\033[0m\n";
+    echo str_repeat('─', 56) . "\n";
+    echo "  \033[33m⏭ SKIPPED — Apache not running at localhost\033[0m\n";
+    $suiteResults[] = [
+        'name' => 'Upload Security Tests',
         'passed' => 0, 'failed' => 0, 'total' => 0,
         'exit_code' => -1, 'success' => false
     ];
