@@ -1,0 +1,4 @@
+# [SECURITY] ป้องกันเข้าถึงไฟล์ในโฟลเดอร์ database/ ผ่านเว็บ
+# - *.sql = โครงสร้าง + ข้อมูลตัวอย่าง (root .htaccess บล็อกอยู่แล้ว แต่กันซ้ำอีกชั้น)
+# - *.php = migration script ที่แก้ schema — ต้องรันผ่าน CLI เท่านั้น
+Require all denied
