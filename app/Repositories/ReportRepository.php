@@ -513,19 +513,18 @@ class ReportRepository
      *
      * 📥 Input:
      * @param int         $limit         จำนวนสูงสุด (default: 50)
-     * @param bool        $translateRole true = แปลง role เป็นไทย (สำหรับ PDF)
      * @param string|null $startDate     Y-m-d (default: 1 ปีย้อนหลัง)
      * @param string|null $endDate       Y-m-d (default: วันนี้)
      *
      * 📤 Output: @return array[] [{name, email, role/role_name, borrow_count, active_loans}, ...]
      *
      * 🧠 เหตุผล:
-     * - $translateRole ใช้ CASE แปลง role ใน SQL (PDF ต้องการภาษาไทย)
+     * - role ถูกแปลเป็นไทยใน SQL เสมอ (ใช้ค่าเดียวกันทุกช่องทาง)
      * - HAVING borrow_count > 0 กรองเฉพาะที่เคยยืม
      * - WHERE role != 'admin' ไม่แสดง admin
      * ✅ Use case: admin/reports.php, export_pdf.php
      */
-    public function getTopMembersReport(int $limit = 50, bool $translateRole = false, ?string $startDate = null, ?string $endDate = null): array
+    public function getTopMembersReport(int $limit = 50, ?string $startDate = null, ?string $endDate = null): array
     {
         // 🔄 Flow: admin/reports.php + export_pdf.php → ReportService
         // 🎯 ดึงสมาชิกที่ใช้บริการบ่อยตามช่วงวันที่ + แปลง role เป็นไทย (สำหรับ PDF)
@@ -543,9 +542,9 @@ class ReportRepository
         // ⚠️ Danger Zone #4: $roleCol ถูกต่อเข้า SQL string โดยตรง (ไม่ได้ bind)
         //    แต่ปลอดภัย เพราะค่ามาจาก code ภายใน (boolean $translateRole)
         //    🔴 ห้ามเปลี่ยนให้รับค่าจาก user input → SQL Injection ทันที!
-        $roleCol = $translateRole 
-            ? "CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,"
-            : "u.role,";
+        // 🔴 [FIX] แปลเป็นไทยเสมอ — เดิมแปลเฉพาะ PDF ทำให้ CSV ได้คำว่า "member" ดิบ
+        //    ส่วนหน้าเว็บแปลเองอีกที่หนึ่ง (กฎเดียวกันอยู่ 2 ที่)
+        $roleCol = "CASE u.role WHEN 'staff' THEN 'เจ้าหน้าที่' ELSE 'สมาชิก' END as role_name,";
         
         // 📝 SQL อธิบาย:
         //    - WHERE u.role != 'admin' → ไม่แสดง admin ในรายงาน
@@ -600,7 +599,7 @@ class ReportRepository
         // 📤 Output: [{payment_day: "2025-01-15", transaction_count: 3, total_amount: 150.00}, ...]
         // ⚠️ ถ้าวันไหนไม่มีการชำระ → วันนั้นจะไม่ปรากฏ (ไม่ใช่ค่า 0)
         $stmt = $this->pdo->prepare("
-            SELECT DATE(created_at) as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
+            SELECT DATE_FORMAT(created_at, '%d/%m/%Y') as payment_day, COUNT(id) as transaction_count, SUM(amount) as total_amount
             FROM payments
             WHERE DATE(created_at) BETWEEN ? AND ?
             GROUP BY DATE(created_at)
@@ -625,24 +624,17 @@ class ReportRepository
      * 🧠 เหตุผล: $formatDate เปลี่ยน format ใน SQL เลย (ไม่ต้อง format ใน PHP)
      * ✅ Use case: admin/reports.php, export_pdf.php (รายงานหนังสือเกินกำหนด)
      */
-    public function getOverdueReport(bool $formatDate = false): array
+    public function getOverdueReport(): array
     {
         // 🔄 Flow: admin/reports.php + export_pdf.php → ReportService
         // 🎯 ดึงรายการหนังสือที่เกินกำหนดคืน (overdue) ทั้งหมด
         //
-        // 📥 Input: $formatDate = true → แปลงวันที่เป็น dd/mm/yyyy (สำหรับ PDF)
-        //                          false → ใช้ Y-m-d ตามปกติ (สำหรับหน้าเว็บ)
-
-        // 📝 เลือก format วันที่ใน SQL เลย (ไม่ต้อง format ใน PHP)
-        // ⚠️ Danger Zone #5: $borrowDateCol/$dueDateCol ถูกต่อเข้า SQL string
-        //    แต่ปลอดภัย เพราะค่ามาจาก code ภายใน (boolean $formatDate)
-        //    🔴 ห้ามรับค่า format จาก user input!
-        $borrowDateCol = $formatDate 
-            ? "DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date"
-            : "b.borrow_date";
-        $dueDateCol = $formatDate 
-            ? "DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date"
-            : "b.due_date";
+        // 📝 จัดรูปแบบวันที่ใน SQL เป็น dd/mm/yyyy เสมอ — เหมือน getBorrowsReport
+        //    และ getUnpaidFinesReport เพื่อให้ทุกช่องทาง (หน้าเว็บ / CSV / PDF) ตรงกัน
+        //    🔴 [FIX] เดิมผูกกับ $formatDate ทำให้หน้าเว็บโชว์ 2026-06-21
+        //       แต่ PDF โชว์ 21/06/2026 — ทั้งระบบใช้ d/m/Y เป็นมาตรฐาน (ดู formatDate())
+        $borrowDateCol = "DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date";
+        $dueDateCol = "DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date";
         
         // 📝 SQL อธิบาย:
         //    - JOIN users + books → ดึงชื่อสมาชิก + เบอร์โทร + ชื่อหนังสือ

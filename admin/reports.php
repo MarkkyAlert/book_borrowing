@@ -293,11 +293,9 @@ function setDateRange(range) {
                                         </span>
                                     <?php elseif ($key === 'total_amount'): ?>
                                         <span class="text-green-600 font-bold"><?= number_format($value, 2) ?> ฿</span>
-                                    <?php elseif ($key === 'role'): ?>
-                                        <?= $value === 'staff' ? 'เจ้าหน้าที่' : 'สมาชิก' ?>
-                                    <?php elseif ($key === 'payment_day'): ?>
-                                        <?= formatDate($value) ?>
                                     <?php else: ?>
+                                        <?php // 📝 role และวันที่ถูกแปลง/จัดรูปแบบมาจาก SQL แล้ว (ดู ReportRepository)
+                                              //    ไม่ต้องแปลงซ้ำที่นี่ — ไม่งั้นหน้าเว็บกับ CSV/PDF จะไม่ตรงกัน ?>
                                         <?= e($value) ?>
                                     <?php endif; ?>
                                 </td>

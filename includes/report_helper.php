@@ -62,7 +62,7 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             // 📝 สมาชิกใช้บริการบ่อย (top 50)
             //    forPdf = true → ปรับ format สำหรับ PDF
             return [
-                'data' => $repo->getTopMembersReport(50, $forPdf, $start, $end),
+                'data' => $repo->getTopMembersReport(50, $start, $end),
                 'headers' => ['ชื่อสมาชิก', 'อีเมล', 'สถานะ', 'ประวัติการยืม' . ($forPdf ? '' : ' (เล่ม)'), 'กำลังยืมอยู่' . ($forPdf ? '' : ' (เล่ม)')],
                 'filename' => "top_members_" . date('Y-m-d'),
                 'title' => 'รายงานสมาชิกที่ใช้บริการบ่อย (' . $dateRangeText . ')',
@@ -80,7 +80,7 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
         case 'overdue':
             // 📝 หนังสือค้างส่ง (ไม่ใช้ date range เพราะดูแค่ "ตอนนี้")
             return [
-                'data' => $repo->getOverdueReport($forPdf),
+                'data' => $repo->getOverdueReport(),
                 'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'],
                 'filename' => "overdue_books_" . date('Y-m-d'),
                 'title' => 'รายงานหนังสือค้างส่ง',
