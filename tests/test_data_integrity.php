@@ -106,7 +106,9 @@ $safeCatId = (int) $pdo->query("SELECT id FROM categories ORDER BY id LIMIT 1")-
 function createBook(string $tag, int $qty = 5): int
 {
     global $pdo, $safeCatId;
-    $isbn = 'DI' . time() . mt_rand(100, 999) . $tag;
+    // 🧠 คอลัมน์ isbn เป็น VARCHAR(20) — ต้องคุมความยาวเอง
+    //    เดิมใช้ 'DI'.time().rand().$tag ซึ่งยาวเกิน 20 เมื่อ tag ยาวหน่อย → fatal PDOException
+    $isbn = mb_substr('DI' . time() . $tag, 0, 20);
     $stmt = $pdo->prepare("INSERT INTO books (title, author, isbn, quantity, available, category_id) VALUES (?, 'Test', ?, ?, ?, ?)");
     $stmt->execute(["DI Book $tag", $isbn, $qty, $qty, $safeCatId]);
     return (int) $pdo->lastInsertId();

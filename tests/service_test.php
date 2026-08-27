@@ -647,6 +647,49 @@ try {
 echo "  Cleanup done" . ($cleanupErrors > 0 ? " ($cleanupErrors minor errors)" : "") . "\n";
 
 // ============================================================
+// VALIDATION — ค่าที่ยาวเกินคอลัมน์ต้องถูกจับก่อนถึง MySQL
+// ============================================================
+// 🧠 ทำไมต้องมี: ถ้าปล่อยให้ค่ายาวเกินหลุดไปถึง MySQL ผู้ใช้จะเห็น
+//    "SQLSTATE[22001] Data too long for column 'isbn'" เต็ม ๆ บนหน้าจอ
+//    ทั้งดูไม่เป็นมืออาชีพและเปิดเผยชื่อคอลัมน์/ชั้นฐานข้อมูล (เกิดจริงแม้ APP_DEBUG=false)
+echo "\n\033[1m── Validation: ความยาวของค่า ──\033[0m\n";
+
+$okBook = ['title' => 'หนังสือทดสอบ', 'author' => 'ผู้แต่ง'];
+
+// VD-01: ISBN ยาวเกินคอลัมน์ (VARCHAR(20))
+$errs = validateBookData($okBook + ['isbn' => str_repeat('9', 43)]);
+$hasIsbnErr = (bool) array_filter($errs, fn($e) => str_contains($e, 'ISBN'));
+$hasIsbnErr
+    ? pass('VD-01', 'ISBN 43 ตัว → ถูกจับพร้อมข้อความไทย ไม่หลุดไปให้ MySQL')
+    : fail('VD-01', 'ISBN ยาวเกินไม่ถูกจับ → ผู้ใช้จะเห็น SQLSTATE ดิบ');
+
+// VD-02: ISBN ยาว 20 พอดี = ขอบเขต ต้องผ่าน
+$errs = validateBookData($okBook + ['isbn' => str_repeat('9', 20)]);
+empty($errs)
+    ? pass('VD-02', 'ISBN 20 ตัวพอดี (ขอบเขต) → ผ่าน')
+    : fail('VD-02', 'ISBN 20 ตัวไม่ควรถูกปฏิเสธ: ' . implode(' · ', $errs));
+
+// VD-03: 🔴 ISBN แบบมีขีดคั่นต้องใช้ได้ — ห้ามบังคับรูปแบบ 10/13 หลัก
+//    ห้องสมุดจำนวนมากเก็บเป็น 978-616-123-456-7 (17 ตัว) ถ้าบังคับรูปแบบข้อมูลจริงจะกรอกไม่ได้
+$errs = validateBookData($okBook + ['isbn' => '978-616-123-456-7']);
+empty($errs)
+    ? pass('VD-03', 'ISBN มีขีดคั่น (17 ตัว) → ยังใช้ได้ ไม่ได้บังคับรูปแบบ')
+    : fail('VD-03', 'ISBN มีขีดคั่นถูกปฏิเสธ: ' . implode(' · ', $errs));
+
+// VD-04: ไม่กรอก ISBN ได้ (ไม่ใช่ field บังคับ)
+$errs = validateBookData($okBook);
+empty($errs)
+    ? pass('VD-04', 'ไม่กรอก ISBN → ผ่าน (ไม่ใช่ field บังคับ)')
+    : fail('VD-04', 'ไม่กรอก ISBN ไม่ควร error: ' . implode(' · ', $errs));
+
+// VD-05: title / author ยาวเกินก็ต้องถูกจับเหมือนกัน
+$tooLongTitle  = validateBookData(['title' => str_repeat('ก', 201), 'author' => 'ผู้แต่ง']);
+$tooLongAuthor = validateBookData(['title' => 'ชื่อ', 'author' => str_repeat('ก', 101)]);
+(!empty($tooLongTitle) && !empty($tooLongAuthor))
+    ? pass('VD-05', 'ชื่อเรื่อง >200 และผู้แต่ง >100 ถูกจับทั้งคู่')
+    : fail('VD-05', 'ชื่อเรื่อง/ผู้แต่งยาวเกินไม่ถูกจับ');
+
+// ============================================================
 // SUMMARY
 // ============================================================
 $total = $results['total'];

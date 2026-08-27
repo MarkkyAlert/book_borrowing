@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $qty = max(1, (int)($row[4] ?? 1));
                         
                         // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ book_form.php)
-                        $bookErrors = validateBookData(['title' => $title, 'author' => $author]);
+                        $bookErrors = validateBookData(['title' => $title, 'author' => $author, 'isbn' => $isbn]);
                         if (!empty($bookErrors)) {
                             $skippedDetails[] = "แถวที่ $rowNumber: " . $bookErrors[0];
                             continue;

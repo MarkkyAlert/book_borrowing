@@ -16,8 +16,10 @@
  * Usage: php tests/test_security_gap_analysis.php
  */
 
-// 🧠 ต้องโหลด config ก่อนใช้ APP_URL
+// 🧠 ต้องโหลด config ก่อนใช้ APP_URL และ functions ก่อนใช้ appSessionName()
 require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);

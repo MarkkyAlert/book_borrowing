@@ -87,7 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ import_books.php)
     $errors = array_merge($errors, validateBookData([
         'title' => $book['title'],
-        'author' => $book['author']
+        'author' => $book['author'],
+        'isbn' => $book['isbn']   // 🧠 ต้องส่งด้วย ไม่งั้น ISBN ยาวเกินจะหลุดไปให้ MySQL โยน error ดิบ
     ]));
 
     // 🔍 [DATA INTEGRITY] ตรวจ ISBN ซ้ำ — exclude ตัวเองในกรณี edit
@@ -237,7 +238,8 @@ require_once __DIR__ . '/header.php';
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <i class="bi bi-upc-scan text-gray-400"></i>
                             </div>
-                            <input type="text" id="isbn" name="isbn" value="<?= e($book['isbn']) ?>"
+                            <?php // 📝 maxlength = ด่านแรกฝั่งหน้าจอ (ของจริงตรวจซ้ำที่ validateBookData) ?>
+                            <input type="text" id="isbn" name="isbn" maxlength="20" value="<?= e($book['isbn']) ?>"
                                 class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 border-gray-300 rounded-xl"
                                 placeholder="978-xxx-xxx">
                         </div>
