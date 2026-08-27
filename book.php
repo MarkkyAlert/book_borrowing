@@ -40,7 +40,9 @@ if (!$book) {
 
 // 👁️ [SECURITY] ซ่อนหนังสือที่ถูกปิดการแสดงผลจากผู้ใช้ทั่วไป
 // Admin/Staff ยังเข้าดูหน้ารายละเอียดได้ (เพื่อตรวจสอบ)
-if (empty($book['is_visible']) && (!isLoggedIn() || !isAdmin())) {
+//   ⚠️ ต้องใช้ isStaff() ไม่ใช่ isAdmin() — staff เห็นหนังสือที่ซ่อนอยู่แล้วใน admin/books.php
+//      (มี badge "ซ่อน") และกดแก้ไขได้ ถ้าเช็คแค่ isAdmin() staff จะกดเข้าหน้านี้แล้วโดนเด้งออก
+if (empty($book['is_visible']) && !isStaff()) {
     setFlash('error', 'ไม่พบหนังสือที่ต้องการ');
     redirect(APP_URL . '/index.php');
 }

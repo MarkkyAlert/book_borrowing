@@ -4,7 +4,7 @@
  * 
  * ⚠️ กติกา: ไฟล์นี้ทำหน้าที่ Controller เท่านั้น
  * - ตรวจ method / validate input
- * - เรียก Repository
+ * - เรียก Service
  * - ส่ง Response (HTML partial)
  * - ห้ามใส่ business logic
  * - ห้ามเขียน SQL โดยตรง
@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-use App\Repositories\BookRepository;
+use App\Services\HomeService;
 
 // 🛡️ [SECURITY] Rate limiting ป้องกัน API abuse
 //    60 requests ต่อ 5 นาที — ป้องกัน bot/script ยิง request ถี่
@@ -37,7 +37,7 @@ $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
 
-// 📝 สร้าง filters array สำหรับส่งให้ Repository
+// 📝 สร้าง filters array สำหรับส่งให้ Service
 $filters = [];
 
 if (!empty($search)) {
@@ -49,13 +49,16 @@ if ($categoryId > 0) {
 }
 
 if ($status === 'available') {
-    $filters['available_only'] = true;
+    $filters['status'] = 'available';
 }
 
-// 📝 เรียก Repository โดยตรง (ไม่ผ่าน Service เพราะเป็น read-only)
-$pdo = getDB();
-$bookRepository = new BookRepository($pdo);
-$books = $bookRepository->findAll($filters);
+// 📝 เรียกผ่าน HomeService — Single Source of Truth ของ "หนังสือที่ผู้ใช้ทั่วไปเห็นได้"
+//    🛡️ [SECURITY] ห้ามเรียก BookRepository::findAll() ตรงๆ จากที่นี่!
+//       HomeService::getBooks() เป็นที่เดียวที่ใส่ visible_only = true
+//       ถ้าข้ามไปเรียก repo เอง หนังสือที่ถูกซ่อน (is_visible = 0) จะโผล่ในผลค้นหาสาธารณะ
+//       (index.php ใช้ service ตัวเดียวกันนี้ตอน render ครั้งแรก — ผลลัพธ์จึงตรงกันเสมอ)
+$homeService = new HomeService(getDB());
+$books = $homeService->getBooks($filters)['books'];
 
 // 📤 ส่ง Response เป็น HTML partial (ไม่ใช่ JSON)
 //    AJAX รับ HTML ไปแทรกใน DOM โดยตรง (innerHTML)
