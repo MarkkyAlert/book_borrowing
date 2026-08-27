@@ -210,6 +210,7 @@ book_borrowing/
 │   │   ├── header.php        → HTML header (public)
 │   │   ├── footer.php        → HTML footer (public)
 │   │   ├── book_grid.php     → component แสดงหนังสือ
+│   │   ├── pagination.php    → แถบเลือกหน้า (ใช้ร่วมกัน 4 หน้า)
 │   │   ├── modal.js          → JavaScript สำหรับ modal
 │   │   └── report_helper.php → ช่วยสร้างรายงาน PDF
 │   │

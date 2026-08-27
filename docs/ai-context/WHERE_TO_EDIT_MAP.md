@@ -15,6 +15,7 @@
 | ความยาวรหัสผ่านขั้นต่ำ | `MIN_PASSWORD_LENGTH` |
 | ความเข้มของ rate limit | `RATE_LIMIT_MAX_ATTEMPTS`, `RATE_LIMIT_WINDOW_MINUTES` |
 | อายุ session | `SESSION_LIFETIME` |
+| จำนวนรายการต่อหน้า | `ITEMS_PER_PAGE` (ตารางแอดมิน), `BOOKS_PER_PAGE` (grid หน้าแรก) |
 | ชื่อระบบ / URL | `APP_NAME`, `APP_URL` |
 
 ## 2. เปลี่ยนกติกาที่ต้องแก้โค้ด
@@ -26,9 +27,9 @@
 | อายุการจอง (ตอนนี้ 2 วัน) | `ReservationService::createReservation()` param `$expireDays` :98 | ควรย้ายไป `.env` ถ้าลูกค้าอยากปรับเอง |
 | ให้ admin ยืมหนังสือได้ | `UserRepository::findMemberById()` :204 (`role IN`) | ตรวจผลกระทบกับ `admin/borrow_form.php` |
 | นับ/ไม่นับการจองในโควตา | `BorrowService.php:147-157` + `ReservationService.php:152` | ต้องแก้ **ทั้งคู่** ให้สอดคล้อง |
-| เงื่อนไขห้ามลบหนังสือ | `BookService::deleteBook()` :237-249 | |
-| เงื่อนไขห้ามลบสมาชิก | `MemberService::deleteMember()` :219-227 | |
-| role ที่ตั้งได้จากหน้า admin | `MemberService.php:184` (whitelist) | |
+| เงื่อนไขห้ามลบหนังสือ | `BookService::deleteBook()` :249-261 | |
+| เงื่อนไขห้ามลบสมาชิก | `MemberService::deleteMember()` :231-241 | |
+| role ที่ตั้งได้จากหน้า admin | `MemberService.php:198` (whitelist) | |
 
 ## 3. เปลี่ยน "วิธีอ่าน/เขียนข้อมูล"
 
@@ -47,6 +48,7 @@
 | เมนู/หัวเว็บฝั่ง public | `includes/header.php`, `includes/footer.php` |
 | เมนู/หัวเว็บฝั่ง admin | `admin/header.php` (มี `requireStaff()` อยู่ในนี้ — ห้ามลบ), `admin/footer.php` |
 | การ์ดหนังสือบนหน้าแรก + ผลค้นหา | `includes/book_grid.php` (ใช้ร่วมกัน 2 ที่ — แก้ที่เดียวได้ทั้งคู่) |
+| แถบเลือกหน้า | `includes/pagination.php` (ใช้ร่วมกัน 4 หน้า) · ตรรกะคำนวณอยู่ที่ `paginate()` ใน `includes/functions.php` |
 | สี/ฟอนต์ | `css/style.css` + tailwind config inline ใน `includes/header.php` |
 | ชื่อหน่วยงาน + สีบัตรสมาชิก | หน้า `admin/settings.php` (ไม่ต้องแก้โค้ด) |
 | เลย์เอาต์บัตรสมาชิก / ฉลากหนังสือ | `admin/member_card.php`, `admin/book_labels.php` |

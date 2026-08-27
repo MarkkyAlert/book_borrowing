@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';
 $filter = $_GET['filter'] ?? '';
+$page = (int) ($_GET['page'] ?? 1);
 
 require_once __DIR__ . '/../app/Repositories/BorrowRepository.php';
 $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
@@ -92,8 +93,17 @@ if ($filter === 'overdue') {
     $filters['due_today'] = true;     // แสดงเฉพาะครบกำหนดวันนี้
 }
 
-// 📊 ดึงข้อมูลพร้อม JOIN (book_title, user_name, ฯลฯ)
+// 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
+// 🧠 ต้องนับก่อนใส่ limit/offset — ไม่งั้นจะได้ยอดแค่ในหน้านั้น
+$pagination = paginate($borrowRepo->countAll($filters), $page, ITEMS_PER_PAGE);
+$filters['limit']  = $pagination['per_page'];
+$filters['offset'] = $pagination['offset'];
+
+// 📊 ดึงข้อมูล "เฉพาะหน้านี้" พร้อม JOIN (book_title, user_name, ฯลฯ)
 $borrows = $borrowRepo->findAll($filters);
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
+$paginationParams = ['search' => $search, 'status' => $status, 'filter' => $filter];
 
 $pageTitle = 'จัดการยืม-คืน';
 require_once __DIR__ . '/header.php';
@@ -103,7 +113,7 @@ require_once __DIR__ . '/header.php';
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
     <div>
         <h3 class="text-lg font-bold text-gray-800">รายการยืม-คืนหนังสือ</h3>
-        <p class="text-sm text-gray-500">ทั้งหมด <?= count($borrows) ?> รายการ</p>
+        <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> รายการ</p>
     </div>
     <a href="borrow_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
         <i class="bi bi-plus-circle mr-2"></i>บันทึกการยืม
@@ -183,7 +193,7 @@ require_once __DIR__ . '/header.php';
                             }
                         ?>
                         <tr class="hover:bg-gray-50/50 transition-colors <?= $isOverdue ? 'bg-red-50/30' : '' ?>">
-                            <td class="px-6 py-4 text-gray-500"><?= $index + 1 ?></td>
+                            <td class="px-6 py-4 text-gray-500"><?= $pagination['offset'] + $index + 1 ?></td>
                             <td class="px-6 py-4">
                                 <div class="font-bold text-gray-900 line-clamp-1 max-w-[180px]" title="<?= e($borrow['book_title']) ?>"><?= e($borrow['book_title']) ?></div>
                                 <div class="text-xs text-gray-500 mt-0.5"><?= e($borrow['book_author']) ?></div>
@@ -236,6 +246,9 @@ require_once __DIR__ . '/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php // 📄 แถบเลือกหน้า (ไม่แสดงถ้ามีหน้าเดียว) ?>
+<?php require __DIR__ . '/../includes/pagination.php'; ?>
 
 <!-- Return Confirmation Modal (Tailwind CSS) -->
 <div id="returnModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

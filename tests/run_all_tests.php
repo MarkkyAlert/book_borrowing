@@ -27,6 +27,7 @@ echo "╠═══════════════════════�
 echo "║  Suite 1: Service-Level Tests (PHP direct)              ║\n";
 echo "║  Suite 2: DB Constraint Tests (SQL direct)              ║\n";
 echo "║  Suite 2b: Deadlock Retry Tests (helper logic)          ║\n";
+echo "║  Suite 2c: Pagination Tests (LIMIT/OFFSET correctness)  ║\n";
 echo "║  Suite 3: HTTP Integration Tests (curl via Apache)      ║\n";
 echo "║  Suite 4: Upload Security Tests (real files)            ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
@@ -90,6 +91,12 @@ $suiteResults[] = runSuite(
 $suiteResults[] = runSuite(
     'Deadlock Retry Tests',
     __DIR__ . '/test_deadlock_retry.php'
+);
+
+// Suite 2c: Pagination Tests (ไม่ต้องใช้ Apache — อ่านข้อมูลอย่างเดียว)
+$suiteResults[] = runSuite(
+    'Pagination Tests',
+    __DIR__ . '/test_pagination.php'
 );
 
 // Suite 3: HTTP Integration Tests

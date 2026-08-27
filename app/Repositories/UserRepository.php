@@ -471,6 +471,84 @@ class UserRepository
      */
     public function findMembers(array $filters = []): array
     {
+        // 🔧 สร้างเงื่อนไข + การเรียงลำดับ (ใช้ร่วมกับ countFilteredMembers ให้ผลตรงกันเสมอ)
+        [$whereSQL, $havingSQL, $params, $orderBy] = $this->buildMemberQuery($filters);
+
+        // 📄 แบ่งหน้า — ใส่ LIMIT/OFFSET เฉพาะตอนที่ผู้เรียกส่ง limit มาเท่านั้น
+        // 🧠 ไม่ส่ง limit = ดึงทั้งหมดเหมือนเดิม (export/สคริปต์ยังต้องได้ครบทุกแถว)
+        // 🛡️ [SECURITY] cast เป็น int + clamp → ปลอดภัยแม้ค่ามาจาก $_GET
+        $limitSQL = '';
+        if (isset($filters['limit'])) {
+            $limitSQL = 'LIMIT ? OFFSET ?';
+            $params[] = max(1, (int) $filters['limit']);
+            $params[] = max(0, (int) ($filters['offset'] ?? 0));
+        }
+
+        // 📝 SQL: ดึงสมาชิก + subquery นับการยืม
+        // 🧠 subquery แทน JOIN เพราะไม่ต้องการ GROUP BY users
+        //    total_borrows = ยืมทั้งหมด (borrowing + returned)
+        //    active_borrows = ยืมค้างอยู่ (borrowing only)
+        // 🧠 `, u.id DESC` คือตัวตัดสินเมื่อค่าที่เรียงเท่ากัน — ถ้าไม่มี การเรียงจะไม่คงที่
+        //    ทำให้กดหน้า 2 แล้วเจอสมาชิกซ้ำจากหน้า 1 หรือบางคนหายไปเลย
+        $stmt = $this->pdo->prepare("
+            SELECT u.*,
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations
+            FROM users u
+            {$whereSQL}
+            {$havingSQL}
+            ORDER BY {$orderBy}, u.id DESC
+            {$limitSQL}
+        ");
+        $stmt->execute($params);
+        // 📤 คืน array สมาชิก + สถิติการยืม
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนสมาชิกที่ตรงเงื่อนไข filter (ไม่สนใจ LIMIT)
+     * ==========================================================================
+     * ✅ Use case: admin/members.php ต้องรู้ยอดรวมเพื่อคำนวณจำนวนหน้า
+     *
+     * ⚠️ ห้ามสับสนกับ countMembers() ที่นับสมาชิกทั้งระบบสำหรับ dashboard
+     *    ตัวนี้นับ "ตามที่กรองอยู่" เท่านั้น
+     *
+     * 🧠 ทำไมต้องห่อเป็น derived table (SELECT COUNT(*) FROM ( ... ) t):
+     *    filter สถานะการยืมใช้ HAVING บนค่าที่มาจาก subquery
+     *    ถ้าเขียน SELECT COUNT(*) ... HAVING ตรง ๆ MySQL จะกรองทีหลังจากยุบเหลือแถวเดียว
+     *    → ได้ยอดผิด (0 หรือ 1) แทนที่จะเป็นจำนวนสมาชิกจริง
+     */
+    public function countFilteredMembers(array $filters = []): int
+    {
+        [$whereSQL, $havingSQL, $params] = $this->buildMemberQuery($filters);
+
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM (
+                SELECT u.id,
+                       (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
+                FROM users u
+                {$whereSQL}
+                {$havingSQL}
+            ) t
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: แปลง $filters → WHERE + HAVING + params + ORDER BY
+     * ==========================================================================
+     * 🧠 ทำไมแยกออกมา: findMembers() กับ countFilteredMembers() ต้องกรองเหมือนกันเป๊ะ
+     *    ไม่งั้นจะเจออาการ "บอกว่ามี 137 คน แต่กดหน้าสุดท้ายแล้วว่างเปล่า"
+     *
+     * 📤 Output: [$whereSQL, $havingSQL, $params, $orderBy]
+     * 🛡️ [SECURITY] user input bind ผ่าน ? · ORDER BY มาจาก whitelist เท่านั้น
+     */
+    private function buildMemberQuery(array $filters): array
+    {
         // 📝 แสดง member + staff (ไม่รวม admin)
         $where = ["role IN ('member', 'staff')"];
         $params = [];
@@ -493,7 +571,7 @@ class UserRepository
 
         // 🔗 ประกอบ WHERE clause
         $whereSQL = 'WHERE ' . implode(' AND ', $where);
-        
+
         // 🏷️ Status filter: กรองตามสถานะการยืม
         // 🧠 ใช้ HAVING ไม่ใช้ WHERE เพราะ active_borrows มาจาก subquery
         //    WHERE กรองได้แค่ column จริง / HAVING กรองได้ค่าจาก subquery/aggregate
@@ -504,7 +582,7 @@ class UserRepository
         } elseif ($status === 'no_borrow') {
             $havingSQL = "HAVING active_borrows = 0";
         }
-        
+
         // 📊 Sort mapping (whitelist ป้องกัน SQL Injection)
         // 🛡️ ไม่ใช้ user input ตรงๆ ใน ORDER BY — ใช้ switch แปลงเป็นค่าที่อนุญาต
         $orderBy = 'u.created_at DESC';
@@ -517,23 +595,7 @@ class UserRepository
             default: $orderBy = 'u.created_at DESC'; break;
         }
 
-        // 📝 SQL: ดึงสมาชิก + subquery นับการยืม
-        // 🧠 subquery แทน JOIN เพราะไม่ต้องการ GROUP BY users
-        //    total_borrows = ยืมทั้งหมด (borrowing + returned)
-        //    active_borrows = ยืมค้างอยู่ (borrowing only)
-        $stmt = $this->pdo->prepare("
-            SELECT u.*,
-                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
-                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
-                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations
-            FROM users u
-            {$whereSQL}
-            {$havingSQL}
-            ORDER BY {$orderBy}
-        ");
-        $stmt->execute($params);
-        // 📤 คืน array สมาชิก + สถิติการยืม
-        return $stmt->fetchAll();
+        return [$whereSQL, $havingSQL, $params, $orderBy];
     }
 
     /**

@@ -41,6 +41,8 @@
 | จำนวนวันยืม | `.env` | `DEFAULT_BORROW_DAYS=7` |
 | จำนวนเล่มสูงสุดที่ยืมได้ | `.env` | `MAX_BORROW_BOOKS=3` |
 | ความยาวรหัสผ่านขั้นต่ำ | `.env` | `MIN_PASSWORD_LENGTH=6` |
+| จำนวนรายการต่อหน้า (ตารางแอดมิน) | `.env` | `ITEMS_PER_PAGE=20` |
+| จำนวนหนังสือต่อหน้า (หน้าแรก) | `.env` | `BOOKS_PER_PAGE=12` |
 
 💡 แก้แล้ว save → refresh หน้าเว็บ เห็นผลทันที
 
@@ -97,6 +99,7 @@
 | Header หน้า admin (เมนู sidebar) | `admin/header.php` |
 | Footer หน้า admin | `admin/footer.php` |
 | การ์ดแสดงหนังสือ (grid) | `includes/book_grid.php` |
+| แถบเลือกหน้า (หน้าตา) | `includes/pagination.php` — แก้ที่เดียวมีผลทั้ง 4 หน้า |
 | Modal (popup) | `includes/modal.js` |
 
 ### 2.5 เปลี่ยน CSS / Stylesheet

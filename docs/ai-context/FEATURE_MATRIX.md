@@ -13,6 +13,7 @@
 | หมวดหมู่ (CRUD + นับจำนวนหนังสือ) | `admin/categories.php` → `CategoryRepository` |
 | ค้นหา/กรอง (คำค้น, หมวดหมู่, สถานะ stock, เรียงลำดับ) | `BookRepository::findAll()` |
 | ค้นหาสดแบบ AJAX บนหน้าแรก | `api/search_books.php` + `includes/book_grid.php` |
+| แบ่งหน้า (หน้าแรก + 3 หน้าแอดมิน) | `paginate()` ใน `includes/functions.php` + `includes/pagination.php` · จำนวนต่อหน้าปรับที่ `.env` |
 | ซ่อน/แสดงหนังสือจากหน้า public | `is_visible` toggle ใน `admin/book_form.php` |
 | Import หนังสือจาก CSV (merge + auto-create category) | `admin/import_books.php`, ตัวอย่าง `docs/samples/books_sample.csv` |
 | พิมพ์ฉลาก Barcode (CODE128 จาก ISBN) | `admin/book_labels.php` |

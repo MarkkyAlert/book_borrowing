@@ -509,7 +509,7 @@ mysqldump -u root -p book_borrowing > backup_$(date +%Y%m%d).sql
 
 | กรณี | เหตุผล |
 |------|--------|
-| ห้องสมุดขนาดใหญ่ (หมื่นเล่ม+) | ไม่มี pagination ฝั่ง DB ที่ optimize สำหรับข้อมูลจำนวนมาก |
+| ห้องสมุดขนาดใหญ่ (หมื่นเล่ม+) | ค้นหาใช้ `LIKE '%คำ%'` ซึ่งใช้ index ไม่ได้ ยังไม่มี FULLTEXT index (แบ่งหน้าแล้ว — วัดจริงถึง 2,000 เล่มยังสบาย) |
 | ผู้ใช้พร้อมกันมาก (100+) | session เก็บบน file system, ไม่มี caching layer |
 | หลายสาขา | ออกแบบสำหรับห้องสมุดเดียว ไม่มีระบบ multi-branch |
 | Mobile app / Third-party integration | มี API เบื้องต้น แต่ไม่ครบ (ไม่มี token-based auth) |

@@ -158,12 +158,78 @@ class BorrowRepository
     public function findAll(array $filters = []): array
     {
         // 🔄 Flow: admin/borrows.php (GET) → findAll(filters)
-        // 🎯 ดึงรายการยืมทั้งหมด + JOIN user/book + filter ตามเงื่อนไข
+        // 🎯 ดึงรายการยืม + JOIN user/book + filter ตามเงื่อนไข (+ แบ่งหน้าถ้าส่ง limit มา)
+        [$whereSQL, $params] = $this->buildListConditions($filters);
+
+        // 📄 แบ่งหน้า — ใส่ LIMIT/OFFSET เฉพาะตอนที่ผู้เรียกส่ง limit มาเท่านั้น
+        // 🧠 ไม่ส่ง limit = ดึงทั้งหมดเหมือนเดิม (รายงาน/สคริปต์ยังต้องได้ครบทุกแถว)
+        // 🛡️ [SECURITY] cast เป็น int + clamp → ปลอดภัยแม้ค่ามาจาก $_GET
+        $limitSQL = '';
+        if (isset($filters['limit'])) {
+            $limitSQL = 'LIMIT ? OFFSET ?';
+            $params[] = max(1, (int) $filters['limit']);
+            $params[] = max(0, (int) ($filters['offset'] ?? 0));
+        }
+
+        // 📝 SQL อธิบาย:
+        //    - SELECT b.* → ดึงทุกคอลัมน์จาก borrows
+        //    - JOIN users + books → เอาชื่อสมาชิก + ชื่อหนังสือมาแสดง
+        //    - {$whereSQL} → เงื่อนไขที่สร้างจาก filters
+        //    - ORDER BY created_at DESC → รายการล่าสุดขึ้นก่อน
+        //      🧠 `, b.id DESC` คือตัวตัดสินเมื่อ created_at เท่ากัน — ถ้าไม่มี
+        //         การเรียงจะไม่คงที่ ทำให้กดหน้า 2 แล้วเจอรายการซ้ำหรือตกหล่น
         //
-        // 📝 สร้าง WHERE clause แบบ dynamic จาก $filters
-        //    - แต่ละ filter ถูกเพิ่มเข้า array $where และ bind ผ่าน ?
-        //    - ⚠️ Danger Zone #2: $where ถูกต่อเข้า SQL แต่ค่ามาจาก code ภายใน
-        //      user input ทั้งหมด bind ผ่าน ? → ปลอดภัยจาก SQL Injection
+        // 📤 Output: [{borrow fields + user_name, user_email, user_phone, book_title, book_author}, ...]
+        // ⚠️ user_email + user_phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงใน HTML
+        $stmt = $this->pdo->prepare("
+            SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+                   bk.title as book_title, bk.author as book_author
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            {$whereSQL}
+            ORDER BY b.created_at DESC, b.id DESC
+            {$limitSQL}
+        ");
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนรายการยืมทั้งหมดที่ตรงเงื่อนไข (ไม่สนใจ LIMIT)
+     * ==========================================================================
+     * ✅ Use case: admin/borrows.php ต้องรู้ยอดรวมเพื่อคำนวณจำนวนหน้า
+     * 🧠 ใช้ buildListConditions() ตัวเดียวกับ findAll() — ยอดนับกับรายการที่แสดง
+     *    จึงมาจากเงื่อนไขชุดเดียวกันเสมอ
+     */
+    public function countAll(array $filters = []): int
+    {
+        [$whereSQL, $params] = $this->buildListConditions($filters);
+
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            {$whereSQL}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: แปลง $filters → WHERE clause + params
+     * ==========================================================================
+     * 🧠 ทำไมแยกออกมา: findAll() กับ countAll() ต้องกรองเหมือนกันเป๊ะ
+     *    ไม่งั้นจะเจออาการ "บอกว่ามี 137 รายการ แต่หน้าสุดท้ายว่างเปล่า"
+     *
+     * ⚠️ Danger Zone #2: $where ถูกต่อเข้า SQL แต่ค่ามาจาก code ภายใน
+     *    user input ทั้งหมด bind ผ่าน ? → ปลอดภัยจาก SQL Injection
+     */
+    private function buildListConditions(array $filters): array
+    {
         $where = [];
         $params = [];
 
@@ -192,7 +258,7 @@ class BorrowRepository
         if (isset($filters['overdue']) && $filters['overdue']) {
             $where[] = "b.status = 'borrowing' AND b.due_date < CURDATE()";
         }
-        
+
         // 🔍 filter: due_today → เฉพาะครบกำหนดวันนี้
         if (isset($filters['due_today']) && $filters['due_today']) {
             $where[] = "b.status = 'borrowing' AND b.due_date = CURDATE()";
@@ -201,25 +267,7 @@ class BorrowRepository
         // 📝 รวม WHERE clauses ด้วย AND → ถ้าไม่มี filter → $whereSQL = '' (ดึงทั้งหมด)
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        // 📝 SQL อธิบาย:
-        //    - SELECT b.* → ดึงทุกคอลัมน์จาก borrows
-        //    - JOIN users + books → เอาชื่อสมาชิก + ชื่อหนังสือมาแสดง
-        //    - {$whereSQL} → เงื่อนไขที่สร้างจาก filters
-        //    - ORDER BY created_at DESC → รายการล่าสุดขึ้นก่อน
-        //
-        // 📤 Output: [{borrow fields + user_name, user_email, user_phone, book_title, book_author}, ...]
-        // ⚠️ user_email + user_phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงใน HTML
-        $stmt = $this->pdo->prepare("
-            SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
-                   bk.title as book_title, bk.author as book_author
-            FROM borrows b
-            JOIN users u ON b.user_id = u.id
-            JOIN books bk ON b.book_id = bk.id
-            {$whereSQL}
-            ORDER BY b.created_at DESC
-        ");
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        return [$whereSQL, $params];
     }
 
     /**

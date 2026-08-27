@@ -1,5 +1,10 @@
 <?php // 📝 HTML partial: ถูก require จาก api/search_books.php + index.php
 //    ต้องมีตัวแปร $books (array) ก่อน require
+//    ถ้ามี $pagination ด้วย → จะแสดงแถบเลือกหน้าต่อท้าย grid
+//
+// 🧠 ทำไมแถบเลือกหน้าต้องอยู่ในไฟล์นี้ ไม่ใช่ index.php:
+//    ตอนค้นหา AJAX จะเอา output ของไฟล์นี้ไปแทนที่ทั้งก้อน
+//    ถ้าแถบเลือกหน้าอยู่นอกไฟล์ มันจะค้างเป็นของผลค้นหาชุดเก่า
 ?>
 <?php if (empty($books)): ?>
     <!-- 📝 Empty state: ไม่พบหนังสือ -->
@@ -72,4 +77,13 @@
             </div>
         <?php endforeach; ?>
     </div>
+<?php endif; ?>
+
+<?php // 📄 แถบเลือกหน้า + ยอดรวม (มีเฉพาะตอนที่ผู้เรียกส่ง $pagination มา) ?>
+<?php if (!empty($pagination)): ?>
+    <?php // 🧠 JS ฝั่ง index.php อ่านยอดรวมจากตรงนี้เพื่ออัปเดตป้าย "N เล่ม"
+    //    เพราะนับ card ในหน้าจะได้แค่จำนวนของหน้านั้น ไม่ใช่ยอดจริง
+    ?>
+    <span id="grid-total" data-total="<?= (int) $pagination['total'] ?>" hidden></span>
+    <?php require __DIR__ . '/pagination.php'; ?>
 <?php endif; ?>

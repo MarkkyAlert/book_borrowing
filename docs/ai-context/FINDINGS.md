@@ -8,7 +8,7 @@
 > F-19 เจอตอนไล่ทดสอบ 5 หน้าที่เหลือ — **แก้แล้ว** · F-22 เจอตอนทดสอบพิมพ์ฉลากบาร์โค้ด — **แก้แล้ว**
 > F-20 เจอตอนทดสอบเจ้าหน้าที่ 2 คนกดพร้อมกัน — **แก้แล้ว** (retry อัตโนมัติ + ข้อความไทย)
 > F-23 เจอตอนทดสอบระบบ migration — **แก้แล้ว** (🔴 ตัวติดตั้งล็อกตัวเองไม่สำเร็จ → สร้าง admin ซ้ำได้)
-> F-21 เจอตอนวัด performance — **กำลังทำ** (ไม่ใช่บั๊ก แต่จำเป็นเมื่อข้อมูลโตเกิน 1,000 แถว)
+> F-21 เจอตอนวัด performance — **แก้แล้ว** (หน้าแรก 5.5 MB → 62 KB ที่ 2,029 เล่ม)
 > F-06, F-07, F-09, F-10, F-11 เป็นข้อมูลเชิงบริบท — ไม่ใช่บั๊ก ต้องตัดสินใจเชิงผลิตภัณฑ์ก่อนถึงจะแก้ได้
 >
 > F-12…F-14 เจอตอนตรวจว่าข้อมูลตัวอย่างครอบคลุมพอสำหรับทดสอบทุก flow หรือไม่ — ทั้งสามอยู่ใน `database/sample_data.sql`
@@ -19,7 +19,7 @@
 
 **ปัญหา:** หนังสือที่ตั้ง "ซ่อนจากผู้ใช้ทั่วไป" ไม่แสดงตอนโหลดหน้าแรก แต่ **โผล่ทันทีเมื่อผู้ใช้พิมพ์ค้นหา** (หน้าแรกยิง AJAX ไป `api/search_books.php` แล้วแทนที่ทั้ง grid)
 
-**Root cause:** `index.php` เรียกผ่าน `HomeService::getBooks()` ซึ่งใส่ `visible_only = true` (`app/Services/HomeService.php:94`) แต่ `api/search_books.php:58` เรียก `BookRepository::findAll($filters)` ตรง ๆ โดยไม่ใส่ `visible_only` — ฟีเจอร์ `is_visible` เพิ่งเพิ่มใน commit `1453c01` และตกหล่นเส้นทางนี้
+**Root cause:** `index.php` เรียกผ่าน `HomeService::getBooks()` ซึ่งใส่ `visible_only = true` (`app/Services/HomeService.php:101`) แต่ `api/search_books.php:58` เรียก `BookRepository::findAll($filters)` ตรง ๆ โดยไม่ใส่ `visible_only` — ฟีเจอร์ `is_visible` เพิ่งเพิ่มใน commit `1453c01` และตกหล่นเส้นทางนี้
 
 **ยืนยันแล้ว (ทดสอบจริงบนเครื่องนี้):**
 ```
@@ -103,7 +103,7 @@ GET /api/search_books.php?search=Atomic → พบ (2 ครั้ง)  ❌ ร�
 
 ## ✅ F-05 — [แก้แล้ว] `api/add_member.php` สร้างสมาชิกด้วยรหัสผ่านสุ่ม แต่ไม่คืนรหัสให้ใครเห็น
 
-`MemberService::createMember()` จะสุ่มรหัส 8 ตัวเมื่อไม่ได้ส่ง `password` มา และ **คืนค่า plain password กลับมาครั้งเดียว** เพื่อให้แสดงแก่ admin (`app/Services/MemberService.php:137-142`)
+`MemberService::createMember()` จะสุ่มรหัส 8 ตัวเมื่อไม่ได้ส่ง `password` มา และ **คืนค่า plain password กลับมาครั้งเดียว** เพื่อให้แสดงแก่ admin (`app/Services/MemberService.php:141-158`)
 
 แต่ `api/add_member.php` (ไม่ส่ง key `password`) ไม่ได้ส่ง `password` และ response ก็ **ไม่มี field password** → สมาชิกที่ถูกเพิ่มด้วยปุ่ม "เพิ่มสมาชิกด่วน" จะมีรหัสที่ไม่มีใครรู้ ต้องไปใช้ "ลืมรหัสผ่าน" (ซึ่งระบบไม่ส่งอีเมล) หรือให้ admin รีเซ็ตให้ที่ `admin/member_form.php`
 
@@ -576,39 +576,65 @@ if (!$stmt->fetch()) {
 | บัญชี attacker ในฐานข้อมูล | ✅ 0 แถว |
 
 ---
+## ✅ F-21 — [แก้แล้ว] เพิ่ม pagination ให้หน้าที่โหลดทั้งชุด
 
-## 📌 F-21 — [รอทำ · ตัดสินใจแล้วว่าจะทำ] เพิ่ม pagination ให้หน้าที่โหลดทั้งชุด
+**ปัญหา:** 4 หน้าดึงข้อมูลทั้งตารางมา render ในครั้งเดียว วัดจริงที่ 2,029 เล่ม:
+`index.php` 5.5 MB · `admin/borrows.php` 7.8 MB · Chrome ใช้ 3.1 วินาที (32,542 DOM node)
+ทั้งที่ฝั่ง server ตอบใน 20 ms — **คอขวดคือขนาด payload ไม่ใช่ SQL**
 
-**สถานะ:** เจ้าของโปรเจกต์รับทราบและเห็นด้วยว่าควรทำ แต่**พักไว้ก่อน** ยังไม่ถึงคิว
-บันทึกไว้ที่นี่เพื่อไม่ให้หลุด ไม่ใช่บั๊กที่ต้องรีบ — ที่ขนาดข้อมูลปัจจุบัน (29 เล่ม) ไม่มีผลใด ๆ
+**Root cause:** `BookRepository::findAll()`, `BorrowRepository::findAll()`,
+`UserRepository::findMembers()` ไม่มี `LIMIT/OFFSET` เลย
 
-**ทำไมต้องทำ:** วัดจริงแล้วพบว่าคอขวดของระบบไม่ใช่ฐานข้อมูล แต่คือขนาดหน้าเว็บ
-เพราะหน้าเหล่านี้ render ทุกแถวที่ query เจอ (ดูตัวเลขเต็มใน KNOWN_LIMITATIONS §1.1)
+**สิ่งที่แก้:**
 
-| หน้า | 529 เล่ม | 2,029 เล่ม |
-|------|----------|-----------|
-| `index.php` | 1.4 MB | 5.5 MB (Chrome ใช้ 3.1 วินาที · 32,542 DOM node) |
-| `admin/books.php` | 1.6 MB | 6.2 MB |
-| `admin/borrows.php` | 2.7 MB | 7.8 MB |
-| `admin/members.php` | 0.9 MB | 2.5 MB |
+| ชั้น | ทำอะไร |
+|------|--------|
+| Repository | แยกการสร้างเงื่อนไขออกเป็น `buildListQuery()` / `buildListConditions()` / `buildMemberQuery()` แล้วให้ `findAll()` กับ `countAll()` ใช้ร่วมกัน · `findAll()` รับ `limit`/`offset` ผ่าน `$filters` |
+| Service | pass-through เท่านั้น — `BookService::countBooks()`, `MemberService::countFilteredMembers()`, `HomeService::getBooks()` ส่ง page/per_page ต่อและคืน `pagination` |
+| helper | `paginate()`, `paginationPageNumbers()`, `paginationUrl()` ใน `includes/functions.php` (ตรรกะล้วน ทดสอบได้) |
+| View | `includes/pagination.php` เป็นแถบเลือกหน้าที่ใช้ร่วมกันทั้ง 4 หน้า |
+| Config | `ITEMS_PER_PAGE` (default 20) และ `BOOKS_PER_PAGE` (default 12) ปรับได้ผ่าน `.env` |
 
-**เกณฑ์ว่าเมื่อไหร่ต้องทำ:** เกิน ~1,000 เล่ม หรือลูกค้าเข้าใช้ผ่านอินเทอร์เน็ต/มือถือ
-(5.5 MB บนเน็ต 10 Mbps = รอโหลดอีก ~4 วินาทีก่อนเริ่ม render)
+**ทำไมไม่เปลี่ยนรูปแบบค่าที่ `findAll()` คืน:** ยังมีที่ที่ต้องได้ครบทุกแถวจริง ๆ
+(export CSV/PDF, พิมพ์ฉลากบาร์โค้ด, สคริปต์ทดสอบ) — ถ้าไม่ส่ง `limit` มาก็ยังดึงทั้งหมดเหมือนเดิม
+ผู้เรียกเดิมทุกจุดจึงไม่ต้องแก้อะไรเลย
 
-**ทำอย่างไร — มีตัวอย่างในโปรเจกต์อยู่แล้ว:**
+**สิ่งที่ต้องระวังและจัดการไปแล้ว:**
 
-1. `BorrowRepository::findByUserIdPaginated()` คือแบบที่ทำถูกแล้ว — ลอกรูปแบบนี้ได้เลย
-2. เพิ่ม `LIMIT/OFFSET` + query นับจำนวนรวม ใน:
-   - `BookRepository::findAll()` → ใช้โดย `index.php`, `api/search_books.php`, `admin/books.php`
-   - `BorrowRepository::findAll()` → `admin/borrows.php`
-   - `UserRepository::findMembers()` → `admin/members.php`
-3. เพิ่ม UI เลือกหน้าใน View ทั้ง 4 หน้า
-4. `admin/reports.php` **ไม่ต้องแก้** — query มี `LIMIT 50` อยู่แล้ว ขนาดหน้าคงที่ 121 KB ตลอด
+1. 🛡️ **`visible_only` ต้องไม่หลุด** (F-01 เคยเกิดมาแล้ว) — ทั้ง `findAll()` และ `countAll()`
+   ใช้ตัวสร้างเงื่อนไขตัวเดียวกัน · มีเทสต์ PG-08 เดินทุกหน้าเพื่อยืนยันว่าไม่มีเล่มที่ซ่อนหลุด
+   และยอดรวมนับเฉพาะเล่มที่เปิดแสดง (ไม่งั้นจะเปิดเผยว่ามีของซ่อนอยู่กี่เล่ม)
+2. 🧠 **การเรียงต้องคงที่** — `created_at` ของหนังสือที่ import พร้อมกันเท่ากันหมด
+   ถ้าไม่มีตัวตัดสิน MySQL เรียงไม่คงที่ → กดหน้า 2 เจอเล่มซ้ำหรือตกหล่น
+   จึงเติม `, id DESC` ต่อท้าย `ORDER BY` ทุก query (เทสต์ PG-06/PG-10 เดินทุกหน้าเพื่อจับเคสนี้)
+3. 🧠 **`findMembers()` ใช้ `HAVING` บน subquery** — ถ้าเขียน `SELECT COUNT(*) ... HAVING` ตรง ๆ
+   จะได้ 0 หรือ 1 แทนจำนวนจริง ต้องห่อเป็น derived table (เทสต์ PG-12)
+4. 🛡️ `page` มาจาก `$_GET` — `paginate()` cast เป็น int แล้ว clamp ทุกกรณี
+   (`?page=abc` → 1 · `?page=-5` → 1 · เกินจำนวนหน้าจริง → หน้าสุดท้าย)
+5. **เลขลำดับแถวต้องนับต่อ** — ใช้ `$pagination['offset'] + $index + 1` ไม่ใช่ `$index + 1`
+6. **ป้าย "ทั้งหมด N"** ต้องใช้ `$pagination['total']` ไม่ใช่ `count($rows)` ซึ่งจะได้แค่จำนวนในหน้านั้น
+7. **หน้าแรกเป็น AJAX** — แถบเลือกหน้าจึงต้องอยู่ใน `includes/book_grid.php` (ไฟล์ที่ถูกแทนที่ทั้งก้อน)
+   ไม่งั้นจะค้างเป็นของผลค้นหาชุดเก่า · ลิงก์ยังมี `href` จริงเป็น fallback ถ้า JS ไม่ทำงาน
+   · ค้นหาใหม่จะเด้งกลับหน้า 1 เสมอ
 
-**ขอบเขต:** แก้ที่ Repository + View เท่านั้น **ไม่ต้องแตะ Service** เพราะไม่ใช่การเปลี่ยนกฎธุรกิจ
-⚠️ ระวัง: `HomeService::getBooks()` ต้องส่ง filter การแบ่งหน้าผ่านไปด้วย และอย่าให้หลุด `visible_only` (ดู F-01)
+**ไม่แตะ:** `admin/reports.php` (มี `LIMIT 50` อยู่แล้ว) · export CSV/PDF (ต้องได้ครบทุกแถว)
+· `admin/payments.php` และ `admin/reservations.php` (ยังโหลดทั้งชุด แต่ข้อมูลโตช้ากว่ามาก — ดู §1)
 
-**วัดซ้ำหลังทำเสร็จ:** `php tests/fixtures/seed_bulk_data.php --books=2000 --members=600` แล้วเทียบกับตัวเลขใน KNOWN_LIMITATIONS §1.1
+**ผลลัพธ์ที่วัดได้ (ข้อมูลชุดเดิม 2,029 เล่ม · 620 สมาชิก · 3,640 การยืม):**
+
+| หน้า | ก่อน | หลัง |
+|------|------|------|
+| `index.php` | 5,455 KB | **62 KB** |
+| `admin/books.php` | 6,152 KB | **87 KB** |
+| `admin/borrows.php` | 7,777 KB | **72 KB** |
+| `admin/members.php` | 2,462 KB | **109 KB** |
+| DOM node (หน้าแรก) | 32,542 | **360** |
+| โหลดเสร็จใน Chrome | 3.1 วินาที | **0.32 วินาที** |
+
+**ทดสอบหลังแก้:** ชุดใหม่ `tests/test_pagination.php` 12/12 (Suite 2c ในชุดเต็ม)
+· ชุดเต็ม **126/126** ทั้งตอนมีข้อมูล 2,029 เล่มและตอน reset กลับเป็นชุดปกติ
+· เดินหน้าจริงใน browser: กดเลขหน้าแล้ว grid เปลี่ยนโดยไม่ reload · ค้นหาใหม่เด้งกลับหน้า 1
+· กดหน้า 2 ของผลค้นหาแล้วคำค้นยังอยู่ · เลขแถวในตารางแอดมินนับต่อ (หน้า 2 เริ่มที่ 21)
 
 ---
 

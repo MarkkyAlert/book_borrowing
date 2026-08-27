@@ -158,66 +158,19 @@ class BookRepository
      */
     public function findAll(array $filters = []): array
     {
-        // 📦 เก็บเงื่อนไข WHERE แต่ละข้อไว้ใน array — จะนำมาประกอบเป็น SQL ทีหลัง
-        $where = [];
-        // 📦 เก็บค่า parameter สำหรับ bind ใน prepared statement (ป้องกัน SQL Injection)
-        $params = [];
+        // 🔧 สร้างเงื่อนไข + การเรียงลำดับ (ใช้ร่วมกับ countAll ให้ผลตรงกันเสมอ)
+        [$whereSQL, $params, $orderBy] = $this->buildListQuery($filters);
 
-        // 🔍 Filter: ค้นหาคำ (search) — ค้นจากชื่อ, ผู้แต่ง, ISBN พร้อมกัน
-        // ใช้ LIKE %...% = ค้นทุกตำแหน่งในข้อความ
-        // ⚠️ ถ้า search = "PHP" → จะค้น title LIKE '%PHP%' OR author LIKE '%PHP%' OR isbn LIKE '%PHP%'
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
-            // 📌 ต้องใส่ 3 ค่า เพราะมี ? 3 ตัว (title, author, isbn)
-            $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
+        // 📄 แบ่งหน้า — ใส่ LIMIT/OFFSET เฉพาะตอนที่ผู้เรียกส่ง limit มาเท่านั้น
+        // 🧠 ไม่ส่ง limit = ดึงทั้งหมดเหมือนเดิม เพราะยังมีที่ที่ต้องได้ครบทุกแถว
+        //    (export CSV/PDF, พิมพ์ฉลากบาร์โค้ด, สคริปต์ทดสอบ)
+        // 🛡️ [SECURITY] cast เป็น int + clamp → ค่าที่ต่อเข้า SQL ปลอดภัยแม้มาจาก $_GET
+        $limitSQL = '';
+        if (isset($filters['limit'])) {
+            $limitSQL = 'LIMIT ? OFFSET ?';
+            $params[] = max(1, (int) $filters['limit']);
+            $params[] = max(0, (int) ($filters['offset'] ?? 0));
         }
-
-        // 🏷️ Filter: หมวดหมู่ — กรองเฉพาะ category_id ที่เลือก
-        if (!empty($filters['category_id'])) {
-            $where[] = "b.category_id = ?";
-            $params[] = $filters['category_id'];
-        }
-
-        // 📗 Filter: เฉพาะหนังสือที่มี stock (available > 0)
-        // รองรับ 2 key เพราะหน้าต่างๆ ส่งมาคนละชื่อ
-        // Support both 'available_only' and 'available' filter keys
-        if ((isset($filters['available_only']) && $filters['available_only'])
-            || (isset($filters['available']) && $filters['available'])
-        ) {
-            $where[] = "b.available > 0";
-        }
-
-        // 📊 Filter: สถานะหนังสือ — ใช้ match() expression (PHP 8.0+)
-        // 🛡️ whitelist: เฉพาะค่าที่กำหนดเท่านั้น → default = ไม่ทำอะไร (ปลอดภัย)
-        // Status filter
-        if (!empty($filters['status'])) {
-            match ($filters['status']) {
-                'available'    => $where[] = "b.available > 0",           // ยังมี stock
-                'out_of_stock' => $where[] = "b.available = 0",           // หมด stock
-                'low_stock'    => $where[] = "b.available > 0 AND b.available <= 2", // ใกล้หมด
-                'borrowed'     => $where[] = "b.available < b.quantity",  // มีคนยืมอยู่
-                default        => null, // ค่าอื่น → ไม่เพิ่มเงื่อนไข (ปลอดภัย)
-            };
-        }
-
-        // 👁️ Filter: การมองเห็น (is_visible) — ซ่อนหนังสือจากหน้า public
-        if (isset($filters['visible_only']) && $filters['visible_only']) {
-            $where[] = "b.is_visible = 1";
-        }
-
-        // 🔗 ประกอบ WHERE clause จาก array → "WHERE cond1 AND cond2 AND ..."
-        // ถ้าไม่มีเงื่อนไข → string ว่าง (= SELECT ทั้งหมด)
-        $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-        // 🔃 Sort: เรียงลำดับ — ใช้ whitelist (match expression)
-        // 🛡️ ป้องกัน SQL Injection: ไม่เอา user input ใส่ ORDER BY ตรงๆ
-        // Sort
-        $orderBy = match ($filters['sort'] ?? 'newest') {
-            'oldest' => 'b.created_at ASC',   // เก่าสุดก่อน
-            'az'     => 'b.title ASC',         // เรียง ก-ฮ / A-Z
-            default  => 'b.created_at DESC',   // ใหม่สุดก่อน (default)
-        };
 
         // 📝 SQL: SELECT หนังสือ + LEFT JOIN หมวดหมู่
         // LEFT JOIN = หนังสือที่ไม่มีหมวดหมู่ก็แสดง (category_name = null)
@@ -233,12 +186,39 @@ class BookRepository
             FROM books b
             LEFT JOIN categories c ON b.category_id = c.id
             {$whereSQL}
-            ORDER BY {$orderBy}
+            ORDER BY {$orderBy}, b.id DESC
+            {$limitSQL}
         ");
-        // 🚀 execute: ส่ง $params ไป bind กับ ? ใน WHERE clause
+        // 🚀 execute: ส่ง $params ไป bind กับ ? ใน WHERE clause (+ LIMIT/OFFSET ถ้ามี)
         $stmt->execute($params);
-        // 📤 return: array ของหนังสือทั้งหมดที่ตรงเงื่อนไข
+        // 📤 return: array ของหนังสือในหน้านั้น (หรือทั้งหมดถ้าไม่ได้ส่ง limit)
         return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนหนังสือทั้งหมดที่ตรงเงื่อนไข (ไม่สนใจ LIMIT)
+     * ==========================================================================
+     * ✅ Use case: หน้าที่แบ่งหน้าต้องรู้ยอดรวมเพื่อคำนวณว่ามีกี่หน้า
+     *
+     * 🧠 ใช้ buildListQuery() ตัวเดียวกับ findAll() — ถ้าแก้ filter ที่เดียว
+     *    ยอดนับกับรายการที่แสดงจะไม่มีวันหลุดจากกัน
+     *
+     * ⚠️ ไม่ใส่ subquery total_borrows/active_borrows เพราะ COUNT ไม่ต้องใช้
+     *    (ที่ 2,000 เล่ม subquery 3 ตัวคือส่วนที่หนักที่สุดของ query)
+     */
+    public function countAll(array $filters = []): int
+    {
+        [$whereSQL, $params] = $this->buildListQuery($filters);
+
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM books b
+            LEFT JOIN categories c ON b.category_id = c.id
+            {$whereSQL}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -310,16 +290,87 @@ class BookRepository
             SELECT * FROM books WHERE available > 0 ORDER BY title
         ")->fetchAll();
     }
-
     /**
      * ==========================================================================
-     * 🎯 จุดประสงค์: ดึงหนังสือทั้งหมดสำหรับพิมพ์ barcode labels
+     * 🎯 จุดประสงค์: แปลง $filters → WHERE clause + params + ORDER BY
      * ==========================================================================
-     * SELECT เฉพาะ id, title, isbn (เบาๆ สำหรับพิมพ์ label)
+     * 🧠 ทำไมแยกออกมา: findAll() (ดึงรายการ) กับ countAll() (นับยอดรวม)
+     *    ต้องกรองด้วยเงื่อนไข "เดียวกันเป๊ะ" ไม่งั้นจะเจออาการ
+     *    "บอกว่ามี 137 เล่ม แต่กดหน้าสุดท้ายแล้วว่างเปล่า"
      *
-     * 📤 Output: @return array[] [{id, title, isbn}, ...]
-     * ✅ Use case: admin/book_labels.php → พิมพ์ barcode สติกเกอร์
+     * 📤 Output: [$whereSQL, $params, $orderBy]
+     * 🛡️ [SECURITY] user input ทุกตัว bind ผ่าน ? · ORDER BY มาจาก whitelist เท่านั้น
      */
+    private function buildListQuery(array $filters): array
+    {
+        // 📦 เก็บเงื่อนไข WHERE แต่ละข้อไว้ใน array — จะนำมาประกอบเป็น SQL ทีหลัง
+        $where = [];
+        // 📦 เก็บค่า parameter สำหรับ bind ใน prepared statement (ป้องกัน SQL Injection)
+        $params = [];
+
+        // 🔍 Filter: ค้นหาคำ (search) — ค้นจากชื่อ, ผู้แต่ง, ISBN พร้อมกัน
+        // ใช้ LIKE %...% = ค้นทุกตำแหน่งในข้อความ
+        // ⚠️ ถ้า search = "PHP" → จะค้น title LIKE '%PHP%' OR author LIKE '%PHP%' OR isbn LIKE '%PHP%'
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
+            // 📌 ต้องใส่ 3 ค่า เพราะมี ? 3 ตัว (title, author, isbn)
+            $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
+        }
+
+        // 🏷️ Filter: หมวดหมู่ — กรองเฉพาะ category_id ที่เลือก
+        if (!empty($filters['category_id'])) {
+            $where[] = "b.category_id = ?";
+            $params[] = $filters['category_id'];
+        }
+
+        // 📗 Filter: เฉพาะหนังสือที่มี stock (available > 0)
+        // รองรับ 2 key เพราะหน้าต่างๆ ส่งมาคนละชื่อ
+        // Support both 'available_only' and 'available' filter keys
+        if ((isset($filters['available_only']) && $filters['available_only'])
+            || (isset($filters['available']) && $filters['available'])
+        ) {
+            $where[] = "b.available > 0";
+        }
+
+        // 📊 Filter: สถานะหนังสือ — ใช้ match() expression (PHP 8.0+)
+        // 🛡️ whitelist: เฉพาะค่าที่กำหนดเท่านั้น → default = ไม่ทำอะไร (ปลอดภัย)
+        // Status filter
+        if (!empty($filters['status'])) {
+            match ($filters['status']) {
+                'available'    => $where[] = "b.available > 0",           // ยังมี stock
+                'out_of_stock' => $where[] = "b.available = 0",           // หมด stock
+                'low_stock'    => $where[] = "b.available > 0 AND b.available <= 2", // ใกล้หมด
+                'borrowed'     => $where[] = "b.available < b.quantity",  // มีคนยืมอยู่
+                default        => null, // ค่าอื่น → ไม่เพิ่มเงื่อนไข (ปลอดภัย)
+            };
+        }
+
+        // 👁️ Filter: การมองเห็น (is_visible) — ซ่อนหนังสือจากหน้า public
+        // 🛡️ [SECURITY] F-01: หน้า public ทุกทางต้องผ่าน filter นี้
+        if (isset($filters['visible_only']) && $filters['visible_only']) {
+            $where[] = "b.is_visible = 1";
+        }
+
+        // 🔗 ประกอบ WHERE clause จาก array → "WHERE cond1 AND cond2 AND ..."
+        // ถ้าไม่มีเงื่อนไข → string ว่าง (= SELECT ทั้งหมด)
+        $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // 🔃 Sort: เรียงลำดับ — ใช้ whitelist (match expression)
+        // 🛡️ ป้องกัน SQL Injection: ไม่เอา user input ใส่ ORDER BY ตรงๆ
+        // Sort
+        // 🧠 ตัวช่วยตัดสินเมื่อค่าเท่ากัน (`, b.id DESC` ต่อท้ายใน SQL):
+        //    created_at ของหนังสือที่ import มาพร้อมกันจะเท่ากันหมด ถ้าไม่มีตัวตัดสิน
+        //    MySQL จะเรียงไม่คงที่ → กดหน้า 2 แล้วเจอเล่มซ้ำจากหน้า 1 หรือบางเล่มหายไปเลย
+        $orderBy = match ($filters['sort'] ?? 'newest') {
+            'oldest' => 'b.created_at ASC',   // เก่าสุดก่อน
+            'az'     => 'b.title ASC',         // เรียง ก-ฮ / A-Z
+            default  => 'b.created_at DESC',   // ใหม่สุดก่อน (default)
+        };
+
+        return [$whereSQL, $params, $orderBy];
+    }
+
     public function findAllForLabels(): array
     {
         // 📝 SQL: ดึงเฉพาะ id, title, isbn (เบาๆ สำหรับพิมพ์ label)

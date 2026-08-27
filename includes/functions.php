@@ -839,6 +839,106 @@ function formatFine(float $amount): string
     return number_format($amount) . ' บาท';
 }
 
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: คำนวณข้อมูลการแบ่งหน้า (ไม่เกี่ยวกับ HTML)
+ * ==========================================================================
+ * 🧠 ทำไมต้องมี: 4 หน้าที่แบ่งหน้าต้องคำนวณเหมือนกันหมด
+ *    (หน้าปัจจุบันเกินช่วงไหม / มีกี่หน้า / แสดงเลขหน้าไหนบ้าง)
+ *    ถ้าปล่อยให้แต่ละ View คิดเอง จะเพี้ยนกันคนละแบบ
+ *
+ * 📥 Input:  $total   จำนวนรายการทั้งหมด (จาก countXxx() ของ Repository)
+ *            $page    หน้าที่ผู้ใช้ขอมา (รับมาจาก $_GET ดิบ ๆ ได้เลย)
+ *            $perPage จำนวนต่อหน้า
+ * 📤 Output: ['page','per_page','total','total_pages','offset','from','to','pages']
+ *            - offset  → ส่งต่อให้ Repository ใช้ใน SQL
+ *            - from/to → "แสดง 21–40 จาก 137" และใช้เป็นเลขลำดับแถวในตาราง
+ *            - pages   → เลขหน้าที่จะแสดงเป็นปุ่ม (null = จุดไข่ปลา)
+ *
+ * 🛡️ [SECURITY] cast เป็น int + clamp ทุกค่า → ค่าที่ออกไปประกอบ SQL ปลอดภัยเสมอ
+ *    ("?page=abc" → 1 · "?page=-5" → 1 · "?page=9999" ทั้งที่มี 3 หน้า → 3)
+ */
+function paginate($total, $page, int $perPage): array
+{
+    $total   = max(0, (int) $total);
+    $perPage = max(1, $perPage);
+
+    // 📝 หน้าทั้งหมด — ไม่มีข้อมูลเลยก็ยังนับเป็น 1 หน้า (จะได้แสดง empty state)
+    $totalPages = max(1, (int) ceil($total / $perPage));
+
+    // 🛡️ clamp หน้าให้อยู่ในช่วงจริงเสมอ
+    $page   = max(1, min($totalPages, (int) $page));
+    $offset = ($page - 1) * $perPage;
+
+    // 📝 ช่วงลำดับที่แสดงอยู่ (ใช้ทั้งข้อความสรุปและเลขแถวในตาราง)
+    $from = $total === 0 ? 0 : $offset + 1;
+    $to   = min($total, $offset + $perPage);
+
+    return [
+        'page'        => $page,
+        'per_page'    => $perPage,
+        'total'       => $total,
+        'total_pages' => $totalPages,
+        'offset'      => $offset,
+        'from'        => $from,
+        'to'          => $to,
+        'pages'       => paginationPageNumbers($page, $totalPages),
+    ];
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: เลือกเลขหน้าที่จะแสดงเป็นปุ่ม (ย่อด้วย ... เมื่อหน้าเยอะ)
+ * ==========================================================================
+ * ✅ ตัวอย่าง 10 หน้า อยู่หน้า 6 → [1, null, 5, 6, 7, null, 10]
+ *    (null = จุดไข่ปลา)
+ * 🧠 แยกออกมาเป็นฟังก์ชันของตัวเองเพราะเป็นตรรกะล้วน ๆ ทดสอบง่าย
+ */
+function paginationPageNumbers(int $current, int $totalPages, int $around = 1): array
+{
+    // 📝 หน้าน้อย (≤ 7) → แสดงครบทุกหน้า ไม่ต้องย่อ
+    if ($totalPages <= 7) {
+        return range(1, $totalPages);
+    }
+
+    // 📝 เก็บหน้าแรก หน้าสุดท้าย และหน้ารอบ ๆ หน้าปัจจุบัน
+    $keep = [1, $totalPages];
+    for ($p = $current - $around; $p <= $current + $around; $p++) {
+        if ($p >= 1 && $p <= $totalPages) {
+            $keep[] = $p;
+        }
+    }
+    $keep = array_values(array_unique($keep));
+    sort($keep);
+
+    // 📝 แทรก null ตรงช่วงที่ข้ามไป
+    $out  = [];
+    $prev = 0;
+    foreach ($keep as $p) {
+        if ($prev && $p - $prev > 1) {
+            $out[] = null;
+        }
+        $out[] = $p;
+        $prev  = $p;
+    }
+    return $out;
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: สร้าง URL ของหน้าที่ต้องการ โดยคง filter เดิมไว้ครบ
+ * ==========================================================================
+ * 🧠 ทำไมต้องมี: ถ้าลิงก์ "หน้า 2" ทิ้ง ?search= ไป ผู้ใช้จะเด้งกลับไปเห็นข้อมูลทั้งหมด
+ * 🛡️ [SECURITY] ค่าถูก urlencode ผ่าน http_build_query — แต่ต้อง e() อีกชั้นตอนใส่ href
+ */
+function paginationUrl(array $params, int $page): string
+{
+    $params['page'] = $page;
+    // 📝 ตัดค่าว่างทิ้ง ให้ URL สั้นและอ่านง่าย
+    $params = array_filter($params, fn($v) => $v !== '' && $v !== null);
+    return '?' . http_build_query($params);
+}
+
 // 📝 Auto-start session — เรียกอัตโนมัติเมื่อ require functions.php
 //    ไม่ต้องเรียก startSession() เอง
 

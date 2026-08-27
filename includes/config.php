@@ -84,6 +84,16 @@ define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15));
 // ⏰ Session Settings
 define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));  // 📝 อายุ session วินาที (ป้องกัน session ค้างบน shared PC)
 
+// ═══════════════════════════════════════════════════════
+// 📄 Pagination — จำนวนรายการต่อหน้า
+// ═══════════════════════════════════════════════════════
+// 🧠 ทำไมต้องแบ่งหน้า: วัดจริงที่ 2,029 เล่ม หน้าแรกส่ง HTML 5.5 MB
+//    และ admin/borrows.php ส่ง 7.8 MB — ฝั่ง server เร็ว (50ms) แต่ browser
+//    ต้องวาด 32,000+ DOM node จึงช้า (ดู KNOWN_LIMITATIONS §1.1)
+// 📌 ปรับได้ผ่าน .env ถ้าลูกค้าอยากได้หน้าใหญ่/เล็กกว่านี้
+define('ITEMS_PER_PAGE', (int) env('ITEMS_PER_PAGE', 20));   // 📝 ตารางฝั่งแอดมิน
+define('BOOKS_PER_PAGE', (int) env('BOOKS_PER_PAGE', 12));   // 📝 grid หน้าแรก (4 คอลัมน์ × 3 แถว)
+
 // 🐛 Debug Mode — true = แสดง error ละเอียด (ห้ามเปิดบน production!)
 //    ⚠️ APP_DEBUG=true จะแสดง password reset link บนหน้าจอด้วย (forgot_password.php)
 define('APP_DEBUG', env('APP_DEBUG', 'false') === 'true');

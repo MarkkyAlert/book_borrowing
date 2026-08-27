@@ -26,15 +26,23 @@ $homeService = new HomeService($pdo);
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';  // 'available' หรือ '' (ทั้งหมด)
+$page = (int) ($_GET['page'] ?? 1);  // 📄 หน้าที่ขอ (Service clamp ให้อยู่ในช่วงจริงเอง)
 
 // 📚 ดึงหนังสือ + หมวดหมู่ ผ่าน Service (JOIN category_name ให้)
 $data = $homeService->getBooks([
     'search' => $search,
     'category_id' => $categoryId,
-    'status' => $status
+    'status' => $status,
+    'page' => $page
 ]);
-$books = $data['books'];           // array ข้อมูลหนังสือ
+$books = $data['books'];           // array หนังสือ "เฉพาะหน้านี้"
 $categories = $data['categories']; // array หมวดหมู่ทั้งหมด (สำหรับ dropdown)
+$pagination = $data['pagination']; // array ข้อมูลแบ่งหน้า (total, total_pages, ...)
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วผลค้นหาหาย
+$paginationParams = ['search' => $search, 'category' => $categoryId ?: '', 'status' => $status];
+$paginationAjax = true;  // 📝 JS ดักคลิกแล้วโหลดผ่าน fetch แทน (ดูสคริปต์ท้ายหน้า)
+$paginationUnit = 'เล่ม';
 
 // 📊 ดึงสถิติสำหรับ Hero Section (total, available, members)
 $stats = $homeService->getStats();
@@ -201,7 +209,7 @@ require_once __DIR__ . '/includes/header.php';
             </span>
             รายการหนังสือ
             <span id="result-count" class="ml-3 px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full font-medium border border-gray-200">
-                <?= count($books) ?> เล่ม
+                <?= number_format($pagination['total']) ?> เล่ม
             </span>
         </h2>
 
@@ -265,6 +273,16 @@ require_once __DIR__ . '/includes/header.php';
             fetchBooks();
         });
 
+        // 📄 ปุ่มเปลี่ยนหน้า — ใช้ event delegation เพราะ grid ถูกสร้างใหม่ทุกครั้งที่ค้นหา
+        //    ถ้าผูก listener ตรงปุ่ม พอ AJAX แทนที่ HTML ปุ่มชุดใหม่จะไม่มี listener
+        //    (ลิงก์ยังมี href จริง → ถ้า JS ไม่ทำงาน ก็ยังกดเปลี่ยนหน้าแบบโหลดใหม่ได้)
+        gridContainer.addEventListener('click', function(e) {
+            const link = e.target.closest('a[data-page]');
+            if (!link) return;
+            e.preventDefault();
+            fetchBooks(parseInt(link.dataset.page, 10) || 1);
+        });
+
         // Initial check
         toggleClearButton();
 
@@ -278,7 +296,9 @@ require_once __DIR__ . '/includes/header.php';
             }
         }
 
-        function fetchBooks() {
+        // 📄 page = 1 คือค่า default → เปลี่ยนคำค้น/ตัวกรองจะเด้งกลับหน้าแรกเสมอ
+        //    (ถ้าไม่ทำ ค้นคำใหม่ตอนอยู่หน้า 5 แล้วผลลัพธ์มี 2 หน้า จะเห็นหน้าว่าง)
+        function fetchBooks(page = 1) {
             // Show loading
             loadingOverlay.classList.remove('hidden');
 
@@ -288,6 +308,9 @@ require_once __DIR__ . '/includes/header.php';
                 category: categorySelect.value,
                 status: statusSelect.value
             });
+            if (page > 1) {
+                params.set('page', page);
+            }
 
             // Update URL without reload (History API)
             const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -322,12 +345,18 @@ require_once __DIR__ . '/includes/header.php';
                         gridContainer.insertBefore(tempDiv.firstChild, loadingOverlay);
                     }
 
-                    // Update result count
-                    // We can't easily parse PHP count from JS without API returning JSON
-                    // So let's approximate or update API to return count header
-                    // For now, let's count elements with class 'group'
-                    const count = gridContainer.querySelectorAll('.group').length;
-                    resultCount.textContent = `${count} เล่ม`;
+                    // 📊 ยอดรวม: อ่านจาก data-total ที่ book_grid.php แนบมาให้
+                    //    ⚠️ ห้ามนับ .group ในหน้า เพราะแบ่งหน้าแล้วจะได้แค่จำนวนของหน้านั้น
+                    const totalEl = gridContainer.querySelector('#grid-total');
+                    const total = totalEl ?
+                        parseInt(totalEl.dataset.total, 10) :
+                        gridContainer.querySelectorAll('.group').length;
+                    resultCount.textContent = `${total.toLocaleString()} เล่ม`;
+
+                    // 📄 เปลี่ยนหน้าแล้วเลื่อนขึ้นไปบนสุดของ grid — ไม่งั้นจะค้างอยู่ตรงแถบเลือกหน้า
+                    if (page > 1) {
+                        gridContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
 
                     // Hide loading
                     loadingOverlay.classList.add('hidden');

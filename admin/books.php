@@ -61,14 +61,28 @@ $search = trim($_GET['search'] ?? '');
 $category = $_GET['category'] ?? '';
 $status = $_GET['status'] ?? '';
 $sort = $_GET['sort'] ?? 'newest';
+$page = (int) ($_GET['page'] ?? 1);
 
-// ดึงหนังสือตาม filter ผ่าน Service (จัดการ search, sort, pagination ให้)
-$books = $bookService->getBooks([
+// 🔧 filter ชุดเดียว ใช้ทั้งนับยอดรวมและดึงรายการ — ต้องเป็นชุดเดียวกันเป๊ะ
+//    ไม่งั้นจะบอกจำนวนหน้าผิด (เช่น บอกมี 5 หน้า แต่หน้า 5 ว่างเปล่า)
+$bookFilters = [
     'search' => $search,
     'category_id' => $category,
     'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
     'sort' => $sort
-]);
+];
+
+// 📄 นับยอดรวมก่อน แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
+$pagination = paginate($bookService->countBooks($bookFilters), $page, ITEMS_PER_PAGE);
+$bookFilters['limit']  = $pagination['per_page'];
+$bookFilters['offset'] = $pagination['offset'];
+
+// ดึงหนังสือ "เฉพาะหน้านี้" ผ่าน Service
+$books = $bookService->getBooks($bookFilters);
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
+$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'sort' => $sort];
+$paginationUnit = 'เล่ม';
 
 // ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
 $categories = $categoryRepo->findAll();
@@ -81,7 +95,7 @@ require_once __DIR__ . '/header.php';
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
     <div>
         <h3 class="text-lg font-bold text-gray-800">รายการหนังสือทั้งหมด</h3>
-        <p class="text-sm text-gray-500">ทั้งหมด <?= count($books) ?> เล่ม</p>
+        <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> เล่ม</p>
     </div>
     <div class="flex gap-2">
         <a href="import_books.php" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm">
@@ -168,7 +182,7 @@ require_once __DIR__ . '/header.php';
                 <tbody class="divide-y divide-gray-100">
                     <?php foreach ($books as $index => $book): ?>
                         <tr class="hover:bg-gray-50/50 transition-colors">
-                            <td class="px-6 py-4 text-gray-500"><?= $index + 1 ?></td>
+                            <td class="px-6 py-4 text-gray-500"><?= $pagination['offset'] + $index + 1 ?></td>
                             <td class="px-6 py-4">
                                 <a href="<?= APP_URL ?>/book.php?id=<?= $book['id'] ?>" class="font-bold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 max-w-xs block" target="_blank">
                                     <?= e($book['title']) ?>
@@ -239,5 +253,8 @@ require_once __DIR__ . '/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php // 📄 แถบเลือกหน้า (ไม่แสดงถ้ามีหน้าเดียว) ?>
+<?php require __DIR__ . '/../includes/pagination.php'; ?>
 
 <?php require_once __DIR__ . '/footer.php'; ?>

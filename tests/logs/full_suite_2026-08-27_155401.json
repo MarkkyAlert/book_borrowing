@@ -1,0 +1,58 @@
+{
+    "run_at": "2026-08-27T15:54:01+02:00",
+    "elapsed_seconds": 13.800000000000000710542735760100185871124267578125,
+    "grand_total": 126,
+    "grand_passed": 126,
+    "grand_failed": 0,
+    "pass_rate": "100%",
+    "suites": [
+        {
+            "name": "Service-Level Tests",
+            "passed": 27,
+            "failed": 0,
+            "total": 27,
+            "exit_code": 0,
+            "success": true
+        },
+        {
+            "name": "DB Constraint Tests",
+            "passed": 11,
+            "failed": 0,
+            "total": 11,
+            "exit_code": 0,
+            "success": true
+        },
+        {
+            "name": "Deadlock Retry Tests",
+            "passed": 6,
+            "failed": 0,
+            "total": 6,
+            "exit_code": 0,
+            "success": true
+        },
+        {
+            "name": "Pagination Tests",
+            "passed": 12,
+            "failed": 0,
+            "total": 12,
+            "exit_code": 0,
+            "success": true
+        },
+        {
+            "name": "HTTP Integration Tests",
+            "passed": 56,
+            "failed": 0,
+            "total": 56,
+            "exit_code": 0,
+            "success": true
+        },
+        {
+            "name": "Upload Security Tests",
+            "passed": 14,
+            "failed": 0,
+            "total": 14,
+            "exit_code": 0,
+            "success": true
+        }
+    ]
+}

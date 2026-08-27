@@ -88,6 +88,7 @@ book_borrowing/
 │   ├── report_helper.php    Report type mapping (SSoT)
 │   ├── header.php/footer.php  Public layout
 │   ├── book_grid.php        Reusable grid component
+│   ├── pagination.php       Reusable pagination bar
 │   └── modal.js             Custom modal (Promise-based)
 │
 ├── database/

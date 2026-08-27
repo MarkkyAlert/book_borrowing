@@ -60,13 +60,18 @@ class HomeService
      * 🎯 จุดประสงค์: ดึงหนังสือ + categories สำหรับหน้าแรก
      * ==========================================================================
      *
-     * 📥 Input: @param array $filters {search?, category_id?, status?}
-     * 📤 Output: @return array {books: array, categories: array}
+     * 📥 Input: @param array $filters {search?, category_id?, status?, page?, per_page?}
+     * 📤 Output: @return array {books: array, categories: array, pagination: array}
+     *   - books      = เฉพาะหนังสือของหน้านั้น (ไม่ใช่ทั้งหมด)
+     *   - pagination = ผลจาก paginate() → page, total, total_pages, from, to, pages
      *
      * 🧠 เหตุผล: คืนทั้ง books + categories ในครั้งเดียว
      *   เพื่อลด round-trip (หน้าแรกต้องแสดงทั้ง dropdown กรอง + รายการ)
      *
-     * ✅ Use case: index.php
+     * ⚠️ books ถูกจำกัดจำนวนแล้ว — ถ้าต้องการยอดรวมจริงให้ใช้ pagination['total']
+     *   ห้ามใช้ count($books) เพราะจะได้แค่จำนวนในหน้านั้น
+     *
+     * ✅ Use case: index.php, api/search_books.php
      */
     public function getBooks(array $filters = []): array
     {
@@ -91,13 +96,26 @@ class HomeService
         }
 
         // 👁️ ซ่อนหนังสือที่ถูกปิดการแสดงผลจากหน้า public
+        // 🛡️ [SECURITY] F-01: บรรทัดนี้คือด่านเดียวที่กันหนังสือซ่อนไม่ให้หลุดสู่หน้าสาธารณะ
+        //    index.php และ api/search_books.php เรียกผ่านที่นี่ทั้งคู่ → ห้ามข้าม
         $bookFilters['visible_only'] = true;
 
-        // 📤 คืนทั้ง books + categories ในครั้งเดียว
+        // 📄 แบ่งหน้า — นับยอดรวมก่อน แล้วค่อยดึงเฉพาะหน้าที่ขอ
+        // 🧠 ต้องนับด้วย $bookFilters ชุดเดียวกัน (มี visible_only แล้ว)
+        //    ไม่งั้นจะบอกจำนวนเล่มรวมหนังสือที่ซ่อนอยู่ด้วย = เปิดเผยว่ามีของซ่อนอยู่กี่เล่ม
+        $total      = $this->bookRepo->countAll($bookFilters);
+        $perPage    = max(1, (int) ($filters['per_page'] ?? BOOKS_PER_PAGE));
+        $pagination = paginate($total, $filters['page'] ?? 1, $perPage);
+
+        $bookFilters['limit']  = $pagination['per_page'];
+        $bookFilters['offset'] = $pagination['offset'];
+
+        // 📤 คืนทั้ง books + categories + ข้อมูลแบ่งหน้า ในครั้งเดียว
         //    ลด round-trip: หน้าแรกต้องใช้ทั้ง dropdown กรอง + รายการหนังสือ
         return [
             'books' => $this->bookRepo->findAll($bookFilters),
-            'categories' => $this->categoryRepo->findAll()
+            'categories' => $this->categoryRepo->findAll(),
+            'pagination' => $pagination
         ];
     }
 

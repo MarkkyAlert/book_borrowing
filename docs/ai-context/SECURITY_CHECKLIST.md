@@ -8,7 +8,7 @@
 |--------|-------|---------|
 | Prepared statement ทุก query | ✅ | ทุก Repository ใช้ `prepare()/execute()` — ไม่มี string concat ของ user input |
 | ปิด emulate prepares | ✅ | `includes/db.php:62` `PDO::ATTR_EMULATE_PREPARES => false` (native prepared statements) |
-| `ORDER BY` / `WHERE` แบบ dynamic | ✅ | ใช้ whitelist ผ่าน `match()` — `BookRepository.php:190,209` |
+| `ORDER BY` / `WHERE` แบบ dynamic | ✅ | ใช้ whitelist ผ่าน `match()` — `BookRepository.php:340,365` |
 | `LIMIT ?` | ✅ | ทำงานได้เพราะปิด emulate prepares แล้ว |
 
 ## 2. XSS
@@ -44,7 +44,7 @@
 | Guard แยกหน้าเว็บ/API | ✅ | `requireLogin/requireStaff/requireAdmin` + `requireStaffApi/requireAdminApi` (คืน JSON 403 แทน redirect) |
 | หน้า member ดูข้อมูลคนอื่นได้ไหม | ✅ | `my_borrows/my_reservations/profile` ใช้ `$_SESSION['user_id']` เท่านั้น ไม่รับ id จาก GET/POST |
 | ownership check ตอนยกเลิกการจอง | ✅ | `api/cancel_reservation.php` ส่ง `$_SESSION['user_id']` → query มี `AND user_id = ?` |
-| ป้องกันเลื่อนสิทธิ์เป็น admin | ✅ | whitelist `['member','staff']` — `MemberService.php:184` |
+| ป้องกันเลื่อนสิทธิ์เป็น admin | ✅ | whitelist `['member','staff']` — `MemberService.php:198` |
 | ป้องกันแก้ email ตัวเอง | ✅ | `AuthService::updateProfile()` เขียนทับด้วย email จาก DB |
 | ป้องกันลบ admin | ✅ | `DELETE ... WHERE role IN ('member','staff')` |
 

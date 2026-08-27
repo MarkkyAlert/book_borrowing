@@ -25,7 +25,7 @@ Browser
 | `api/` | 5 endpoint (JSON 4 + HTML partial 1) | ⚠️ ระวัง auth |
 | `app/Services/` | Business logic ทั้งหมด (8 ไฟล์) | ⭐ แก้กติกาที่นี่ |
 | `app/Repositories/` | SQL ทั้งหมด (9 ไฟล์) | ⭐ แก้ query ที่นี่ |
-| `includes/` | config, db, functions, header/footer, partial | ⚠️ ระวัง |
+| `includes/` | config, db, functions, header/footer, partial (`book_grid.php`, `pagination.php`) | ⚠️ ระวัง |
 | `database/` | `schema.sql`, `sample_data.sql`, migration script (บล็อกจากเว็บทั้งโฟลเดอร์ + migration ต้องรันผ่าน CLI) | — |
 | `cron/` | 2 งานตามเวลา (CLI-guarded) | ✅ |
 | `docs/` | เอกสาร 11 ไฟล์ + `samples/` CSV | ✅ |

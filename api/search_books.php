@@ -36,6 +36,7 @@ if (!checkRateLimit('search_books', 60, 5)) {
 $search = trim($_GET['search'] ?? '');
 $categoryId = (int) ($_GET['category'] ?? 0);
 $status = $_GET['status'] ?? '';
+$page = (int) ($_GET['page'] ?? 1);   // 📄 หน้าที่ขอ — Service clamp ให้อยู่ในช่วงจริงเอง
 
 // 📝 สร้าง filters array สำหรับส่งให้ Service
 $filters = [];
@@ -52,13 +53,24 @@ if ($status === 'available') {
     $filters['status'] = 'available';
 }
 
+// 📄 ส่งหน้าที่ขอไปด้วย — ถ้าไม่ส่ง Service จะคืนหน้า 1 เสมอ
+//    ทำให้กดเลขหน้าใน grid ที่โหลดผ่าน AJAX แล้วไม่ขยับ
+$filters['page'] = $page;
+
 // 📝 เรียกผ่าน HomeService — Single Source of Truth ของ "หนังสือที่ผู้ใช้ทั่วไปเห็นได้"
 //    🛡️ [SECURITY] ห้ามเรียก BookRepository::findAll() ตรงๆ จากที่นี่!
 //       HomeService::getBooks() เป็นที่เดียวที่ใส่ visible_only = true
 //       ถ้าข้ามไปเรียก repo เอง หนังสือที่ถูกซ่อน (is_visible = 0) จะโผล่ในผลค้นหาสาธารณะ
 //       (index.php ใช้ service ตัวเดียวกันนี้ตอน render ครั้งแรก — ผลลัพธ์จึงตรงกันเสมอ)
 $homeService = new HomeService(getDB());
-$books = $homeService->getBooks($filters)['books'];
+$data = $homeService->getBooks($filters);
+$books = $data['books'];
+$pagination = $data['pagination'];   // 📄 book_grid.php ใช้วาดแถบเลือกหน้าต่อท้าย
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า (ใช้ชื่อ key เดียวกับที่หน้าเว็บส่งมา)
+$paginationParams = ['search' => $search, 'category' => $categoryId ?: '', 'status' => $status];
+$paginationAjax = true;   // 📝 ลิงก์จะมี data-page ให้ JS ดักคลิกแทนการโหลดหน้าใหม่
+$paginationUnit = 'เล่ม';
 
 // 📤 ส่ง Response เป็น HTML partial (ไม่ใช่ JSON)
 //    AJAX รับ HTML ไปแทรกใน DOM โดยตรง (innerHTML)

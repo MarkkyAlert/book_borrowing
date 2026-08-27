@@ -57,14 +57,28 @@ $search = trim($_GET['search'] ?? '');
 $status = $_GET['status'] ?? '';    // has_borrow | no_borrow | ''
 $role = $_GET['role'] ?? '';        // member | staff | ''
 $sort = $_GET['sort'] ?? 'newest'; // newest | oldest | az | most_borrows
+$page = (int) ($_GET['page'] ?? 1);
 
-// 📊 ดึงผู้ใช้พร้อม borrow stats (active_borrows, total_borrows) ผ่าน Service
-$members = $memberService->getMembers([
+// 🔧 filter ชุดเดียว ใช้ทั้งนับยอดรวมและดึงรายการ — ต้องเป็นชุดเดียวกันเป๊ะ
+//    ไม่งั้นจะบอกจำนวนหน้าผิด (เช่น บอกมี 5 หน้า แต่หน้า 5 ว่างเปล่า)
+$memberFilters = [
     'search' => $search,
     'status' => $status,
     'role' => $role,
     'sort' => $sort
-]);
+];
+
+// 📄 นับยอดรวมก่อน แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
+$pagination = paginate($memberService->countFilteredMembers($memberFilters), $page, ITEMS_PER_PAGE);
+$memberFilters['limit']  = $pagination['per_page'];
+$memberFilters['offset'] = $pagination['offset'];
+
+// 📊 ดึงผู้ใช้ "เฉพาะหน้านี้" พร้อม borrow stats (active_borrows, total_borrows) ผ่าน Service
+$members = $memberService->getMembers($memberFilters);
+
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
+$paginationParams = ['search' => $search, 'status' => $status, 'role' => $role, 'sort' => $sort];
+$paginationUnit = 'คน';
 
 $pageTitle = 'จัดการผู้ใช้';
 require_once __DIR__ . '/header.php';
@@ -74,7 +88,7 @@ require_once __DIR__ . '/header.php';
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
     <div>
         <h3 class="text-lg font-bold text-gray-800">จัดการผู้ใช้</h3>
-        <p class="text-sm text-gray-500">ทั้งหมด <?= count($members) ?> คน</p>
+        <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> คน</p>
     </div>
     <div class="flex gap-2">
         <a href="import_members.php" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm">
@@ -157,7 +171,7 @@ require_once __DIR__ . '/header.php';
                 <tbody class="divide-y divide-gray-100">
                     <?php foreach ($members as $index => $member): ?>
                         <tr class="hover:bg-gray-50/50 transition-colors">
-                            <td class="px-6 py-4 text-gray-500"><?= $index + 1 ?></td>
+                            <td class="px-6 py-4 text-gray-500"><?= $pagination['offset'] + $index + 1 ?></td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center">
                                     <div class="h-8 w-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center mr-3 font-bold text-xs">
@@ -239,6 +253,9 @@ require_once __DIR__ . '/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php // 📄 แถบเลือกหน้า (ไม่แสดงถ้ามีหน้าเดียว) ?>
+<?php require __DIR__ . '/../includes/pagination.php'; ?>
 
 <!-- Single Borrow History Modal (AJAX loaded - Fix N+1 query) -->
 <div id="historyModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

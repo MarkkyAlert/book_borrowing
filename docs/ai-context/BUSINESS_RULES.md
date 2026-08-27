@@ -60,9 +60,9 @@
 
 | # | กฎ | พฤติกรรม | ที่มา |
 |---|-----|----------|-------|
-| K-01 | ลบหนังสือไม่ได้ถ้า... | (1) กำลังถูกยืม (2) มีประวัติการยืม (3) มี pending reservation | `BookService::deleteBook()` :237-249 |
+| K-01 | ลบหนังสือไม่ได้ถ้า... | (1) กำลังถูกยืม (2) มีประวัติการยืม (3) มี pending reservation | `BookService::deleteBook()` :249-261 |
 | K-02 | แก้ `quantity` | `available` ปรับตาม diff อัตโนมัติ: `available_ใหม่ = available_เดิม + (qty_ใหม่ − qty_เดิม)` | `BookService.php:182-186` |
-| K-03 | ลด quantity ต่ำกว่าที่ออกอยู่ | ห้าม — throw error พร้อมบอกจำนวนที่ออกอยู่ | `BookService.php:175-177` |
+| K-03 | ลด quantity ต่ำกว่าที่ออกอยู่ | ห้าม — throw error พร้อมบอกจำนวนที่ออกอยู่ | `BookService.php:188-190` |
 | K-04 | `quantity = 0` | อนุญาต (ใช้กับหนังสือหาย/ชำรุด) — commit `4d64088` | `BookService.php` |
 | K-05 | ซ่อนหนังสือ | ใช้ `is_visible = 0` **ไม่ใช่** `quantity = 0` (ตรงกับ Context §8) | `admin/book_form.php:82` |
 | K-06 | ISBN | UNIQUE — เว้นว่างได้ (NULL ซ้ำได้) | `schema.sql:63` |
@@ -73,11 +73,11 @@
 
 | # | กฎ | พฤติกรรม | ที่มา |
 |---|-----|----------|-------|
-| M-01 | ลบสมาชิกไม่ได้ถ้า... | (1) มีประวัติการยืม (2) มี pending reservation | `MemberService::deleteMember()` :219-227 |
-| M-02 | ลบ admin | **ไม่ได้เด็ดขาด** — `DELETE ... WHERE role IN ('member','staff')` | `UserRepository::deleteMember()` :560 |
-| M-03 | เปลี่ยน role | admin/staff ตั้งได้เฉพาะ `member` หรือ `staff` — เลื่อนเป็น admin ผ่าน UI ไม่ได้ | `MemberService.php:184` |
-| M-04 | สมัครเอง | ได้ role `member` เสมอ (hard-code) | `MemberService::createMember()` :135 |
-| M-05 | รหัสผ่าน | ขั้นต่ำ `MIN_PASSWORD_LENGTH` (6) · bcrypt · ถ้าไม่กรอกตอน admin สร้าง → สุ่ม 8 ตัวแล้วแสดงครั้งเดียว | `functions.php:460`, `MemberService.php:125` |
+| M-01 | ลบสมาชิกไม่ได้ถ้า... | (1) มีประวัติการยืม (2) มี pending reservation | `MemberService::deleteMember()` :231-241 |
+| M-02 | ลบ admin | **ไม่ได้เด็ดขาด** — `DELETE ... WHERE role IN ('member','staff')` | `UserRepository::deleteMember()` :617 |
+| M-03 | เปลี่ยน role | admin/staff ตั้งได้เฉพาะ `member` หรือ `staff` — เลื่อนเป็น admin ผ่าน UI ไม่ได้ | `MemberService.php:198` |
+| M-04 | สมัครเอง | ได้ role `member` เสมอ (hard-code) | `MemberService::createMember()` :126 |
+| M-05 | รหัสผ่าน | ขั้นต่ำ `MIN_PASSWORD_LENGTH` (6) · bcrypt · ถ้าไม่กรอกตอน admin สร้าง → สุ่ม 8 ตัวแล้วแสดงครั้งเดียว | `functions.php:460`, `MemberService.php:141` |
 | M-06 | เปลี่ยน email เอง | **ไม่ได้** — `updateProfile()` เขียนทับด้วย email เดิมจาก DB เสมอ | `AuthService::updateProfile()` |
 | M-07 | เปลี่ยนรหัสผ่าน | ต้องยืนยันรหัสเดิม + ห้ามซ้ำรหัสเดิม | `AuthService::changePassword()` |
 | M-08 | Import สมาชิก | รหัสผ่าน default `123456` ถ้าไฟล์ไม่ระบุ | `MemberService::importMember()` :342 |
