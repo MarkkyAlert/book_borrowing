@@ -94,6 +94,16 @@ define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));  // 📝 อา
 define('ITEMS_PER_PAGE', (int) env('ITEMS_PER_PAGE', 20));   // 📝 ตารางฝั่งแอดมิน
 define('BOOKS_PER_PAGE', (int) env('BOOKS_PER_PAGE', 12));   // 📝 grid หน้าแรก (4 คอลัมน์ × 3 แถว)
 
+// ═══════════════════════════════════════════════════════
+// 🔎 Full-text search
+// ═══════════════════════════════════════════════════════
+// 🧠 ขนาดชิ้นข้อความที่ใช้ทำ index ค้นหา (ดู buildSearchTokens() ใน functions.php)
+//    🔴 ห้ามเปลี่ยนโดยไม่รัน `php database/rebuild_search_index.php` ใหม่ทั้งตาราง
+//       ไม่งั้น token ที่เก็บไว้กับคำค้นจะคนละสูตร → ค้นไม่เจอทั้งระบบ
+//    📌 ต้องไม่ต่ำกว่า innodb_ft_min_token_size ของ MySQL (default 3)
+//       ถ้าตั้ง 2 ต้องไปแก้ my.cnf แล้ว restart ซึ่งบังคับลูกค้าไม่ได้
+define('SEARCH_TOKEN_SIZE', 3);
+
 // 🐛 Debug Mode — true = แสดง error ละเอียด (ห้ามเปิดบน production!)
 //    ⚠️ APP_DEBUG=true จะแสดง password reset link บนหน้าจอด้วย (forgot_password.php)
 define('APP_DEBUG', env('APP_DEBUG', 'false') === 'true');

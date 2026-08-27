@@ -96,9 +96,12 @@ key-value ธรรมดา ใช้จริงแค่ 3 key: `org_name`, `
 `books`: idx_available, idx_category, uq_isbn · `borrows`: idx_status, idx_user, idx_book, idx_due_date
 `reservations`: idx_status, idx_user, idx_book · `users`: idx_email, idx_role · `password_resets`: idx_email, idx_token, idx_expires · `rate_limits`: idx_key_name, idx_created_at
 
-> ยังไม่มี FULLTEXT index — การค้นหาใช้ `LIKE '%คำ%'` (`BookRepository.php:316`) ซึ่ง **ใช้ index ไม่ได้**
-> (`EXPLAIN` → `type=ALL`, `key=NULL`) · วัดจริงที่ 2,029 เล่มใช้เวลา 10.7 ms — ยังไม่ใช่คอขวด
-> เดิมคอขวดคือขนาดหน้าเว็บเพราะไม่มี pagination — **แก้แล้ว (F-21)** ดู KNOWN_LIMITATIONS §1.1
+> 🔎 **FULLTEXT:** `books.search_tokens` + index `ft_books_search` (F-24)
+> เก็บ trigram ของ `title + author + isbn` เพราะ FULLTEXT ปกติตัดคำด้วยช่องว่าง
+> ซึ่งใช้กับภาษาไทยไม่ได้ · การค้นหายังคง `LIKE` ไว้กรองซ้ำเพื่อความแม่นยำ
+> 🔴 คอลัมน์นี้ **PHP เป็นคนสร้าง** — `INSERT` ด้วย SQL ตรง ๆ ต้องรัน
+> `php database/rebuild_search_index.php` ตามเสมอ ไม่งั้นค้นหาเล่มนั้นไม่เจอ
+> เดิมคอขวดคือขนาดหน้าเว็บเพราะไม่มี pagination — **แก้แล้ว (F-21)** ดู KNOWN_LIMITATIONS §1.1–1.2
 
 ## 6. การเปลี่ยน Schema — เช็คลิสต์
 
@@ -110,3 +113,6 @@ key-value ธรรมดา ใช้จริงแค่ 3 key: `org_name`, `
 4. Repository ที่ INSERT/UPDATE คอลัมน์นั้น
 5. Report / Import / Export ที่อ้างคอลัมน์
 6. `docs/ARCHITECTURE.md` + `docs/ai-context/DATABASE_MAP.md` (เอกสารชุดนี้)
+7. **ถ้าคอลัมน์นั้นค้นหาได้** → `BookRepository::makeSearchTokens()` + เงื่อนไข `LIKE`
+   ใน `buildListQuery()` แล้วรัน `php database/rebuild_search_index.php --all` ← **มักลืม**
+8. seeder ทั้ง 2 ตัวใน `tests/fixtures/` ถ้าคอลัมน์เป็น NOT NULL

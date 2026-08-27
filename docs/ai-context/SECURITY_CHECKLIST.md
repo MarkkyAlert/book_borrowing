@@ -8,7 +8,7 @@
 |--------|-------|---------|
 | Prepared statement ทุก query | ✅ | ทุก Repository ใช้ `prepare()/execute()` — ไม่มี string concat ของ user input |
 | ปิด emulate prepares | ✅ | `includes/db.php:62` `PDO::ATTR_EMULATE_PREPARES => false` (native prepared statements) |
-| `ORDER BY` / `WHERE` แบบ dynamic | ✅ | ใช้ whitelist ผ่าน `match()` — `BookRepository.php:340,365` |
+| `ORDER BY` / `WHERE` แบบ dynamic | ✅ | ใช้ whitelist ผ่าน `match()` — `BookRepository.php:378,403` |
 | `LIMIT ?` | ✅ | ทำงานได้เพราะปิด emulate prepares แล้ว |
 
 ## 2. XSS

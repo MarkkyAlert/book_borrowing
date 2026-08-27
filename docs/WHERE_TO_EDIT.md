@@ -100,6 +100,7 @@
 | Footer หน้า admin | `admin/footer.php` |
 | การ์ดแสดงหนังสือ (grid) | `includes/book_grid.php` |
 | แถบเลือกหน้า (หน้าตา) | `includes/pagination.php` — แก้ที่เดียวมีผลทั้ง 4 หน้า |
+| ค้นหาหนังสือไม่เจอทั้งที่มีในระบบ | รัน `php database/rebuild_search_index.php` (index ค้นหาตกหล่น เช่นเพิ่มหนังสือด้วย SQL ตรง ๆ) |
 | Modal (popup) | `includes/modal.js` |
 
 ### 2.5 เปลี่ยน CSS / Stylesheet

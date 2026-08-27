@@ -49,6 +49,7 @@
 | เมนู/หัวเว็บฝั่ง admin | `admin/header.php` (มี `requireStaff()` อยู่ในนี้ — ห้ามลบ), `admin/footer.php` |
 | การ์ดหนังสือบนหน้าแรก + ผลค้นหา | `includes/book_grid.php` (ใช้ร่วมกัน 2 ที่ — แก้ที่เดียวได้ทั้งคู่) |
 | แถบเลือกหน้า | `includes/pagination.php` (ใช้ร่วมกัน 4 หน้า) · ตรรกะคำนวณอยู่ที่ `paginate()` ใน `includes/functions.php` |
+| สูตรการค้นหา (trigram) | `buildSearchTokens()` / `buildSearchBooleanQuery()` ใน `includes/functions.php` · 🔴 แก้แล้วต้องรัน `php database/rebuild_search_index.php --all` |
 | สี/ฟอนต์ | `css/style.css` + tailwind config inline ใน `includes/header.php` |
 | ชื่อหน่วยงาน + สีบัตรสมาชิก | หน้า `admin/settings.php` (ไม่ต้องแก้โค้ด) |
 | เลย์เอาต์บัตรสมาชิก / ฉลากหนังสือ | `admin/member_card.php`, `admin/book_labels.php` |

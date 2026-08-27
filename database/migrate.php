@@ -37,6 +37,10 @@ if (php_sapi_name() !== 'cli') {
 
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/db.php';
+// 🧠 โหลด helper ให้ migration ใช้ได้ (เช่น buildSearchTokens ตอน backfill)
+//    ต้องโหลด **ก่อน** echo อะไรออกไป เพราะ functions.php เรียก startSession() ท้ายไฟล์
+//    ถ้าโหลดทีหลังจะได้ warning "headers already sent" เต็มจอ
+require_once __DIR__ . '/../includes/functions.php';
 
 $MIGRATION_DIR = __DIR__ . '/migrations';
 $opts          = getopt('', ['status', 'baseline']);

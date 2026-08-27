@@ -297,15 +297,21 @@ try {
 
     // ── หนังสือ (quantity ตั้งชั่วคราว — คำนวณจริงท้ายสคริปต์) ──
     $bookId = [];
+    // 🔎 ต้องเติม search_tokens เองเพราะ INSERT ตรง ๆ ไม่ผ่าน BookRepository::create()
+    //    ถ้าลืม หนังสือทดสอบจะค้นหาไม่เจอ แล้วเทสต์ค้นหาจะ fail แบบงง ๆ
     $stmt = $pdo->prepare(
-        "INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available, is_visible)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, quantity, available, is_visible)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     foreach ($BOOKS as $key => $b) {
+        $title  = $b['title'];
+        $author = $b['author'] ?? T_TAG . 'ผู้แต่งทดสอบ';
+        $isbn   = array_key_exists('isbn', $b) ? $b['isbn'] : 'T' . str_pad((string) count($bookId), 12, '0', STR_PAD_LEFT);
         $stmt->execute([
-            $b['title'],
-            $b['author']  ?? T_TAG . 'ผู้แต่งทดสอบ',
-            array_key_exists('isbn', $b) ? $b['isbn'] : 'T' . str_pad((string) count($bookId), 12, '0', STR_PAD_LEFT),
+            $title,
+            $author,
+            $isbn,
+            buildSearchTokens(trim("$title $author $isbn")),
             array_key_exists('category', $b) ? $b['category'] : $catId['c_main'],
             $b['want'],                       // ใส่คำอธิบายสภาพไว้ในช่อง description — เปิดหน้าเว็บแล้วรู้เลยว่าเล่มนี้ไว้ทดสอบอะไร
             $b['cover']   ?? null,

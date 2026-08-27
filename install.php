@@ -9,6 +9,10 @@
 
 // 🔌 โหลดเฉพาะ config (constants) — ไม่ใช้ bootstrap เพราะ DB ยังไม่มี
 require_once __DIR__ . '/includes/config.php';
+// 🔎 ต้องใช้ buildSearchTokens() ตอนใส่หนังสือตัวอย่าง
+//    functions.php ไม่แตะ DB ตอนโหลด (แค่ startSession()) จึงเรียกก่อนสร้างฐานข้อมูลได้
+//    🧠 ห้าม copy สูตร trigram มาไว้ที่นี่ — ต้องเป็นสูตรเดียวกับตอนค้นหาเสมอ
+require_once __DIR__ . '/includes/functions.php';
 
 // =====================================================
 // 🔒 INSTALL LOCK — ป้องกันการติดตั้งซ้ำ (2 ชั้น)
@@ -145,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `title` VARCHAR(200) NOT NULL,
                 `author` VARCHAR(100) NOT NULL,
                 `isbn` VARCHAR(20) DEFAULT NULL,
+                `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
                 `category_id` INT DEFAULT NULL,
                 `description` TEXT DEFAULT NULL,
                 `cover_image` VARCHAR(255) DEFAULT NULL,
@@ -156,6 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INDEX `idx_available` (`available`),
                 INDEX `idx_category` (`category_id`),
                 UNIQUE INDEX `uq_isbn` (`isbn`),
+                FULLTEXT KEY `ft_books_search` (`search_tokens`),
                 FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
                 CONSTRAINT `chk_books_available_non_negative` CHECK (`available` >= 0),
                 CONSTRAINT `chk_books_quantity_gte_available` CHECK (`quantity` >= `available`)
@@ -320,8 +326,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$book[0]]);
             if (!$stmt->fetch()) {
                 $qty = $book[3] ?? 1;
-                $stmt = $pdo->prepare("INSERT INTO books (title, author, category_id, quantity, available) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([$book[0], $book[1], $cat['id'] ?? null, $qty, $qty]);
+                // 🔎 ต้องเติม search_tokens ด้วย ไม่งั้นหนังสือตัวอย่างจะค้นหาไม่เจอ
+                $stmt = $pdo->prepare("INSERT INTO books (title, author, search_tokens, category_id, quantity, available) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $book[0],
+                    $book[1],
+                    buildSearchTokens($book[0] . ' ' . $book[1]),
+                    $cat['id'] ?? null,
+                    $qty,
+                    $qty
+                ]);
             }
         }
         $messages[] = "✅ เพิ่มหนังสือตัวอย่าง " . count($books) . " เล่ม";

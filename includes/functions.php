@@ -939,6 +939,102 @@ function paginationUrl(array $params, int $page): string
     return '?' . http_build_query($params);
 }
 
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: แปลงข้อความเป็น "trigram" สำหรับให้ FULLTEXT ค้นหาภาษาไทยได้
+ * ==========================================================================
+ * 🧠 ทำไมต้องทำแบบนี้ (สำคัญมาก — อย่าเปลี่ยนเป็น FULLTEXT ธรรมดา):
+ *    FULLTEXT ของ MySQL/MariaDB ตัดคำด้วย "ช่องว่าง" แต่ภาษาไทยไม่มีช่องว่างระหว่างคำ
+ *    "การเขียนโปรแกรม" จึงกลายเป็น token เดียว → ค้น "โปรแกรม" **ไม่เจอ**
+ *    (ทดสอบยืนยันแล้ว ทั้ง natural language mode และ boolean mode + wildcard)
+ *    และ MariaDB ไม่มี ngram parser แบบ MySQL 8
+ *
+ *    วิธีแก้: เก็บ "คอลัมน์เงา" ที่ตัดข้อความเป็นชิ้นละ 3 ตัวอักษรแบบเลื่อนทีละตัว
+ *    "การเขียน" → "การ ารเ รเข เขี ขีย ียน"  ← ทีนี้ FULLTEXT ก็มี token ให้ค้นแล้ว
+ *    ตอนค้นก็แปลงคำค้นด้วยวิธีเดียวกัน แล้วสั่งให้เจอ "ทุกชิ้น"
+ *
+ * 📌 ทำไม 3 ตัว ไม่ใช่ 2: `innodb_ft_min_token_size` default = 3
+ *    ถ้าใช้ 2 ตัว ต้องแก้ config ของ MySQL แล้ว restart ซึ่งบังคับลูกค้าไม่ได้
+ *
+ * 📝 normalize ก่อน: ตัดช่องว่าง/เครื่องหมายวรรคตอนทิ้ง เหลือแต่ตัวอักษร ตัวเลข
+ *    และ \p{M} = สระบน-ล่าง + วรรณยุกต์ไทย
+ *    ⚠️ ต้องเก็บ \p{M} ไว้ ไม่งั้น "กัน" กับ "กน" จะกลายเป็นคำเดียวกัน
+ *
+ * 📥 Input:  ข้อความดิบ (ชื่อเรื่อง + ผู้แต่ง + ISBN ต่อกัน)
+ * 📤 Output: trigram คั่นด้วยช่องว่าง — เก็บลง `books.search_tokens`
+ *
+ * ⚠️ ถ้าแก้ฟังก์ชันนี้ **ต้องรัน `php database/rebuild_search_index.php` ใหม่ทั้งตาราง**
+ *    ไม่งั้น token เก่ากับคำค้นใหม่จะคนละสูตรกัน แล้วค้นไม่เจอทั้งระบบ
+ */
+function buildSearchTokens(string $text): string
+{
+    // 📝 ตัวเล็กทั้งหมด — ค้นหาไม่สนตัวพิมพ์
+    $normalized = mb_strtolower($text, 'UTF-8');
+
+    // 📝 เหลือแต่ตัวอักษร (\p{L}) ตัวเลข (\p{N}) และสระ/วรรณยุกต์ (\p{M})
+    $normalized = preg_replace('/[^\p{L}\p{N}\p{M}]+/u', '', $normalized) ?? '';
+
+    $length = mb_strlen($normalized, 'UTF-8');
+    if ($length === 0) {
+        return '';
+    }
+    // 📝 สั้นกว่า 3 → เก็บทั้งก้อน (จะค้นเจอผ่าน LIKE อยู่ดี)
+    if ($length < SEARCH_TOKEN_SIZE) {
+        return $normalized;
+    }
+
+    $tokens = [];
+    for ($i = 0; $i <= $length - SEARCH_TOKEN_SIZE; $i++) {
+        $tokens[] = mb_substr($normalized, $i, SEARCH_TOKEN_SIZE, 'UTF-8');
+    }
+    return implode(' ', $tokens);
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: แปลงคำค้นของผู้ใช้เป็นเงื่อนไข BOOLEAN MODE ของ FULLTEXT
+ * ==========================================================================
+ * ✅ "โปรแกรม" → "+โปร +ปรแ +รแก +แกร +กรม"  (ต้องเจอครบทุกชิ้น)
+ *
+ * 📤 Output: string ที่ส่งเข้า `AGAINST(? IN BOOLEAN MODE)`
+ *            หรือ **null** = ใช้ FULLTEXT กับคำค้นนี้ไม่ได้ ให้ผู้เรียกไปใช้ LIKE ล้วนแทน
+ *
+ * ⚠️ [กับดัก] คำค้นที่สั้นกว่า 3 ตัวอักษรหลัง normalize จะกลายเป็น token ที่สั้นกว่า
+ *    `innodb_ft_min_token_size` → FULLTEXT จะ **คืน 0 ผลลัพธ์เงียบ ๆ**
+ *    (ทดสอบแล้ว: ค้น "กา" ที่ควรเจอ 18,333 แถว กลับได้ 0)
+ *    จึงต้องคืน null เพื่อบังคับให้ fallback ไม่ใช่ปล่อยผ่าน
+ */
+function buildSearchBooleanQuery(string $term): ?string
+{
+    $tokens = buildSearchTokens($term);
+    if ($tokens === '') {
+        return null;
+    }
+
+    $parts = explode(' ', $tokens);
+
+    // 🛡️ ชิ้นแรกสั้นกว่าขนาดขั้นต่ำ = คำค้นทั้งคำสั้นเกินไป → FULLTEXT ใช้ไม่ได้
+    if (mb_strlen($parts[0], 'UTF-8') < SEARCH_TOKEN_SIZE) {
+        return null;
+    }
+
+    // ⚡ [PERF] คำค้นที่เป็นตัวเลขเป็นหลัก (ISBN/บาร์โค้ด) → ไม่ใช้ FULLTEXT
+    // 🧠 เหตุผล: trigram ของตัวเลขมีได้แค่ 1,000 แบบ ("000" ถึง "999")
+    //    ในห้องสมุดหลักหมื่นเล่ม ตัวเลข 3 หลักชุดหนึ่งจะไปโผล่ในหนังสือเป็นพัน ๆ เล่ม
+    //    (ยิ่ง ISBN เติมศูนย์ข้างหน้ายิ่งหนัก — "000" ตรงกับแทบทุกเล่ม)
+    //    FULLTEXT จึงต้องไล่รายการยาวมากแล้วตัดทิ้งเกือบหมด — วัดจริงแล้ว
+    //    **ช้ากว่า** LIKE ราว 3 เท่า (70 ms เทียบกับ 21 ms ที่ 21,000 เล่ม)
+    // 📌 ไม่กระทบการยิงบาร์โค้ด — ตรงนั้นใช้ findByIdOrIsbn() ที่ค้นแบบตรงตัวผ่าน uq_isbn
+    $normalized = str_replace(' ', '', $tokens);
+    $digitCount = preg_match_all('/\d/', $normalized);
+    if ($digitCount > 0 && $digitCount / mb_strlen($normalized, 'UTF-8') >= 0.7) {
+        return null;
+    }
+
+    // 📝 "+" หน้าทุกชิ้น = ต้องมีครบทุกชิ้นถึงจะนับว่าตรง
+    return implode(' ', array_map(fn($token) => '+' . $token, $parts));
+}
+
 // 📝 Auto-start session — เรียกอัตโนมัติเมื่อ require functions.php
 //    ไม่ต้องเรียก startSession() เอง
 

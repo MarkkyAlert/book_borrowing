@@ -26,6 +26,7 @@ Browser
 | `app/Services/` | Business logic ทั้งหมด (8 ไฟล์) | ⭐ แก้กติกาที่นี่ |
 | `app/Repositories/` | SQL ทั้งหมด (9 ไฟล์) | ⭐ แก้ query ที่นี่ |
 | `includes/` | config, db, functions, header/footer, partial (`book_grid.php`, `pagination.php`) | ⚠️ ระวัง |
+| `database/` | `schema.sql`, `sample_data.sql`, `migrate.php`, `migrations/`, `rebuild_search_index.php` | 🔒 CLI เท่านั้น (`.htaccess` กันทั้งโฟลเดอร์) |
 | `database/` | `schema.sql`, `sample_data.sql`, migration script (บล็อกจากเว็บทั้งโฟลเดอร์ + migration ต้องรันผ่าน CLI) | — |
 | `cron/` | 2 งานตามเวลา (CLI-guarded) | ✅ |
 | `docs/` | เอกสาร 11 ไฟล์ + `samples/` CSV | ✅ |
@@ -56,7 +57,7 @@ Browser
 
 | Method | ไฟล์ | ป้องกันอะไร |
 |--------|------|-------------|
-| `BookRepository::findByIdForUpdate()` | `app/Repositories/BookRepository.php:631` | 2 คนยืม/จองเล่มสุดท้ายพร้อมกัน |
+| `BookRepository::findByIdForUpdate()` | `app/Repositories/BookRepository.php:674` | 2 คนยืม/จองเล่มสุดท้ายพร้อมกัน |
 | `BorrowRepository::findByIdForUpdate()` | `:317` | คืนซ้ำ (บวก `WHERE status='borrowing'`) |
 | `BorrowRepository::findByIdForUpdateAnyStatus()` | `:352` | ชำระค่าปรับซ้ำ |
 | `BorrowRepository::countActiveBorrowsForUpdate()` | `:492` | นับโควตาแบบล็อก |

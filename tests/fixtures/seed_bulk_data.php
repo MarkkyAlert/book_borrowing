@@ -128,11 +128,13 @@ for ($i = 1; $i <= $nBooks; $i++) {
         ($i % 5) + 1,
     ];
     if (count($batch) >= 500 || $i === $nBooks) {
-        $ph  = implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,1)'));
-        $sql = "INSERT INTO books (title, author, isbn, category_id, description, quantity, available, is_visible) VALUES $ph";
+        // 🔎 ต้องเติม search_tokens เองเพราะ INSERT ตรง ๆ ไม่ผ่าน BookRepository::create()
+        //    ถ้าลืม การวัด performance ของการค้นหาจะได้ตัวเลขหลอก (FULLTEXT ไม่เจออะไรเลย)
+        $ph  = implode(',', array_fill(0, count($batch), '(?,?,?,?,?,?,?,?,1)'));
+        $sql = "INSERT INTO books (title, author, isbn, search_tokens, category_id, description, quantity, available, is_visible) VALUES $ph";
         $vals = [];
         foreach ($batch as $b) {
-            array_push($vals, $b[0], $b[1], $b[2], $b[3], $b[4], $b[5], $b[5]);
+            array_push($vals, $b[0], $b[1], $b[2], buildSearchTokens("{$b[0]} {$b[1]} {$b[2]}"), $b[3], $b[4], $b[5], $b[5]);
         }
         $pdo->prepare($sql)->execute($vals);
         $made += count($batch);

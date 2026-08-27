@@ -301,6 +301,26 @@ class BookRepository
      * 📤 Output: [$whereSQL, $params, $orderBy]
      * 🛡️ [SECURITY] user input ทุกตัว bind ผ่าน ? · ORDER BY มาจาก whitelist เท่านั้น
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: สร้างค่าคอลัมน์ `search_tokens` จากข้อมูลหนังสือ
+     * ==========================================================================
+     * 🧠 รวม 3 คอลัมน์ที่การค้นหาครอบคลุม (title, author, isbn) ให้ตรงกับเงื่อนไข
+     *    LIKE ใน buildListQuery() — ถ้าไม่ตรงกันจะเกิดอาการ "FULLTEXT บอกว่ามี
+     *    แต่ LIKE กรองทิ้ง" หรือแย่กว่านั้นคือค้นบางคอลัมน์ไม่เจอเลย
+     *
+     * ⚠️ ถ้าเพิ่มคอลัมน์ที่ค้นหาได้ ต้องแก้ 3 ที่ให้ตรงกัน:
+     *    1. เงื่อนไข LIKE ใน buildListQuery()
+     *    2. ฟังก์ชันนี้
+     *    3. `database/rebuild_search_index.php` แล้วรัน --all ใหม่
+     */
+    private function makeSearchTokens(array $data): string
+    {
+        return buildSearchTokens(trim(
+            ($data['title'] ?? '') . ' ' . ($data['author'] ?? '') . ' ' . ($data['isbn'] ?? '')
+        ));
+    }
+
     private function buildListQuery(array $filters): array
     {
         // 📦 เก็บเงื่อนไข WHERE แต่ละข้อไว้ใน array — จะนำมาประกอบเป็น SQL ทีหลัง
@@ -309,10 +329,28 @@ class BookRepository
         $params = [];
 
         // 🔍 Filter: ค้นหาคำ (search) — ค้นจากชื่อ, ผู้แต่ง, ISBN พร้อมกัน
-        // ใช้ LIKE %...% = ค้นทุกตำแหน่งในข้อความ
-        // ⚠️ ถ้า search = "PHP" → จะค้น title LIKE '%PHP%' OR author LIKE '%PHP%' OR isbn LIKE '%PHP%'
+        //
+        // 🧠 ทำงาน 2 ชั้น:
+        //    ชั้นที่ 1 (FULLTEXT) — คัดผู้ต้องสงสัยด้วย index แทนการสแกนทั้งตาราง
+        //    ชั้นที่ 2 (LIKE)     — ยืนยันว่าตรงจริง
+        //
+        //    ทำไมต้องมีชั้นที่ 2: trigram บอกได้แค่ว่า "มีชิ้นส่วนครบ" ไม่ได้บอกว่าเรียงติดกัน
+        //    ค้น "abcd" จะไปตรงกับ "abcXXXbcd" ด้วย (ทดสอบยืนยันแล้ว) → LIKE กรองทิ้ง
+        //    ผลลัพธ์สุดท้ายจึงเหมือนกับสมัยที่ใช้ LIKE ล้วนทุกประการ
+        //
+        // ⚠️ ถ้าคำค้นสั้นกว่า SEARCH_TOKEN_SIZE → FULLTEXT จะคืน 0 ผลลัพธ์เงียบ ๆ
+        //    (token สั้นกว่า innodb_ft_min_token_size ไม่ถูก index)
+        //    buildSearchBooleanQuery() คืน null ในกรณีนั้น → ตกไปใช้ LIKE ล้วนแทน
+        //    ยอมช้าดีกว่าค้นไม่เจอ
         if (!empty($filters['search'])) {
             $search = $filters['search'];
+
+            $ftQuery = buildSearchBooleanQuery($search);
+            if ($ftQuery !== null) {
+                $where[]  = "MATCH(b.search_tokens) AGAINST(? IN BOOLEAN MODE)";
+                $params[] = $ftQuery;
+            }
+
             $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
             // 📌 ต้องใส่ 3 ค่า เพราะมี ? 3 ตัว (title, author, isbn)
             $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
@@ -451,8 +489,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, category_id, description, cover_image, quantity, available, is_visible)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, quantity, available, is_visible)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -464,6 +502,8 @@ class BookRepository
             $data['title'],              // ชื่อหนังสือ (บังคับ)
             $data['author'],             // ผู้แต่ง (บังคับ)
             $data['isbn'] ?? null,       // ISBN (ไม่บังคับ — ใช้สแกน barcode)
+            // 🔎 index ค้นหา — ถ้าไม่เติมตรงนี้ หนังสือเล่มนี้จะ **ค้นหาไม่เจอ** ทั้งระบบ
+            $this->makeSearchTokens($data),
             $data['category_id'] ?? null, // หมวดหมู่ (ไม่บังคับ)
             $data['description'] ?? null, // รายละเอียด (ไม่บังคับ)
             $data['cover_image'] ?? null, // ชื่อไฟล์รูปปก (ไม่บังคับ)
@@ -501,7 +541,7 @@ class BookRepository
         //    ห้ามส่ง available > quantity เด็ดขาด
         $stmt = $this->pdo->prepare("
             UPDATE books SET 
-                title = ?, author = ?, isbn = ?, category_id = ?, 
+                title = ?, author = ?, isbn = ?, search_tokens = ?, category_id = ?, 
                 description = ?, cover_image = COALESCE(?, cover_image), 
                 quantity = ?, available = ?, is_visible = ?
             WHERE id = ?
@@ -512,13 +552,16 @@ class BookRepository
             $data['title'],              // 1. ชื่อหนังสือ
             $data['author'],             // 2. ผู้แต่ง
             $data['isbn'] ?? null,       // 3. ISBN
-            $data['category_id'] ?? null, // 4. หมวดหมู่
-            $data['description'] ?? null, // 5. รายละเอียด
-            $data['cover_image'] ?? null, // 6. รูปปก (null = เก็บรูปเดิม)
-            $data['quantity'],           // 7. จำนวนทั้งหมด
-            $data['available'],          // 8. จำนวนที่ว่าง
-            $data['is_visible'] ?? 1,    // 9. 👁️ การมองเห็น
-            $id                          // 10. WHERE id = ?
+            // 🔎 4. index ค้นหา — ต้องสร้างใหม่ทุกครั้งที่แก้ชื่อ/ผู้แต่ง/ISBN
+            //    ไม่งั้นจะยังค้นเจอด้วย "ชื่อเดิม" แต่ค้นด้วยชื่อใหม่ไม่เจอ
+            $this->makeSearchTokens($data),
+            $data['category_id'] ?? null, // 5. หมวดหมู่
+            $data['description'] ?? null, // 6. รายละเอียด
+            $data['cover_image'] ?? null, // 7. รูปปก (null = เก็บรูปเดิม)
+            $data['quantity'],           // 8. จำนวนทั้งหมด
+            $data['available'],          // 9. จำนวนที่ว่าง
+            $data['is_visible'] ?? 1,    // 10. 👁️ การมองเห็น
+            $id                          // 11. WHERE id = ?
         ]);
     }
 

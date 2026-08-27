@@ -263,10 +263,17 @@ php database/migrate.php --status
 
 # 4. รันอัปเดต
 php database/migrate.php
+
+# 5. ตรวจว่า index ค้นหาครบ (ควรขึ้น ✅)
+php database/rebuild_search_index.php --check
 ```
 
 ระบบจำเองว่ารันอะไรไปแล้ว — รันซ้ำได้ไม่มีผลข้างเคียง ถ้าล้มกลางทางจะหยุดที่ไฟล์นั้น
 แก้แล้วรันใหม่ ระบบจะทำต่อจากจุดที่ค้าง
+
+> 🔎 **ถ้าขั้นที่ 5 แจ้งว่ามีเล่มตกหล่น** ให้รัน `php database/rebuild_search_index.php`
+> เกิดได้เมื่อมีคนเพิ่มหนังสือด้วย SQL ตรง ๆ หรือ restore backup จากเวอร์ชันเก่า
+> หนังสือที่ตกหล่นจะยังแสดงในรายการปกติ แต่ **ค้นหาไม่เจอ**
 
 > ถ้าเข้า command line ไม่ได้ (shared hosting บางเจ้า) ให้ export คำสั่ง SQL จากไฟล์ migration
 > ไปรันใน phpMyAdmin ด้วยตนเอง แล้วเพิ่มแถวใน `schema_migrations` เองเพื่อบันทึกว่ารันแล้ว
