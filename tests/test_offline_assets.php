@@ -155,6 +155,37 @@ if (!is_file($ht)) {
         : fail('OA-05', 'assets/.htaccess ไม่ได้ปิดการรัน PHP');
 }
 
+// ═══════════════════════════════════════════════
+// OA-06: ไฟล์ไลบรารีต้องถูก commit เข้า git จริง
+// ═══════════════════════════════════════════════
+echo "\n── ไฟล์ถูกเก็บเข้า git จริง ──\n";
+// 🧠 ทำไมต้องเช็ค: `.gitignore` เคยมีบรรทัด `vendor/` (ตั้งใจกัน Composer)
+//    ซึ่งไปบล็อก `assets/vendor/` ด้วย → commit ไม่มีไฟล์ไลบรารีติดไปเลยสักไฟล์
+//    บนเครื่องคนพัฒนาทุกอย่างปกติ (ไฟล์อยู่บนดิสก์) แต่คนที่ clone ไปได้เว็บที่ไม่มี style
+//    เป็นความพังแบบเงียบที่ OA-02 (เช็คว่าไฟล์มีบนดิสก์) จับไม่ได้
+$gitDir = "$ROOT/.git";
+if (!is_dir($gitDir)) {
+    pass('OA-06', 'ไม่ได้อยู่ใน git repo — ข้ามการตรวจ');
+} else {
+    $onDisk = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$ROOT/assets", FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) {
+        if ($f->isFile()) {
+            $onDisk[] = str_replace("$ROOT/", '', $f->getPathname());
+        }
+    }
+
+    $tracked = [];
+    exec('cd ' . escapeshellarg($ROOT) . ' && git ls-files assets/ 2>/dev/null', $tracked);
+    $tracked = array_flip($tracked);
+
+    $untracked = array_values(array_filter($onDisk, fn($f) => !isset($tracked[$f])));
+    empty($untracked)
+        ? pass('OA-06', 'ไฟล์ใน assets/ ทั้ง ' . count($onDisk) . ' ไฟล์ถูกเก็บเข้า git แล้ว')
+        : fail('OA-06', 'ไม่ถูกเก็บเข้า git ' . count($untracked) . ' ไฟล์ (คนที่ clone จะไม่ได้ไฟล์นี้): '
+              . implode(', ', array_slice($untracked, 0, 3)) . ' — ตรวจ .gitignore');
+}
+
 $pct = $results['total'] > 0 ? round($results['passed'] / $results['total'] * 100, 1) : 0;
 echo "\n══════════════════════════════════════\n";
 echo " RESULTS: {$results['passed']}/{$results['total']} passed ($pct%)";

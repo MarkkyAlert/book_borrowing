@@ -10,8 +10,11 @@ Desktop.ini
 *.sublime-workspace
 
 # Dependency directories
-vendor/
-node_modules/
+# 🧠 ใส่ / นำหน้า = ผูกกับรากโปรเจกต์เท่านั้น
+#    ถ้าเขียนแค่ `vendor/` จะไปบล็อก assets/vendor/ ด้วย (เคยเกิดมาแล้ว)
+#    ทำให้ commit ไม่มีไฟล์ไลบรารีติดไป แล้วคนที่ clone ไปได้เว็บที่ไม่มี style เลย
+/vendor/
+/node_modules/
 
 # Environment variables
 .env
