@@ -597,9 +597,37 @@ function validateCSRFToken(string $token): bool
  * 🛡️ Security: HttpOnly, SameSite=Lax, Secure (HTTPS), inactivity timeout
  * ⚠️ ถูกเรียกอัตโนมัติท้าย functions.php (ไม่ต้องเรียกเอง)
  */
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ชื่อ session ที่ไม่ซ้ำกับระบบอื่นบนโดเมนเดียวกัน
+ * ==========================================================================
+ * 🧠 ทำไมต้องแยกเป็นฟังก์ชัน: ชุดทดสอบ HTTP ต้องรู้ชื่อนี้เพื่ออ่าน cookie ที่ server ส่งมา
+ *    ถ้าปล่อยให้สูตรอยู่ใน startSession() แล้วให้เทสต์คัดลอกสูตรไปเขียนเอง
+ *    วันหนึ่งแก้ที่เดียวไม่ครบ เทสต์จะพังแบบงง ๆ (เคยเกิดมาแล้ว)
+ *
+ * 📤 Output: เช่น "BBSESS9f97785c" — ขึ้นต้นด้วยตัวอักษรเพราะชื่อ session ห้ามเป็นตัวเลขล้วน
+ * 🧠 ผูกกับ path ของโฟลเดอร์ includes/ → แต่ละที่ติดตั้งได้ชื่อของตัวเองอัตโนมัติ
+ *    ลูกค้าไม่ต้องตั้งค่าอะไรเพิ่ม
+ */
+function appSessionName(): string
+{
+    return 'BBSESS' . substr(md5(__DIR__), 0, 8);
+}
+
 function startSession(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        // 🛡️ [SECURITY] ตั้งชื่อ session ให้ไม่ซ้ำกับระบบอื่นบนโดเมนเดียวกัน
+        // 🧠 ทำไมต้องทำ: PHP ใช้ชื่อ `PHPSESSID` เป็นค่าเริ่มต้น + cookie path = '/'
+        //    ถ้ามีระบบนี้ 2 ชุดบนโดเมนเดียวกัน (เช่น /library กับ /library-test)
+        //    การ login ที่ชุดหนึ่งจะทำให้เข้าอีกชุดได้ทันที เพราะ $_SESSION['user_id']
+        //    ถูกส่งต่อไป แล้วอีกชุดเอา id นั้นไปหาใน **ฐานข้อมูลของตัวเอง**
+        //    (ทดสอบยืนยันแล้ว: login ที่ /book_borrowing → เปิด /bb_release_test/admin/ ได้ 200)
+        //    ⚠️ ต้องเรียกก่อน session_start() เสมอ
+        // 📌 ผูกกับ path ของไฟล์ → แต่ละที่ติดตั้งได้ชื่อของตัวเอง โดยไม่ต้องให้ลูกค้าตั้งค่าอะไร
+        //    ขึ้นต้นด้วยตัวอักษรเพราะชื่อ session ห้ามเป็นตัวเลขล้วน
+        session_name(appSessionName());
+
         // 🛡️ [SECURITY] ตั้งค่า session cookie ให้ปลอดภัย
         session_set_cookie_params([
             'lifetime' => 0, // 📝 Session cookie — ปิด browser = หมดอายุ

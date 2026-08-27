@@ -12,6 +12,9 @@
  * ⚠️ CLI only — ต้องเปิด Apache ก่อนรัน HTTP tests
  */
 
+// 🧠 ต้องโหลด config ก่อนเพราะเช็ค Apache ด้วย APP_URL (ลูกค้าติดตั้งโฟลเดอร์ชื่ออะไรก็ได้)
+require_once __DIR__ . '/../includes/config.php';
+
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);
     exit('CLI only');
@@ -115,7 +118,7 @@ $suiteResults[] = runSuite(
 
 // Suite 3: HTTP Integration Tests
 // Check if Apache is running first
-$ch = curl_init('http://localhost/book_borrowing/login.php');
+$ch = curl_init(rtrim(APP_URL, '/') . '/login.php');
 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_NOBODY => true]);
 curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

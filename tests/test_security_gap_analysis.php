@@ -16,6 +16,9 @@
  * Usage: php tests/test_security_gap_analysis.php
  */
 
+// 🧠 ต้องโหลด config ก่อนใช้ APP_URL
+require_once __DIR__ . '/../includes/config.php';
+
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);
     exit('CLI only');
@@ -24,7 +27,7 @@ if (php_sapi_name() !== 'cli') {
 $passed = 0;
 $failed = 0;
 $total = 0;
-$baseUrl = 'http://localhost/book_borrowing';
+$baseUrl = rtrim(APP_URL, '/');
 
 function assertTest(string $name, bool $condition, string $detail = '')
 {
@@ -376,7 +379,7 @@ echo "\n── 6️⃣ SESSION SECURITY ──\n";
 // Get session ID before login
 $r1 = httpRequest("$baseUrl/login.php");
 $preLoginSessionId = '';
-if (preg_match('/PHPSESSID=([^;\s]+)/', $r1['headers'], $m)) $preLoginSessionId = $m[1];
+if (preg_match('/' . preg_quote(appSessionName(), '/') . '=([^;\s]+)/', $r1['headers'], $m)) $preLoginSessionId = $m[1];
 
 // Login
 $csrfToken = '';
@@ -388,7 +391,7 @@ $r2 = httpRequest("$baseUrl/login.php", 'POST', [
 ], $r1['cookieFile']);
 
 $postLoginSessionId = '';
-if (preg_match('/PHPSESSID=([^;\s]+)/', $r2['headers'], $m)) $postLoginSessionId = $m[1];
+if (preg_match('/' . preg_quote(appSessionName(), '/') . '=([^;\s]+)/', $r2['headers'], $m)) $postLoginSessionId = $m[1];
 assertTest(
     "SC-21: Session ID เปลี่ยนหลัง login (session fixation protection)",
     !empty($preLoginSessionId) && !empty($postLoginSessionId) && $preLoginSessionId !== $postLoginSessionId,

@@ -12,7 +12,7 @@
 
 require_once __DIR__ . '/../bootstrap.php';
 
-$baseUrl = 'http://localhost/book_borrowing';
+$baseUrl = rtrim(APP_URL, '/');
 $cookieFile = __DIR__ . '/logs/cookie_import_test.txt';
 if (!file_exists(__DIR__ . '/logs')) mkdir(__DIR__ . '/logs');
 if (file_exists($cookieFile)) unlink($cookieFile);

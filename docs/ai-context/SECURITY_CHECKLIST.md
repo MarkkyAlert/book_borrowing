@@ -9,6 +9,7 @@
 | Prepared statement ทุก query | ✅ | ทุก Repository ใช้ `prepare()/execute()` — ไม่มี string concat ของ user input |
 | ปิด emulate prepares | ✅ | `includes/db.php:62` `PDO::ATTR_EMULATE_PREPARES => false` (native prepared statements) |
 | `ORDER BY` / `WHERE` แบบ dynamic | ✅ | ใช้ whitelist ผ่าน `match()` — `BookRepository.php:378,403` |
+| Session แยกต่อการติดตั้ง | ✅ | `appSessionName()` — ระบบ 2 ชุดบนโดเมนเดียวกันไม่ใช้ session ร่วมกัน (ดู F-25) |
 | `LIMIT ?` | ✅ | ทำงานได้เพราะปิด emulate prepares แล้ว |
 
 ## 2. XSS
@@ -30,7 +31,7 @@
 | Token per-session, 256-bit | ✅ | `functions.php:568` `bin2hex(random_bytes(32))` |
 | เทียบแบบ timing-safe | ✅ | `hash_equals()` — `functions.php:590` |
 | ครอบทุก POST ที่เปลี่ยนข้อมูล | ✅ | 21 ไฟล์เรียก `validateCSRFToken()` — รวม logout, AJAX scan, และ API |
-| Cookie `SameSite=Lax` | ✅ | `functions.php:606` (ชั้นป้องกันเสริม) |
+| Cookie `SameSite=Lax` | ✅ | `functions.php:638` (ชั้นป้องกันเสริม) |
 
 ## 4. Authentication / Authorization
 
@@ -39,8 +40,8 @@
 | bcrypt | ✅ | `hashPassword()` → `password_hash(PASSWORD_DEFAULT)` |
 | ไม่บอกว่า email มีในระบบไหม | ✅ | `AuthService::login()` คืน `null` เหมือนกันทั้ง 2 กรณี |
 | `session_regenerate_id(true)` หลัง login | ✅ | `login.php:68` |
-| Cookie `HttpOnly` + `Secure`(HTTPS) + `SameSite` | ✅ | `functions.php:600-609` |
-| Inactivity timeout | ✅ | `SESSION_LIFETIME` — `functions.php:617` |
+| Cookie `HttpOnly` + `Secure`(HTTPS) + `SameSite` | ✅ | `functions.php:632-639` |
+| Inactivity timeout | ✅ | `SESSION_LIFETIME` — `functions.php:645` |
 | Guard แยกหน้าเว็บ/API | ✅ | `requireLogin/requireStaff/requireAdmin` + `requireStaffApi/requireAdminApi` (คืน JSON 403 แทน redirect) |
 | หน้า member ดูข้อมูลคนอื่นได้ไหม | ✅ | `my_borrows/my_reservations/profile` ใช้ `$_SESSION['user_id']` เท่านั้น ไม่รับ id จาก GET/POST |
 | ownership check ตอนยกเลิกการจอง | ✅ | `api/cancel_reservation.php` ส่ง `$_SESSION['user_id']` → query มี `AND user_id = ?` |

@@ -12,8 +12,14 @@ date_default_timezone_set('Asia/Bangkok');
 // 📝 โหลด config เพื่ออ่านค่า rate limit ที่ตั้งไว้จริงใน .env
 //    (ไม่ hard-code จำนวนครั้ง — ลูกค้าปรับ RATE_LIMIT_MAX_ATTEMPTS ได้ test ต้องไม่พัง)
 require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/db.php';
+// 🧠 ต้องใช้ appSessionName() เพื่ออ่าน session cookie ที่ server ส่งมา
+require_once __DIR__ . '/../includes/functions.php';
 
-$BASE_URL = 'http://localhost/book_borrowing';
+// 🧠 อ่านจาก APP_URL ไม่ใช่ hardcode — ลูกค้าติดตั้งในโฟลเดอร์ชื่ออะไรก็ได้
+//    เคยฝัง 'http://localhost/book_borrowing' ไว้ตรง ๆ ทำให้เทสต์ยิงไปผิดระบบ
+//    แล้ว fail 18 ข้อโดยที่ระบบไม่ได้มีปัญหาอะไรเลย (เจอตอนทดสอบติดตั้งจาก clone สด)
+$BASE_URL = rtrim(APP_URL, '/');
 $TIMESTAMP = time();
 $LOG_FILE = __DIR__ . '/logs/qa_run_' . date('Y-m-d_His') . '.jsonl';
 
@@ -92,8 +98,11 @@ function http($method, $url, $data = [], $cookies = null) {
     $hdrs = substr($raw, 0, $hdrSize);
     $body = substr($raw, $hdrSize);
     $sess = null;
-    if (preg_match('/Set-Cookie:\s*PHPSESSID=([^;]+)/i', $hdrs, $m)) {
-        $sess = 'PHPSESSID=' . $m[1];
+    // 🧠 ชื่อ session ไม่ใช่ PHPSESSID แล้ว — แต่ละที่ติดตั้งมีชื่อของตัวเอง (ดู appSessionName())
+    //    ห้าม hardcode ชื่อไว้ตรงนี้ ไม่งั้นพอชื่อเปลี่ยนเทสต์จะ fail ยกชุดโดยที่ระบบไม่ได้พัง
+    $sessName = appSessionName();
+    if (preg_match('/Set-Cookie:\s*' . preg_quote($sessName, '/') . '=([^;]+)/i', $hdrs, $m)) {
+        $sess = $sessName . '=' . $m[1];
     }
     return ['status' => $code, 'headers' => $hdrs, 'body' => $body, 'session' => $sess];
 }

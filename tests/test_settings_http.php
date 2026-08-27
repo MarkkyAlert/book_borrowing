@@ -46,7 +46,7 @@ class HttpClient
 // 1. We already have `tests/test_security_gap_analysis.php` style helper in `tests/TestHelper.php`? No.
 // Let's write a simple specialized script.
 
-$baseUrl = 'http://localhost/book_borrowing'; // Adjust if needed, APP_URL in config might be correct.
+$baseUrl = rtrim(APP_URL, '/');
 $cookieFile = tempnam(sys_get_temp_dir(), 'cookie_settings_test');
 
 function request($method, $url, $postData = [])

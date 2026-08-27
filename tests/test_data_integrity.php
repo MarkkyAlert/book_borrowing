@@ -431,7 +431,7 @@ assertTest(
 );
 
 // DI-22: Cron เข้าผ่าน browser → 403
-$ch = curl_init('http://localhost/book_borrowing/cron/expire_reservations.php');
+$ch = curl_init(rtrim(APP_URL, '/') . '/cron/expire_reservations.php');
 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5]);
 $cronBody = curl_exec($ch);
 $cronCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

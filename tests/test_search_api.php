@@ -10,7 +10,9 @@
  * 4. GET /api/search_books.php?status=available -> 200 OK
  */
 
-$baseUrl = 'http://localhost/book_borrowing';
+require_once __DIR__ . '/../includes/config.php';   // 🧠 ต้องโหลดก่อนใช้ APP_URL
+
+$baseUrl = rtrim(APP_URL, '/');
 
 function curlRequest($url, $method = 'GET', $data = [])
 {

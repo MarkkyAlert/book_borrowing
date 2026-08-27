@@ -137,6 +137,10 @@ APP_DEBUG=false
 6. ถ้าสำเร็จ จะเห็น email + password ของ admin → **จดไว้!**
 7. กดเข้าหน้าแรก หรือเข้า Admin ได้เลย
 
+> **🍎 บน macOS / Linux อ่านตรงนี้ก่อนไปต่อ:** XAMPP บน Mac รัน Apache เป็น user `daemon`
+> ซึ่งมักไม่ใช่เจ้าของโฟลเดอร์โปรเจกต์ → **upload รูปปกหนังสือจะไม่สำเร็จและไม่ขึ้น error อะไรเลย**
+> ให้ทำตามหัวข้อ **F. Permission** ก่อน (บน Windows ข้ามได้ ไม่มีปัญหานี้)
+
 ### ขั้นที่ 5 — เพิ่มข้อมูลตัวอย่าง (ไม่บังคับ)
 
 ถ้าต้องการข้อมูล demo เต็ม (มีสมาชิก, ยืม/คืน, จอง, ค่าปรับ):
@@ -286,15 +290,54 @@ ps -eo user,comm | grep httpd
 ไม่ต้องตั้ง permission — XAMPP เขียนได้ทุกโฟลเดอร์อยู่แล้ว
 
 ### บน Linux/Mac/Hosting
-```bash
-# ตั้ง permission
-chmod -R 755 uploads/
-chmod -R 755 logs/
 
-# กำหนดเจ้าของ (ใช้ user ของ web server)
-chown -R www-data:www-data uploads/ logs/
-# บาง hosting ใช้ nobody หรือ apache แทน www-data
+⚠️ **สิ่งที่สำคัญคือ "เจ้าของ" ไม่ใช่ตัวเลข permission**
+`755` แปลว่า "เจ้าของเขียนได้ คนอื่นอ่านได้อย่างเดียว" — ถ้า web server รันเป็นคนละ user
+กับเจ้าของโฟลเดอร์ ต่อให้ตั้ง 755 ก็ยัง**เขียนไม่ได้** อาการคือ upload รูปปกแล้วเงียบ ไม่มี error
+
+**ขั้นที่ 1 — ดูก่อนว่า web server รันเป็น user อะไร**
+
+```bash
+ps aux | grep -m1 [h]ttpd | awk '{print $1}'    # Apache
+ps aux | grep -m1 [n]ginx | awk '{print $1}'    # Nginx
 ```
+
+ค่าที่พบบ่อย: `www-data` (Ubuntu/Debian) · `apache` (CentOS/RHEL) · `nobody` (hosting หลายเจ้า)
+· **`daemon` (XAMPP บน macOS)**
+
+**ขั้นที่ 2 — ตั้งเจ้าของให้ตรงกับ user นั้น**
+
+```bash
+chmod -R 755 uploads/ logs/
+chown -R www-data:www-data uploads/ logs/     # เปลี่ยน www-data เป็น user ที่ได้จากขั้นที่ 1
+```
+
+**ถ้า `chown` ไม่ได้ (ไม่มีสิทธิ์ root) — บน macOS ใช้ ACL แทน:**
+
+```bash
+chmod -R +a "daemon allow read,write,delete,add_file,add_subdirectory,file_inherit,directory_inherit" uploads/ logs/
+```
+
+ให้สิทธิ์เฉพาะ user ของ web server โดยไม่ต้องเปลี่ยนเจ้าของ และ**ปลอดภัยกว่า `chmod 777` มาก**
+เจ้าของโฟลเดอร์รันได้เองไม่ต้องใช้ `sudo` (ทดสอบแล้วบน XAMPP/macOS)
+
+**ทางเลือกสุดท้าย — `chmod 777`**
+
+```bash
+chmod -R 777 uploads/ logs/
+```
+
+⚠️ แปลว่า **ทุก user บนเครื่องเขียนได้** ยอมรับได้บนเครื่องส่วนตัว/เครื่องทดสอบเท่านั้น
+**ห้ามใช้บน shared hosting** ที่มีคนอื่นใช้เครื่องเดียวกัน
+
+**ตรวจว่าได้ผลจริงหรือยัง** — สร้างไฟล์ `wtest.php` ที่รากโปรเจกต์แล้วเปิดผ่าน browser:
+
+```php
+<?php var_dump(is_writable(__DIR__ . '/uploads/covers'));
+```
+
+ต้องได้ `bool(true)` · **ลบไฟล์นี้ทิ้งทันทีหลังตรวจเสร็จ**
+(ต้องเปิดผ่าน browser เท่านั้น — รันบน command line จะได้ `true` เสมอเพราะคนละ user)
 
 ### ไฟล์ .env ต้องอ่านได้แต่ห้ามเข้าถึงจาก web
 ```bash
