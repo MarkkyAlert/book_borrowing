@@ -95,7 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // 🔍 [DATA INTEGRITY] ISBN unique — ถ้าซ้ำให้ skip
                         //    ไม่ merge เพราะ ISBN เดียวกันอาจเป็นคนละเล่ม (edition ต่างกัน)
                         if (!empty($isbn) && $bookRepo->isbnExists($isbn)) {
-                            $skippedDetails[] = "แถวที่ $rowNumber: ISBN $isbn ซ้ำกับหนังสือในระบบ";
+                            // 🛡️ [SECURITY] e() ก่อนเสมอ — ข้อความนี้ถูกส่งเข้า setFlash(..., true)
+                            //    ซึ่ง render เป็น HTML ดิบ ค่าจากไฟล์ CSV จึงต้อง escape
+                            $skippedDetails[] = "แถวที่ $rowNumber: ISBN " . e($isbn) . " ซ้ำกับหนังสือในระบบ";
                             continue;
                         }
                         
