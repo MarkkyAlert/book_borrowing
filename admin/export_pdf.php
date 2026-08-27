@@ -204,14 +204,13 @@ $orgName = getSetting('org_name', 'ระบบห้องสมุด');
                         <tr>
                             <td class="text-center"><?= $index + 1 ?></td>
                             <?php foreach ($row as $key => $value): ?>
-                                <td class="<?= in_array($key, ['borrow_count', 'active_loans', 'currently_borrowed', 'transaction_count', 'days_overdue', 'fine']) ? 'text-center' : '' ?><?= in_array($key, ['total_amount']) ? 'text-right' : '' ?>">
-                                    <?php if ($key === 'total_amount' || $key === 'fine'): ?>
-                                        <?= number_format($value, 2) ?>
-                                    <?php elseif (is_numeric($value)): ?>
-                                        <?= number_format($value) ?>
-                                    <?php else: ?>
-                                        <?= e($value) ?>
-                                    <?php endif; ?>
+                                <td class="<?= in_array($key, REPORT_COUNT_COLUMNS, true) ? 'text-center' : '' ?><?= in_array($key, REPORT_MONEY_COLUMNS, true) ? 'text-right' : '' ?>">
+                                    <?php
+                                    // 🔴 [FIX] เดิมใช้ is_numeric($value) ตัดสินว่าเป็นตัวเลขไหม
+                                    //    ทำให้เบอร์โทร "0891234567" ถูกแปลงเป็น "891,234,567"
+                                    //    ตอนนี้ตัดสินจาก "ชื่อคอลัมน์" แทน (ดู includes/report_helper.php)
+                                    ?>
+                                    <?= e(formatReportValue($key, $value)) ?>
                                 </td>
                             <?php endforeach; ?>
                         </tr>

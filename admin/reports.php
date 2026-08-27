@@ -92,7 +92,10 @@ if ($isExport) {
     
     fputcsv($output, $headers);  // เขียนหัวคอลัมน์
     foreach ($data as $row) {
-        fputcsv($output, $row);  // เขียนข้อมูลทีละแถว
+        // 🛡️ [SECURITY] กัน CSV Formula Injection ก่อนเขียนทุกเซลล์
+        //    ค่าที่ขึ้นต้นด้วย = + - @ จะถูกเติม ' นำหน้า ไม่งั้น Excel รันเป็นสูตร
+        //    ⚠️ quote ของ fputcsv() ไม่ได้ป้องกันเรื่องนี้ (ดู csvSafeValue)
+        fputcsv($output, array_map('csvSafeValue', $row));
     }
     
     fclose($output);

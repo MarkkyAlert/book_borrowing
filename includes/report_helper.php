@@ -114,3 +114,71 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             ];
     }
 }
+
+// =====================================================
+// 🔢 การจัดรูปแบบค่าในรายงาน
+// =====================================================
+/**
+ * 🎯 คอลัมน์ที่เป็น "จำนวนนับ" — แสดงเป็นจำนวนเต็ม มีคอมมาคั่นหลัก
+ * 🎯 คอลัมน์ที่เป็น "จำนวนเงิน" — แสดงทศนิยม 2 ตำแหน่ง
+ *
+ * 🔴 [สำคัญ] ห้ามใช้ is_numeric() ตัดสินว่าคอลัมน์ไหนเป็นตัวเลข!
+ *    เบอร์โทรที่เก็บเป็น string เช่น "0891234567" ก็ผ่าน is_numeric()
+ *    → ถูก number_format() แปลงเป็น "891,234,567" (เลข 0 นำหน้าหาย + มีคอมมา)
+ *    รายงาน "หนังสือค้างส่ง" กับ "สมาชิกค้างชำระ" มีคอลัมน์เบอร์โทร
+ *    ซึ่งเป็นรายงานที่เจ้าหน้าที่พิมพ์ไปโทรตามคนพอดี
+ *
+ * ⚙️ เพิ่มรายงานใหม่ที่มีคอลัมน์ตัวเลข → เพิ่มชื่อคอลัมน์ในลิสต์นี้
+ */
+const REPORT_COUNT_COLUMNS = ['borrow_count', 'currently_borrowed', 'active_loans', 'transaction_count', 'days_overdue'];
+const REPORT_MONEY_COLUMNS = ['total_amount', 'fine', 'fine_amount'];
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: จัดรูปแบบค่าในเซลล์รายงานตาม "ชื่อคอลัมน์" (ไม่ใช่ตามชนิดข้อมูล)
+ * ==========================================================================
+ *
+ * 📥 Input: @param string $key ชื่อคอลัมน์, @param mixed $value ค่าจาก DB
+ * 📤 Output: @return string ข้อความพร้อมแสดง (ยังไม่ escape — ผู้เรียกต้อง e() เอง)
+ * ✅ Use case: admin/export_pdf.php, admin/reports.php
+ */
+function formatReportValue(string $key, mixed $value): string
+{
+    if (in_array($key, REPORT_MONEY_COLUMNS, true)) {
+        return number_format((float) $value, 2);
+    }
+    if (in_array($key, REPORT_COUNT_COLUMNS, true)) {
+        return number_format((int) $value);
+    }
+    // 📝 ที่เหลือถือเป็นข้อความล้วน — เบอร์โทร/ISBN/ชื่อ/วันที่ ต้องไม่ถูกแปลงเป็นตัวเลข
+    return (string) $value;
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: กัน CSV Formula Injection ก่อนเขียนลงไฟล์
+ * ==========================================================================
+ *
+ * 🛡️ [SECURITY] Excel/LibreOffice ตีความเซลล์ที่ขึ้นต้นด้วย = + - @ (รวมถึง TAB/CR)
+ *    ว่าเป็น "สูตร" แล้วสั่งรันทันทีที่เปิดไฟล์
+ *    เช่น ชื่อหนังสือ =cmd|' /C calc'!A0 → รันคำสั่งบนเครื่องคนที่เปิดไฟล์
+ *
+ * ⚠️ การใส่ quote ของ fputcsv() **ไม่ได้ป้องกัน** เรื่องนี้ — ต้องเติม ' นำหน้าเอง
+ *    Excel จะแสดงผลเป็นข้อความธรรมดาโดยไม่โชว์เครื่องหมาย ' ที่เติมเข้าไป
+ *
+ * 📥 Input: @param mixed $value ค่าที่จะเขียนลง CSV
+ * 📤 Output: @return string ค่าที่ปลอดภัยแล้ว
+ * ✅ Use case: admin/reports.php ตอน export CSV
+ */
+function csvSafeValue(mixed $value): string
+{
+    $value = (string) $value;
+
+    // 📝 ตัวอักษรตัวแรกที่ Excel ใช้ตัดสินว่าเป็นสูตร
+    //    (คอลัมน์ตัวเลขในรายงานนี้ไม่มีค่าติดลบ จึงไม่กระทบการแสดงผลจำนวนเงิน/จำนวนนับ)
+    if ($value !== '' && str_contains("=+-@\t\r", $value[0])) {
+        return "'" . $value;
+    }
+
+    return $value;
+}
