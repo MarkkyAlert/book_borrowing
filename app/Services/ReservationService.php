@@ -102,81 +102,85 @@ class ReservationService
         $this->reservationRepo->markExpiredReservations();
 
         // 📝 Step 1: เปิด transaction
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($userId, $bookId, $expireDays) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 2: Lock หนังสือ (FOR UPDATE)
-            //    ป้องกัน 2 คนจองเล่มสุดท้ายพร้อมกัน
-            $book = $this->bookRepo->findByIdForUpdate($bookId);
+            try {
+                // 🔒 Step 2: Lock หนังสือ (FOR UPDATE)
+                //    ป้องกัน 2 คนจองเล่มสุดท้ายพร้อมกัน
+                $book = $this->bookRepo->findByIdForUpdate($bookId);
 
-            if (!$book) {
-                throw new Exception('ไม่พบหนังสือ');
+                if (!$book) {
+                    throw new Exception('ไม่พบหนังสือ');
+                }
+
+                // 👁️ [SECURITY] ป้องกันจองหนังสือที่ถูกซ่อน
+                if (empty($book['is_visible'])) {
+                    throw new Exception('หนังสือนี้ไม่เปิดให้จองในขณะนี้');
+                }
+
+                // 📝 Step 3: ตรวจ stock (ภายใต้ lock)
+                if ($book['available'] <= 0) {
+                    throw new Exception('หนังสือหมด ไม่สามารถจองได้');
+                }
+
+                // 🛡️ Step 4: ตรวจจองซ้ำภายใต้ lock
+                //    ป้องกัน concurrent requests จองเล่มเดียวกัน
+                if ($this->reservationRepo->hasPending($userId, $bookId)) {
+                    throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
+                }
+
+                // 🛡️ Step 4.1: ตรวจว่ายืมเล่มนี้อยู่แล้วหรือไม่
+                //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้ (เสีย stock ฟรี)
+                //    แจ้ง user ทันทีแทนที่จะรอ admin เจอ error ตอน approve
+                if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
+                    throw new Exception('คุณกำลังยืมหนังสือเล่มนี้อยู่แล้ว ไม่สามารถจองซ้ำได้');
+                }
+
+                // 🔒 [I-07 FIX] Lock user row ก่อน check quota
+                //    ป้องกัน: admin สร้าง borrow ให้ user ขณะเดียวกับที่ user จอง
+                //    → ถ้าไม่ lock ทั้งคู่อาจเห็น count ต่ำกว่าจริง → เกินโควต้าได้
+                //    เทียบกับ BorrowService::createBorrow() ที่ใช้ lockById() เช่นกัน
+                $this->userRepo->lockById($userId);
+
+                // 🛡️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
+                //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้เพราะเกินโควต้า
+                //    ⚠️ ต้องนับ pending reservations ด้วย เพราะจะกลายเป็น borrow เมื่อ approve
+                //    🔒 [I-07 FIX] ใช้ countActiveBorrowsForUpdate() แทน countActiveBorrows()
+                //    เพื่อ lock borrow rows ป้องกัน concurrent borrow+reserve
+                $activeBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
+                $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
+                if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
+                    throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+                }
+
+                // 📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
+                $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
+                $reservationId = $this->reservationRepo->create($userId, $bookId, $expiresAt);
+
+                // 📝 Step 6: หัก stock ทันที (available -1)
+                //    ⚠️ stock ถูกหักตอนจอง ไม่ใช่ตอนยืม!
+                //    ถ้ายกเลิก/หมดอายุ ต้องคืน stock เสมอ
+                $this->bookRepo->decrementAvailable($bookId);
+
+                $this->pdo->commit();
+
+                // 📤 คืนผลสำเร็จ + วันหมดอายุ
+                return [
+                    'success' => true,
+                    'message' => "จองสำเร็จ! กรุณามารับหนังสือ \"{$book['title']}\" ภายในวันที่ " . date('d/m/Y', strtotime($expiresAt)),
+                    'reservation_id' => $reservationId, // Added for testing
+                    'expires_at' => $expiresAt
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → stock ไม่ถูกหัก + ไม่มี reservation
+                $this->pdo->rollBack();
+                error_log("[ReservationService::createReservation] userId={$userId} bookId={$bookId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            // 👁️ [SECURITY] ป้องกันจองหนังสือที่ถูกซ่อน
-            if (empty($book['is_visible'])) {
-                throw new Exception('หนังสือนี้ไม่เปิดให้จองในขณะนี้');
-            }
-
-            // 📝 Step 3: ตรวจ stock (ภายใต้ lock)
-            if ($book['available'] <= 0) {
-                throw new Exception('หนังสือหมด ไม่สามารถจองได้');
-            }
-
-            // 🛡️ Step 4: ตรวจจองซ้ำภายใต้ lock
-            //    ป้องกัน concurrent requests จองเล่มเดียวกัน
-            if ($this->reservationRepo->hasPending($userId, $bookId)) {
-                throw new Exception('คุณได้จองหนังสือเล่มนี้ไว้แล้ว กรุณารอรับหนังสือ');
-            }
-
-            // 🛡️ Step 4.1: ตรวจว่ายืมเล่มนี้อยู่แล้วหรือไม่
-            //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้ (เสีย stock ฟรี)
-            //    แจ้ง user ทันทีแทนที่จะรอ admin เจอ error ตอน approve
-            if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
-                throw new Exception('คุณกำลังยืมหนังสือเล่มนี้อยู่แล้ว ไม่สามารถจองซ้ำได้');
-            }
-
-            // 🔒 [I-07 FIX] Lock user row ก่อน check quota
-            //    ป้องกัน: admin สร้าง borrow ให้ user ขณะเดียวกับที่ user จอง
-            //    → ถ้าไม่ lock ทั้งคู่อาจเห็น count ต่ำกว่าจริง → เกินโควต้าได้
-            //    เทียบกับ BorrowService::createBorrow() ที่ใช้ lockById() เช่นกัน
-            $this->userRepo->lockById($userId);
-
-            // 🛡️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
-            //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้เพราะเกินโควต้า
-            //    ⚠️ ต้องนับ pending reservations ด้วย เพราะจะกลายเป็น borrow เมื่อ approve
-            //    🔒 [I-07 FIX] ใช้ countActiveBorrowsForUpdate() แทน countActiveBorrows()
-            //    เพื่อ lock borrow rows ป้องกัน concurrent borrow+reserve
-            $activeBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
-            $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
-            if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
-                throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
-            }
-
-            // 📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
-            $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
-            $reservationId = $this->reservationRepo->create($userId, $bookId, $expiresAt);
-
-            // 📝 Step 6: หัก stock ทันที (available -1)
-            //    ⚠️ stock ถูกหักตอนจอง ไม่ใช่ตอนยืม!
-            //    ถ้ายกเลิก/หมดอายุ ต้องคืน stock เสมอ
-            $this->bookRepo->decrementAvailable($bookId);
-
-            $this->pdo->commit();
-
-            // 📤 คืนผลสำเร็จ + วันหมดอายุ
-            return [
-                'success' => true,
-                'message' => "จองสำเร็จ! กรุณามารับหนังสือ \"{$book['title']}\" ภายในวันที่ " . date('d/m/Y', strtotime($expiresAt)),
-                'reservation_id' => $reservationId, // Added for testing
-                'expires_at' => $expiresAt
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback → stock ไม่ถูกหัก + ไม่มี reservation
-            $this->pdo->rollBack();
-            error_log("[ReservationService::createReservation] userId={$userId} bookId={$bookId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'ReservationService::createReservation');
     }
 
     /**
@@ -198,38 +202,42 @@ class ReservationService
      */
     public function cancelReservation(int $reservationId, ?int $userId = null): array
     {
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($reservationId, $userId) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 1: Lock reservation (FOR UPDATE + status='pending')
-            //    $userId != null → เพิ่ม WHERE user_id = ? (ตรวจ ownership)
-            //    $userId = null → admin ยกเลิกได้ทุกคน
-            $reservation = $this->reservationRepo->findPendingForUpdate($reservationId, $userId);
+            try {
+                // 🔒 Step 1: Lock reservation (FOR UPDATE + status='pending')
+                //    $userId != null → เพิ่ม WHERE user_id = ? (ตรวจ ownership)
+                //    $userId = null → admin ยกเลิกได้ทุกคน
+                $reservation = $this->reservationRepo->findPendingForUpdate($reservationId, $userId);
 
-            if (!$reservation) {
-                throw new Exception('ไม่พบรายการจองหรือยกเลิกไปแล้ว');
+                if (!$reservation) {
+                    throw new Exception('ไม่พบรายการจองหรือยกเลิกไปแล้ว');
+                }
+
+                // 📝 Step 2: เปลี่ยนสถานะ pending → cancelled
+                $this->reservationRepo->updateStatus($reservationId, 'cancelled');
+
+                // 📝 Step 3: คืน stock กลับ (available +1)
+                //    ⚠️ ต้องคืนเสมอ! stock ถูกหักตอนจอง
+                $this->bookRepo->incrementAvailable($reservation['book_id']);
+
+                $this->pdo->commit();
+
+                return [
+                    'success' => true,
+                    'message' => 'ยกเลิกการจองสำเร็จ',
+                    'reservation_id' => $reservationId
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → ยังเป็น pending + stock ไม่ถูกคืน
+                $this->pdo->rollBack();
+                error_log("[ReservationService::cancelReservation] resId={$reservationId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            // 📝 Step 2: เปลี่ยนสถานะ pending → cancelled
-            $this->reservationRepo->updateStatus($reservationId, 'cancelled');
-
-            // 📝 Step 3: คืน stock กลับ (available +1)
-            //    ⚠️ ต้องคืนเสมอ! stock ถูกหักตอนจอง
-            $this->bookRepo->incrementAvailable($reservation['book_id']);
-
-            $this->pdo->commit();
-
-            return [
-                'success' => true,
-                'message' => 'ยกเลิกการจองสำเร็จ',
-                'reservation_id' => $reservationId
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback → ยังเป็น pending + stock ไม่ถูกคืน
-            $this->pdo->rollBack();
-            error_log("[ReservationService::cancelReservation] resId={$reservationId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'ReservationService::cancelReservation');
     }
 
     /**
@@ -257,62 +265,66 @@ class ReservationService
         // 📝 ใช้ default จาก config.php
         $borrowDays = $borrowDays ?? DEFAULT_BORROW_DAYS;
 
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($reservationId, $borrowDays) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 1: Lock reservation (FOR UPDATE) ป้องกัน double approve
-            //    2 admin กดอนุมัติพร้อมกัน → คนที่ 2 จะได้ null
-            $reservation = $this->reservationRepo->findPendingForUpdate($reservationId);
+            try {
+                // 🔒 Step 1: Lock reservation (FOR UPDATE) ป้องกัน double approve
+                //    2 admin กดอนุมัติพร้อมกัน → คนที่ 2 จะได้ null
+                $reservation = $this->reservationRepo->findPendingForUpdate($reservationId);
 
-            if (!$reservation) {
-                throw new Exception('ไม่พบรายการจองหรือไม่อยู่ในสถานะรอรับ');
+                if (!$reservation) {
+                    throw new Exception('ไม่พบรายการจองหรือไม่อยู่ในสถานะรอรับ');
+                }
+
+                // 🛡️ Step 2: ตรวจยืมเล่มนี้ซ้ำหรือไม่ (ป้องกัน duplicate borrow)
+                if ($this->borrowRepo->isAlreadyBorrowing($reservation['user_id'], $reservation['book_id'])) {
+                    throw new Exception('ผู้จองกำลังยืมหนังสือเล่มนี้อยู่แล้ว');
+                }
+
+                // 🛡️ Step 3: ตรวจโควต้า (FOR UPDATE lock บน borrows)
+                //    🔒 [I-08 FIX] นับ pending reservations อื่นด้วย (ลบ 1 = ตัวที่กำลัง fulfill)
+                //    ป้องกัน: user มี 2 pending + 1 borrow (max=3) → ถ้า approve ทั้ง 2 จะเกินโควต้า
+                //    เดิมเช็คแค่ currentBorrows → ไม่เห็น pending อื่นที่กำลังจะกลายเป็น borrow
+                $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
+                $otherPending = $this->reservationRepo->countPendingByUser($reservation['user_id']) - 1;
+                if (($currentBorrows + max(0, $otherPending)) >= MAX_BORROW_BOOKS) {
+                    throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+                }
+
+                // 📝 Step 4: INSERT borrow record
+                //    ไม่ต้องหัก stock อีก เพราะหักไว้แล้วตอนจอง
+                $borrowDate = date('Y-m-d');
+                $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
+
+                $borrowId = $this->borrowRepo->create([
+                    'user_id' => $reservation['user_id'],
+                    'book_id' => $reservation['book_id'],
+                    'borrow_date' => $borrowDate,
+                    'due_date' => $dueDate
+                ]);
+
+                // 📝 Step 5: pending → fulfilled + link borrow_id
+                $this->reservationRepo->updateStatusWithBorrow($reservationId, 'fulfilled', $borrowId);
+
+                $this->pdo->commit();
+
+                // 📤 คืนผล: borrow_id + กำหนดคืน
+                return [
+                    'success' => true,
+                    'borrow_id' => $borrowId,
+                    'due_date' => $dueDate,
+                    'message' => 'อนุมัติการจองสำเร็จ! สร้างรายการยืมแล้ว กำหนดคืน: ' . date('d/m/Y', strtotime($dueDate))
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → ยังเป็น pending + ไม่มี borrow
+                $this->pdo->rollBack();
+                error_log("[ReservationService::fulfillReservation] resId={$reservationId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            // 🛡️ Step 2: ตรวจยืมเล่มนี้ซ้ำหรือไม่ (ป้องกัน duplicate borrow)
-            if ($this->borrowRepo->isAlreadyBorrowing($reservation['user_id'], $reservation['book_id'])) {
-                throw new Exception('ผู้จองกำลังยืมหนังสือเล่มนี้อยู่แล้ว');
-            }
-
-            // 🛡️ Step 3: ตรวจโควต้า (FOR UPDATE lock บน borrows)
-            //    🔒 [I-08 FIX] นับ pending reservations อื่นด้วย (ลบ 1 = ตัวที่กำลัง fulfill)
-            //    ป้องกัน: user มี 2 pending + 1 borrow (max=3) → ถ้า approve ทั้ง 2 จะเกินโควต้า
-            //    เดิมเช็คแค่ currentBorrows → ไม่เห็น pending อื่นที่กำลังจะกลายเป็น borrow
-            $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
-            $otherPending = $this->reservationRepo->countPendingByUser($reservation['user_id']) - 1;
-            if (($currentBorrows + max(0, $otherPending)) >= MAX_BORROW_BOOKS) {
-                throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
-            }
-
-            // 📝 Step 4: INSERT borrow record
-            //    ไม่ต้องหัก stock อีก เพราะหักไว้แล้วตอนจอง
-            $borrowDate = date('Y-m-d');
-            $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
-
-            $borrowId = $this->borrowRepo->create([
-                'user_id' => $reservation['user_id'],
-                'book_id' => $reservation['book_id'],
-                'borrow_date' => $borrowDate,
-                'due_date' => $dueDate
-            ]);
-
-            // 📝 Step 5: pending → fulfilled + link borrow_id
-            $this->reservationRepo->updateStatusWithBorrow($reservationId, 'fulfilled', $borrowId);
-
-            $this->pdo->commit();
-
-            // 📤 คืนผล: borrow_id + กำหนดคืน
-            return [
-                'success' => true,
-                'borrow_id' => $borrowId,
-                'due_date' => $dueDate,
-                'message' => 'อนุมัติการจองสำเร็จ! สร้างรายการยืมแล้ว กำหนดคืน: ' . date('d/m/Y', strtotime($dueDate))
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback → ยังเป็น pending + ไม่มี borrow
-            $this->pdo->rollBack();
-            error_log("[ReservationService::fulfillReservation] resId={$reservationId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'ReservationService::fulfillReservation');
     }
 
     /**

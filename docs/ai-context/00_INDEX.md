@@ -23,7 +23,7 @@
 - Layered: `Page/API → Service → Repository → PDO → MySQL` + autoloader ใน `bootstrap.php`
 - 8 Service / 9 Repository / 9 ตาราง / 3 role (admin, staff, member)
 - ทุก write flow สำคัญใช้ **Transaction + `SELECT ... FOR UPDATE`** จริง (ไม่ใช่แค่เคลม)
-- 18,500 บรรทัด PHP + ชุดทดสอบ 108 เคส (**ผ่าน 108/108**)
+- 18,500 บรรทัด PHP + ชุดทดสอบ 114 เคส (**ผ่าน 114/114**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
 
 ## ชุดข้อมูลสำหรับทดสอบ
 
@@ -40,7 +40,7 @@ L1 กำกับข้อมูลของตัวเองด้วย `[TE
 | รายการ | ผล |
 |--------|-----|
 | ติดตั้ง (`install.php`) | ✅ สำเร็จ — 9 ตาราง, admin, ตัวอย่าง 5 เล่ม/5 หมวด |
-| Test suite (`php tests/run_all_tests.php 123456`) | **108/108 ผ่าน (100%)** — 4 suite รวมชุดทดสอบความปลอดภัยการอัปโหลด + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
+| Test suite (`php tests/run_all_tests.php 123456`) | **114/114 ผ่าน (100%)** — 5 suite (รวม upload security + deadlock retry) + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
 | `.htaccess` ป้องกันไฟล์สำคัญ | ✅ `.env`, `app/`, `includes/*.php`, `tests/`, `database/`, `*.sql`, `*.md`, `.installed` → 403 ทั้งหมด |
 | XSS escaping (probe จริง) | ✅ `?search=<script>` ถูก escape เป็น `&lt;script&gt;` |
 | Rate limit login (probe จริง) | ✅ บล็อกตามค่าใน `.env` (ตอนนี้ = 5 ครั้ง / 15 นาที) |

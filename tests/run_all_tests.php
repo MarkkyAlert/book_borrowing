@@ -26,6 +26,7 @@ echo "║         QA FULL TEST SUITE — " . date('Y-m-d H:i:s') . "          �
 echo "╠══════════════════════════════════════════════════════════╣\n";
 echo "║  Suite 1: Service-Level Tests (PHP direct)              ║\n";
 echo "║  Suite 2: DB Constraint Tests (SQL direct)              ║\n";
+echo "║  Suite 2b: Deadlock Retry Tests (helper logic)          ║\n";
 echo "║  Suite 3: HTTP Integration Tests (curl via Apache)      ║\n";
 echo "║  Suite 4: Upload Security Tests (real files)            ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
@@ -83,6 +84,12 @@ $suiteResults[] = runSuite(
 $suiteResults[] = runSuite(
     'DB Constraint Tests',
     __DIR__ . '/db_constraint_test.php'
+);
+
+// Suite 2b: Deadlock Retry Tests (ไม่ต้องใช้ Apache — ทดสอบตรรกะ helper ล้วน)
+$suiteResults[] = runSuite(
+    'Deadlock Retry Tests',
+    __DIR__ . '/test_deadlock_retry.php'
 );
 
 // Suite 3: HTTP Integration Tests

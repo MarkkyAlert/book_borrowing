@@ -133,61 +133,65 @@ class BorrowService
         $dueDate = date('Y-m-d', strtotime("+{$borrowDays} days"));
 
         // 📝 Step 4: เปิด transaction
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($userId, $bookIds, $borrowDate, $dueDate) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 5: ล็อค User Row ก่อน — ป้องกัน race condition
-            //    เช่น admin 2 คนกดยืมให้ member เดียวกันพร้อมกัน
-            $this->userRepo->lockById($userId);
+            try {
+                // 🔒 Step 5: ล็อค User Row ก่อน — ป้องกัน race condition
+                //    เช่น admin 2 คนกดยืมให้ member เดียวกันพร้อมกัน
+                $this->userRepo->lockById($userId);
 
-            // 📝 Step 6: ตรวจโควต้า (FOR UPDATE lock บน borrows)
-            //    ⚙️ แก้เล่มสูงสุด → config.php → MAX_BORROW_BOOKS
-            //    🛡️ นับ pending reservations ด้วย — เพราะจะกลายเป็น borrow เมื่อ approve
-            //    ป้องกัน: admin สร้าง borrow จนเต็ม → approve reservation ไม่ได้
-            $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
-            $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
-            $availableSlots = MAX_BORROW_BOOKS - $currentBorrows - $pendingReservations;
+                // 📝 Step 6: ตรวจโควต้า (FOR UPDATE lock บน borrows)
+                //    ⚙️ แก้เล่มสูงสุด → config.php → MAX_BORROW_BOOKS
+                //    🛡️ นับ pending reservations ด้วย — เพราะจะกลายเป็น borrow เมื่อ approve
+                //    ป้องกัน: admin สร้าง borrow จนเต็ม → approve reservation ไม่ได้
+                $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
+                $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
+                $availableSlots = MAX_BORROW_BOOKS - $currentBorrows - $pendingReservations;
 
-            if ($availableSlots <= 0) {
-                throw new Exception('ผู้ยืมถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
-            }
-
-            if (count($bookIds) > $availableSlots) {
-                throw new Exception("ผู้ยืมสามารถยืมได้อีก {$availableSlots} เล่มเท่านั้น");
-            }
-
-            // 📝 Step 7: วน loop ยืมทีละเล่ม (ภายใน transaction เดียวกัน)
-            //    🛡️ [ATOMIC] ถ้าเล่มใดยืมไม่ได้ → throw Exception → rollback ทั้งหมด
-            $borrowedBooks = [];
-
-            foreach ($bookIds as $bookId) {
-                // 🔄 borrowSingleBook: lock book → check available → decrement → insert
-                $result = $this->borrowSingleBook($userId, $bookId, $borrowDate, $dueDate);
-
-                if ($result['success']) {
-                    $borrowedBooks[] = $result['title'];
-                } else {
-                    // 🛡️ [ATOMIC] เล่มใดพัง → rollback ทั้งหมด (ไม่ใช่ skip)
-                    throw new Exception('ไม่สามารถยืมได้: ' . $result['reason']);
+                if ($availableSlots <= 0) {
+                    throw new Exception('ผู้ยืมถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
                 }
+
+                if (count($bookIds) > $availableSlots) {
+                    throw new Exception("ผู้ยืมสามารถยืมได้อีก {$availableSlots} เล่มเท่านั้น");
+                }
+
+                // 📝 Step 7: วน loop ยืมทีละเล่ม (ภายใน transaction เดียวกัน)
+                //    🛡️ [ATOMIC] ถ้าเล่มใดยืมไม่ได้ → throw Exception → rollback ทั้งหมด
+                $borrowedBooks = [];
+
+                foreach ($bookIds as $bookId) {
+                    // 🔄 borrowSingleBook: lock book → check available → decrement → insert
+                    $result = $this->borrowSingleBook($userId, $bookId, $borrowDate, $dueDate);
+
+                    if ($result['success']) {
+                        $borrowedBooks[] = $result['title'];
+                    } else {
+                        // 🛡️ [ATOMIC] เล่มใดพัง → rollback ทั้งหมด (ไม่ใช่ skip)
+                        throw new Exception('ไม่สามารถยืมได้: ' . $result['reason']);
+                    }
+                }
+
+                $this->pdo->commit();
+
+                // 📤 คืนผลรวม: สำเร็จทุกเล่ม (atomic — ไม่มี skipped)
+                return [
+                    'success' => true,
+                    'borrowed' => $borrowedBooks,
+                    'skipped' => [],
+                    'due_date' => $dueDate,
+                    'message' => $this->buildBorrowMessage($borrowedBooks, [], $dueDate)
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback ทั้งหมด → stock ไม่ถูกหัก + ไม่มี borrow record
+                $this->pdo->rollBack();
+                error_log("[BorrowService::createBorrow] userId={$userId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            $this->pdo->commit();
-
-            // 📤 คืนผลรวม: สำเร็จทุกเล่ม (atomic — ไม่มี skipped)
-            return [
-                'success' => true,
-                'borrowed' => $borrowedBooks,
-                'skipped' => [],
-                'due_date' => $dueDate,
-                'message' => $this->buildBorrowMessage($borrowedBooks, [], $dueDate)
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback ทั้งหมด → stock ไม่ถูกหัก + ไม่มี borrow record
-            $this->pdo->rollBack();
-            error_log("[BorrowService::createBorrow] userId={$userId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'BorrowService::createBorrow');
     }
 
     /**
@@ -216,47 +220,51 @@ class BorrowService
      */
     public function returnBook(int $borrowId, bool $payNow = false, ?int $recordedBy = null): array
     {
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $payNow, $recordedBy) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE + WHERE status='borrowing')
-            //    ป้องกันคืนซ้ำ: ถ้าสถานะเป็น 'returned' แล้ว → query คืน null
-            $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
+            try {
+                // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE + WHERE status='borrowing')
+                //    ป้องกันคืนซ้ำ: ถ้าสถานะเป็น 'returned' แล้ว → query คืน null
+                $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
 
-            if (!$borrow) {
-                throw new Exception('ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการยืมหรือคืนหนังสือแล้ว');
+                }
+
+                // 📝 Step 2: คำนวณค่าปรับ (วันเกิน × FINE_PER_DAY)
+                $fine = $this->calculateFine($borrow['due_date'], date('Y-m-d'));
+
+                // 📝 Step 3: 3 writes ใน 1 transaction (atomic)
+                //    3a. เปลี่ยน status borrowing → returned + บันทึกค่าปรับ
+                $this->borrowRepo->markAsReturned($borrowId, $fine['amount']);
+                //    3b. คืน stock +1
+                $this->bookRepo->incrementAvailable($borrow['book_id']);
+
+                //    3c. บันทึก payment เฉพาะจ่ายทันที
+                //    🛡️ UNIQUE บน borrow_id ป้องกันจ่ายซ้ำในระดับ DB
+                if ($payNow && $fine['amount'] > 0) {
+                    $this->paymentRepo->create($borrowId, $fine['amount'], $recordedBy);
+                }
+
+                $this->pdo->commit();
+
+                // 📤 คืนผล: สำเร็จ + ค่าปรับ + จ่ายแล้วหรือยัง
+                return [
+                    'success' => true,
+                    'fine' => $fine,
+                    'paid' => $payNow && $fine['amount'] > 0,
+                    'message' => $this->buildReturnMessage($fine, $payNow)
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → status ยังเป็น borrowing + stock ไม่ถูกคืน
+                $this->pdo->rollBack();
+                error_log("[BorrowService::returnBook] borrowId={$borrowId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            // 📝 Step 2: คำนวณค่าปรับ (วันเกิน × FINE_PER_DAY)
-            $fine = $this->calculateFine($borrow['due_date'], date('Y-m-d'));
-
-            // 📝 Step 3: 3 writes ใน 1 transaction (atomic)
-            //    3a. เปลี่ยน status borrowing → returned + บันทึกค่าปรับ
-            $this->borrowRepo->markAsReturned($borrowId, $fine['amount']);
-            //    3b. คืน stock +1
-            $this->bookRepo->incrementAvailable($borrow['book_id']);
-
-            //    3c. บันทึก payment เฉพาะจ่ายทันที
-            //    🛡️ UNIQUE บน borrow_id ป้องกันจ่ายซ้ำในระดับ DB
-            if ($payNow && $fine['amount'] > 0) {
-                $this->paymentRepo->create($borrowId, $fine['amount'], $recordedBy);
-            }
-
-            $this->pdo->commit();
-
-            // 📤 คืนผล: สำเร็จ + ค่าปรับ + จ่ายแล้วหรือยัง
-            return [
-                'success' => true,
-                'fine' => $fine,
-                'paid' => $payNow && $fine['amount'] > 0,
-                'message' => $this->buildReturnMessage($fine, $payNow)
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback → status ยังเป็น borrowing + stock ไม่ถูกคืน
-            $this->pdo->rollBack();
-            error_log("[BorrowService::returnBook] borrowId={$borrowId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'BorrowService::returnBook');
     }
 
     /**
@@ -369,47 +377,51 @@ class BorrowService
      */
     public function payFine(int $borrowId, ?int $recordedBy = null): array
     {
-        $this->pdo->beginTransaction();
+        // 🔁 ครอบด้วย retry — deadlock ของ InnoDB ให้ลองใหม่อัตโนมัติ (ดู FINDINGS F-20)
+        //    ปลอดภัยเพราะ closure นี้เปิด/ปิด transaction เองครบ และไม่มี side effect นอก transaction
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $recordedBy) {
+            $this->pdo->beginTransaction();
 
-        try {
-            // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE, ทุก status)
-            //    ใช้ AnyStatus เพราะต้องหา borrow ที่ returned แล้ว (ไม่ใช่ borrowing)
-            //    ป้องกัน 2 คนกดชำระพร้อมกัน
-            $borrow = $this->borrowRepo->findByIdForUpdateAnyStatus($borrowId);
+            try {
+                // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE, ทุก status)
+                //    ใช้ AnyStatus เพราะต้องหา borrow ที่ returned แล้ว (ไม่ใช่ borrowing)
+                //    ป้องกัน 2 คนกดชำระพร้อมกัน
+                $borrow = $this->borrowRepo->findByIdForUpdateAnyStatus($borrowId);
 
-            if (!$borrow) {
-                throw new Exception('ไม่พบรายการยืม');
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการยืม');
+                }
+
+                // 📝 Step 2: ตรวจว่ามีค่าปรับหรือไม่
+                if ($borrow['fine_amount'] <= 0) {
+                    throw new Exception('รายการนี้ไม่มีค่าปรับ');
+                }
+
+                // 📝 Step 3: ตรวจว่าชำระแล้วหรือยัง (ภายใต้ lock)
+                //    🛡️ UNIQUE constraint บน borrow_id เป็นด่านสุดท้าย
+                $existingPayment = $this->paymentRepo->findByBorrowId($borrowId);
+                if ($existingPayment) {
+                    throw new Exception('รายการนี้ชำระค่าปรับแล้ว');
+                }
+
+                // 📝 Step 4: บันทึก payment
+                $this->paymentRepo->create($borrowId, $borrow['fine_amount'], $recordedBy);
+
+                $this->pdo->commit();
+
+                // 📤 คืนผล: สำเร็จ + จำนวนเงิน
+                return [
+                    'success' => true,
+                    'amount' => $borrow['fine_amount'],
+                    'message' => 'รับชำระค่าปรับ ' . number_format($borrow['fine_amount']) . ' บาท เรียบร้อยแล้ว'
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → ไม่มี payment record
+                $this->pdo->rollBack();
+                error_log("[BorrowService::payFine] borrowId={$borrowId} error: " . $e->getMessage());
+                throw $e;
             }
-
-            // 📝 Step 2: ตรวจว่ามีค่าปรับหรือไม่
-            if ($borrow['fine_amount'] <= 0) {
-                throw new Exception('รายการนี้ไม่มีค่าปรับ');
-            }
-
-            // 📝 Step 3: ตรวจว่าชำระแล้วหรือยัง (ภายใต้ lock)
-            //    🛡️ UNIQUE constraint บน borrow_id เป็นด่านสุดท้าย
-            $existingPayment = $this->paymentRepo->findByBorrowId($borrowId);
-            if ($existingPayment) {
-                throw new Exception('รายการนี้ชำระค่าปรับแล้ว');
-            }
-
-            // 📝 Step 4: บันทึก payment
-            $this->paymentRepo->create($borrowId, $borrow['fine_amount'], $recordedBy);
-
-            $this->pdo->commit();
-
-            // 📤 คืนผล: สำเร็จ + จำนวนเงิน
-            return [
-                'success' => true,
-                'amount' => $borrow['fine_amount'],
-                'message' => 'รับชำระค่าปรับ ' . number_format($borrow['fine_amount']) . ' บาท เรียบร้อยแล้ว'
-            ];
-        } catch (Exception $e) {
-            // ❌ rollback → ไม่มี payment record
-            $this->pdo->rollBack();
-            error_log("[BorrowService::payFine] borrowId={$borrowId} error: " . $e->getMessage());
-            throw $e;
-        }
+        }, 'BorrowService::payFine');
     }
 
     // ==================== Private Methods ====================

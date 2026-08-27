@@ -735,6 +735,96 @@ function cleanupIdempotencyKeys(int $maxAgeSeconds = 300): void
 
 /**
  * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจว่า exception นี้เกิดจาก deadlock/lock timeout ของ DB หรือไม่
+ * ==========================================================================
+ *
+ * 📥 Input: @param \Throwable $e
+ * 📤 Output: @return bool true = เป็น deadlock (ลองใหม่ได้)
+ *
+ * 🧠 MySQL/MariaDB คืน 2 กรณีที่ "ลองใหม่แล้วมีโอกาสสำเร็จ":
+ *    - 1213 / SQLSTATE 40001 → Deadlock found
+ *    - 1205 → Lock wait timeout exceeded
+ *    ทั้งคู่ transaction ถูก rollback ไปแล้ว จึงเริ่มใหม่ได้อย่างปลอดภัย
+ *
+ * ⚠️ error อื่นของ DB (เช่น UNIQUE ซ้ำ, FK) ห้าม retry — ลองกี่ครั้งก็ผลเดิม
+ */
+function isDeadlockException(\Throwable $e): bool
+{
+    if (!($e instanceof \PDOException)) {
+        return false;
+    }
+
+    // 📝 errorInfo[1] = driver error code (1213 / 1205), errorInfo[0] = SQLSTATE
+    $driverCode = $e->errorInfo[1] ?? null;
+    $sqlState   = $e->errorInfo[0] ?? ($e->getCode() ?: '');
+
+    return in_array($driverCode, [1213, 1205], true) || $sqlState === '40001';
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: รัน operation ที่มี transaction แล้วลองใหม่อัตโนมัติเมื่อเจอ deadlock
+ * ==========================================================================
+ *
+ * 📥 Input:
+ * @param PDO      $pdo          connection เดียวกับที่ operation ใช้
+ * @param callable $operation    ฟังก์ชันที่ครอบ beginTransaction...commit ไว้ครบในตัว
+ * @param string   $context      ชื่อไว้เขียน log เช่น 'BorrowService::createBorrow'
+ * @param int      $maxAttempts  ลองทั้งหมดกี่ครั้ง (รวมครั้งแรก)
+ *
+ * 📤 Output: @return mixed ค่าที่ operation คืนมา
+ * @throws Exception ข้อความภาษาไทย เมื่อลองครบแล้วยังไม่สำเร็จ หรือเจอ DB error อื่น
+ *
+ * 🧠 ทำไมต้องมี:
+ *    เมื่อเจ้าหน้าที่ 2 คนแย่งหนังสือเล่มสุดท้ายพร้อมกัน InnoDB จะเลือก transaction
+ *    หนึ่งเป็น "เหยื่อ" แล้ว rollback ทิ้ง — เป็นพฤติกรรมปกติที่ MySQL คาดหวังให้ลองใหม่
+ *    ไม่ใช่ข้อผิดพลาดของข้อมูล (วัดแล้วเกิดราว 25% ของการแย่งเล่มสุดท้าย — ดู FINDINGS F-20)
+ *
+ * 🛡️ เงื่อนไขความปลอดภัยที่ต้องรักษาไว้:
+ *    - $operation ต้อง "ครบวงจรในตัวเอง" — เปิด/ปิด transaction เองทั้งหมด
+ *      และห้ามมี side effect นอก transaction (เขียนไฟล์/ส่งเมล) ก่อน commit
+ *      ไม่งั้นการลองใหม่จะทำซ้ำ side effect นั้น
+ *    - retry เฉพาะ deadlock เท่านั้น — error ทางธุรกิจ (หนังสือหมด/เกินโควตา)
+ *      ต้องเด้งออกทันที ไม่ลองใหม่
+ *
+ * 🛡️ [SECURITY] ไม่ปล่อยข้อความดิบของ DB ออกหน้าจอ
+ *    (เดิม SQLSTATE[40001]: Serialization failure... โผล่ให้ผู้ใช้เห็นทั้งที่ APP_DEBUG=false)
+ */
+function runWithDeadlockRetry(PDO $pdo, callable $operation, string $context = '', int $maxAttempts = 3): mixed
+{
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            return $operation();
+        } catch (\PDOException $e) {
+            // 🧹 กัน transaction ค้าง — บาง driver ยังถือว่า transaction เปิดอยู่หลัง deadlock
+            if ($pdo->inTransaction()) {
+                try {
+                    $pdo->rollBack();
+                } catch (\Throwable $ignore) {
+                    // rollback ซ้ำไม่สำเร็จก็ไม่เป็นไร — transaction ถูก DB ยกเลิกไปแล้ว
+                }
+            }
+
+            if (!isDeadlockException($e)) {
+                // 📝 error อื่นของ DB — log ของจริงไว้ แต่ส่งข้อความกลาง ๆ ให้ผู้ใช้
+                error_log("[$context] PDOException: " . $e->getMessage());
+                throw new Exception('เกิดข้อผิดพลาดกับฐานข้อมูล กรุณาลองใหม่อีกครั้ง');
+            }
+
+            if ($attempt >= $maxAttempts) {
+                error_log("[$context] deadlock ยังไม่หายหลังลอง {$maxAttempts} ครั้ง: " . $e->getMessage());
+                throw new Exception('ระบบกำลังมีผู้ใช้งานพร้อมกันจำนวนมาก กรุณาลองใหม่อีกครั้ง');
+            }
+
+            // 📝 หน่วงแบบเพิ่มขึ้นเรื่อย ๆ + สุ่ม เพื่อไม่ให้ทั้งสองฝั่งชนกันซ้ำที่จังหวะเดิม
+            usleep($attempt * 20000 + random_int(0, 20000));
+            error_log("[$context] deadlock — ลองใหม่ครั้งที่ " . ($attempt + 1));
+        }
+    }
+}
+
+/**
+ * ==========================================================================
  * 🎯 จุดประสงค์: จัดรูปแบบค่าปรับ (บาท)
  * ==========================================================================
  * ✅ Use case: formatFine(150) → "150 บาท"
