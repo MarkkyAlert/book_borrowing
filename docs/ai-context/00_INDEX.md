@@ -15,7 +15,7 @@
 | 5 | [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) | "ปลอดภัยแค่ไหน" — control ที่มีจริง + วิธีที่ยืนยัน |
 | 6 | [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) | "ข้อจำกัดคืออะไร" — ขอบเขตที่พูดตรง ๆ |
 | 7 | [WHERE_TO_EDIT_MAP.md](WHERE_TO_EDIT_MAP.md) | "จะแก้ X ต้องแตะไฟล์ไหน" |
-| 8 | [FINDINGS.md](FINDINGS.md) | จุดที่ Context/Comment **ไม่ตรง** กับโค้ด — F-01…F-05, F-08, F-12…F-14 แก้แล้ว · ที่เหลือเป็นข้อมูลเชิงบริบท |
+| 8 | [FINDINGS.md](FINDINGS.md) | จุดที่ Context/Comment **ไม่ตรง** กับโค้ด (F-01…F-19) — แก้แล้ว 14 · เชิงบริบท 4 · ค้าง 1 (F-19) |
 
 ## สรุประบบใน 5 บรรทัด
 
