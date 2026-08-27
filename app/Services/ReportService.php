@@ -195,7 +195,7 @@ class ReportService
      *
      * 📥 Input: @param string|null $date (null = วันนี้)
      */
-    public function getDailyReport(string $date = null): array
+    public function getDailyReport(?string $date = null): array
     {
         // 📝 Pass-through → สถิติรายวัน (null = วันนี้)
         return $this->reportRepo->getDailyReport($date);

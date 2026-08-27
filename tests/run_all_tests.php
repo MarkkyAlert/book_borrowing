@@ -188,7 +188,6 @@ $ch = curl_init(rtrim(APP_URL, '/') . '/login.php');
 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_NOBODY => true]);
 curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
 
 if ($httpCode > 0) {
     $suiteResults[] = runSuite(

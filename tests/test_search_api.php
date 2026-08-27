@@ -30,7 +30,6 @@ function curlRequest($url, $method = 'GET', $data = [])
     $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     $body = substr($response, $headerSize);
 
-    curl_close($ch);
 
     return ['code' => $httpCode, 'body' => $body];
 }

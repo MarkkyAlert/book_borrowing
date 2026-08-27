@@ -65,20 +65,82 @@ function getDB(): PDO
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
-            // 🛡️ [SECURITY] production ซ่อน error details
-            //    ป้องกันแสดง DSN/credentials ให้ผู้ใช้เห็น
-            if (defined('APP_DEBUG') && APP_DEBUG) {
-                die("Database connection failed: " . $e->getMessage());
-            } else {
-                // 📝 เขียน log แทน (ดูใน php error log)
-                error_log("DB Connection Error: " . $e->getMessage());
-                die("ระบบขัดข้อง กรุณาติดต่อผู้ดูแลระบบ");
-            }
+            // 📝 เขียน log เสมอ ไม่ว่าจะโหมดไหน — ผู้ดูแลต้องตามหาสาเหตุได้
+            error_log("DB Connection Error: " . $e->getMessage());
+
+            // 🛡️ [SECURITY] production ซ่อนรายละเอียด ป้องกัน DSN/credentials หลุด
+            $detail = (defined('APP_DEBUG') && APP_DEBUG) ? $e->getMessage() : null;
+            renderDatabaseDownPage($detail);
         }
     }
     
     // 📤 คืน PDO instance เดิม (Singleton)
     return $pdo;
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: แสดงหน้า "ระบบขัดข้อง" แล้วจบการทำงาน
+ * ==========================================================================
+ * 🧠 ทำไมต้องมีหน้านี้ (เดิมใช้ `die("ข้อความ")` เฉย ๆ):
+ *
+ * 1. **ต้องตอบ HTTP 503 ไม่ใช่ 200** — เดิมตอบ 200 ทั้งที่ระบบล่ม
+ *    เครื่องมือ monitoring/uptime จะรายงานว่าเว็บปกติดี ไม่มีใครรู้ว่าล่ม
+ *    และ Google จะเก็บหน้า error ไปเป็นเนื้อหาจริงของเว็บ
+ *    503 + Retry-After บอกว่า "ล่มชั่วคราว เดี๋ยวมาใหม่" ซึ่งตรงกับความจริง
+ *
+ * 2. **ต้องอ่านออกสำหรับคนทั่วไป** — เดิมเป็นข้อความเปล่า ๆ ไม่มี HTML เลย
+ *    ลูกค้าเห็นแล้วคิดว่าเว็บพังยับ ทั้งที่แค่ฐานข้อมูลล่มชั่วคราว
+ *
+ * 🔴 [ข้อบังคับ] หน้านี้ต้องไม่พึ่งอะไรเลยนอกจากตัวมันเอง
+ *    ห้ามเรียกฐานข้อมูล (ล่มอยู่) · ห้ามโหลด CSS/JS จากที่อื่น
+ *    ห้ามใช้ header.php (ซึ่งอาจแตะฐานข้อมูล) — CSS จึงฝังไว้ในไฟล์นี้เลย
+ *
+ * 📥 Input: @param string|null $detail รายละเอียด error (เฉพาะตอน APP_DEBUG=true)
+ */
+function renderDatabaseDownPage(?string $detail = null): void
+{
+    if (!headers_sent()) {
+        http_response_code(503);
+        header('Retry-After: 60');   // 📝 บอก crawler/monitoring ว่าลองใหม่ใน 60 วินาที
+    }
+
+    // 📝 คำขอแบบ AJAX/API ไม่ต้องการหน้า HTML เต็ม — ส่งข้อความสั้นพอ
+    //    (api/search_books.php เอา response ไปแทรกใน DOM โดยตรง)
+    $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+        || (isset($_SERVER['SCRIPT_NAME']) && str_contains($_SERVER['SCRIPT_NAME'], '/api/'));
+    if ($isAjax) {
+        echo '<div style="text-align:center;padding:2rem;color:#b91c1c">ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง</div>';
+        exit;
+    }
+
+    $appName = defined('APP_NAME') ? APP_NAME : 'ระบบยืมคืนหนังสือ';
+    // 🛡️ escape เสมอ — $detail มาจากข้อความของ MySQL ซึ่งอาจมีอักขระพิเศษ
+    $safeName   = htmlspecialchars($appName, ENT_QUOTES, 'UTF-8');
+    $safeDetail = $detail !== null ? htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') : null;
+
+    echo '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">';
+    echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<title>ระบบขัดข้องชั่วคราว - ' . $safeName . '</title><style>';
+    echo 'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;';
+    echo 'background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1e293b}';
+    echo '.box{max-width:32rem;margin:1rem;padding:2.5rem;background:#fff;border:1px solid #e2e8f0;';
+    echo 'border-radius:1rem;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}';
+    echo 'h1{font-size:1.5rem;margin:0 0 .75rem}p{margin:.5rem 0;color:#475569;line-height:1.7}';
+    echo '.icon{font-size:3rem;line-height:1}';
+    echo '.detail{margin-top:1.5rem;padding:1rem;background:#fef2f2;border:1px solid #fecaca;';
+    echo 'border-radius:.5rem;text-align:left;font-family:ui-monospace,monospace;font-size:.8rem;';
+    echo 'color:#991b1b;word-break:break-all}</style></head><body><div class="box">';
+    echo '<div class="icon">🔌</div>';
+    echo '<h1>ระบบขัดข้องชั่วคราว</h1>';
+    echo '<p>ขณะนี้ระบบไม่สามารถเชื่อมต่อฐานข้อมูลได้</p>';
+    echo '<p>กรุณาลองใหม่อีกสักครู่ หรือติดต่อผู้ดูแลระบบ</p>';
+    if ($safeDetail !== null) {
+        echo '<div class="detail"><strong>รายละเอียด (แสดงเพราะเปิด APP_DEBUG):</strong><br>' . $safeDetail;
+        echo '<br><br>⚠️ อย่าลืมตั้ง APP_DEBUG=false กลับหลังแก้ปัญหาเสร็จ</div>';
+    }
+    echo '</div></body></html>';
+    exit;
 }
 
 /**

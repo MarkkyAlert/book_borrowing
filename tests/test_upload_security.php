@@ -75,7 +75,6 @@ function http(string $method, string $url, array $fields = [], bool $multipart =
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    curl_close($ch);
     return ['body' => (string) $body, 'code' => $code, 'type' => $type];
 }
 

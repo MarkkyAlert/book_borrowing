@@ -91,7 +91,6 @@ function http($method, $url, $data = [], $cookies = null) {
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $hdrSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     $err = curl_error($ch);
-    curl_close($ch);
 
     if ($err) return ['error' => $err, 'status' => 0, 'headers' => '', 'body' => '', 'session' => null];
 

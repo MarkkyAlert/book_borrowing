@@ -38,7 +38,6 @@ function curlPost($url, $data, $files = [])
 
     $response = curl_exec($ch);
     $info = curl_getinfo($ch);
-    curl_close($ch);
 
     return ['body' => $response, 'info' => $info];
 }
@@ -52,7 +51,6 @@ function curlGet($url)
     curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     $response = curl_exec($ch);
-    curl_close($ch);
     return $response;
 }
 

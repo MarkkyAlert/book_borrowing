@@ -377,7 +377,7 @@ class ReservationService
      * 📤 Output: @return array
      * ✅ Use case: my_reservations.php
      */
-    public function getUserReservations(int $userId, string $status = null): array
+    public function getUserReservations(int $userId, ?string $status = null): array
     {
         // 📝 Pass-through → reservation ของ user (กรอง status ถ้าระบุ)
         return $this->reservationRepo->findByUser($userId, $status);

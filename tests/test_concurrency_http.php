@@ -78,7 +78,6 @@ function req(string $jar, string $method, string $url, array $fields = []): arra
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($fields));
     }
     $body = curl_exec($ch);
-    curl_close($ch);
     return ['body' => (string) $body];
 }
 
@@ -137,7 +136,6 @@ function fireTogether(array $calls): array
     foreach ($handles as $i => $ch) {
         $out[$i] = (string) curl_multi_getcontent($ch);
         curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
     }
     curl_multi_close($mh);
     return $out;

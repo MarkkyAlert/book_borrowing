@@ -65,7 +65,6 @@ function request($method, $url, $postData = [])
 
     $output = curl_exec($ch);
     $info = curl_getinfo($ch);
-    curl_close($ch);
 
     return ['body' => $output, 'info' => $info];
 }

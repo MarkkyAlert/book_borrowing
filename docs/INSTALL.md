@@ -21,7 +21,7 @@
 
 | รายการ | เวอร์ชันขั้นต่ำ | หมายเหตุ |
 |--------|----------------|----------|
-| **PHP** | 8.1+ | ใช้ `match()`, `str_starts_with()`, named arguments |
+| **PHP** | 8.1+ | ทดสอบจริงบน **8.2.4 และ 8.5.8** · โค้ดใช้ฟีเจอร์ถึงแค่ 8.0 (`match()`, `str_contains()`) แต่ไม่แนะนำ 8.0 เพราะหมดอายุ security support แล้ว |
 | **MySQL** | 5.7+ | หรือ MariaDB 10.3+ (CHECK constraints ทำงานจริงบน MariaDB 10.2.1+ / MySQL 8.0.16+) |
 | **Web Server** | Apache 2.4+ | ต้องเปิด `mod_rewrite` (ถ้าใช้) และรองรับ `.htaccess` |
 | **PHP Extensions** | pdo_mysql, session, mbstring, fileinfo, json | XAMPP มีครบทุกตัวตามค่าเริ่มต้น |

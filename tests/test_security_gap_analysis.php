@@ -75,7 +75,6 @@ function httpRequest(string $url, string $method = 'GET', array $postData = [], 
     $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     $headers = substr($response, 0, $headerSize);
     $body = substr($response, $headerSize);
-    curl_close($ch);
 
     return ['code' => $httpCode, 'body' => $body, 'headers' => $headers, 'cookieFile' => $tmpCookie];
 }

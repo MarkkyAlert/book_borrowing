@@ -103,7 +103,7 @@ class BorrowService
      *
      * ✅ Use case: admin/borrow_form.php POST
      */
-    public function createBorrow(int $userId, array $bookIds, int $borrowDays = null): array
+    public function createBorrow(int $userId, array $bookIds, ?int $borrowDays = null): array
     {
         // 📝 ใช้ค่า default จาก config.php ถ้าไม่ระบุ
         //    ⚙️ แก้จำนวนวันยืม → config.php → DEFAULT_BORROW_DAYS
