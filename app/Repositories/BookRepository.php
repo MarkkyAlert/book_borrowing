@@ -222,8 +222,14 @@ class BookRepository
         // 📝 SQL: SELECT หนังสือ + LEFT JOIN หมวดหมู่
         // LEFT JOIN = หนังสือที่ไม่มีหมวดหมู่ก็แสดง (category_name = null)
         // $whereSQL + $orderBy มาจาก whitelist → ปลอดภัย
+        // 📊 subquery 3 ตัวสำหรับ "ลบได้หรือไม่" — ตรงกับ guard ใน BookService::deleteBook()
+        //    ดึงมาพร้อมกันทีเดียวเพื่อไม่ให้หน้า list ยิง query ต่อแถว (N+1)
+        //    ⚠️ ถ้าเพิ่ม/แก้ guard ใน Service ต้องเพิ่มคอลัมน์ตรงนี้ด้วย
         $stmt = $this->pdo->prepare("
-            SELECT b.*, c.name as category_name 
+            SELECT b.*, c.name as category_name,
+                   (SELECT COUNT(*) FROM borrows br WHERE br.book_id = b.id) as total_borrows,
+                   (SELECT COUNT(*) FROM borrows br WHERE br.book_id = b.id AND br.status = 'borrowing') as active_borrows,
+                   (SELECT COUNT(*) FROM reservations r WHERE r.book_id = b.id AND r.status = 'pending') as pending_reservations
             FROM books b
             LEFT JOIN categories c ON b.category_id = c.id
             {$whereSQL}

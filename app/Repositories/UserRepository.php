@@ -524,7 +524,8 @@ class UserRepository
         $stmt = $this->pdo->prepare("
             SELECT u.*,
                    (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
-                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations
             FROM users u
             {$whereSQL}
             {$havingSQL}

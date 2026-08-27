@@ -212,7 +212,12 @@ require_once __DIR__ . '/header.php';
                                 <a href="book_form.php?id=<?= $book['id'] ?>" class="text-amber-500 hover:text-amber-600 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition-colors inline-block" title="แก้ไข">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <?php if ($book['available'] == $book['quantity']): ?>
+                                <?php
+                                // 🚫 ถามกฎจาก Service — ตรงกับ guard ใน BookService::deleteBook()
+                                //    (เดิมเช็คแค่ available == quantity → ปุ่มเปิดใช้งานทั้งที่ลบไม่ได้)
+                                $deleteBlockedReason = $bookService->getDeleteBlockReason($book);
+                                ?>
+                                <?php if ($deleteBlockedReason === null): ?>
                                     <form method="POST" class="d-inline inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบหนังสือเล่มนี้?', {title: 'ลบหนังสือ', confirmText: 'ลบ', confirmClass: 'danger'})">
                                         <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                         <input type="hidden" name="action" value="delete">
@@ -222,7 +227,7 @@ require_once __DIR__ . '/header.php';
                                         </button>
                                     </form>
                                 <?php else: ?>
-                                    <button class="text-gray-300 border border-gray-200 p-1.5 rounded-lg cursor-not-allowed" disabled title="ไม่สามารถลบได้ เนื่องจากมีผู้ยืมอยู่">
+                                    <button class="text-gray-300 border border-gray-200 p-1.5 rounded-lg cursor-not-allowed" disabled title="<?= e($deleteBlockedReason) ?>">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 <?php endif; ?>

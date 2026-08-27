@@ -247,6 +247,36 @@ class MemberService
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: บอกเหตุผลว่าทำไมลบสมาชิกคนนี้ไม่ได้ (สำหรับแสดงบน UI)
+     * ==========================================================================
+     *
+     * 📥 Input: @param array $member แถวจาก UserRepository::findMembers()
+     *           (ต้องมี total_borrows, active_borrows, pending_reservations)
+     * 📤 Output: @return string|null ข้อความเหตุผล หรือ null = ลบได้
+     *
+     * 🧠 เหตุผล: เงื่อนไขต้องตรงกับ guard ใน deleteMember() เป๊ะ ๆ
+     *   ก่อนหน้านี้หน้า list เช็คแค่ active_borrows ทำให้ปุ่มลบเปิดใช้งาน
+     *   ทั้งที่สมาชิกมีประวัติการยืม → กดแล้วเจอ error ทุกครั้ง
+     *   ⚠️ แก้ guard ใน deleteMember() เมื่อไหร่ ต้องแก้ที่นี่ด้วย
+     *
+     * ✅ Use case: admin/members.php (disable ปุ่มลบ + tooltip บอกเหตุผล)
+     */
+    public function getDeleteBlockReason(array $member): ?string
+    {
+        if (($member['active_borrows'] ?? 0) > 0) {
+            return 'ไม่สามารถลบได้ เนื่องจากกำลังยืมหนังสืออยู่';
+        }
+        if (($member['total_borrows'] ?? 0) > 0) {
+            return 'ไม่สามารถลบได้ เนื่องจากมีประวัติการยืม';
+        }
+        if (($member['pending_reservations'] ?? 0) > 0) {
+            return 'ไม่สามารถลบได้ เนื่องจากมีการจองที่รอดำเนินการ';
+        }
+        return null;
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: อัปเดตรหัสผ่านสมาชิก (admin reset)
      * ==========================================================================
      *
