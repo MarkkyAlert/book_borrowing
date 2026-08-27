@@ -91,6 +91,8 @@
 | `/.installed` | 403 |
 | `/logs/`, `/uploads/covers/` (directory listing) | 403 |
 | `/database/migrate.php` | 403 (CLI guard + `database/.htaccess` กันทั้งโฟลเดอร์ — ดู F-02) |
+| `/.git/config`, `/.git/objects/pack/*.pack` | 404 (แก้แล้ว: `RedirectMatch` ที่ราก — ดู F-30) · เดิมโหลด pack 1.4 MB ได้ = กู้ซอร์สทั้งโปรเจกต์ |
+| `/.gitignore`, ไฟล์ซ่อนอื่น | 403 (`FilesMatch "^\."`) |
 
 > ⚠️ `uploads/.htaccess` ใช้ `php_flag` ซึ่งใช้ได้เฉพาะ **mod_php** — ถ้า deploy บน PHP-FPM/LiteSpeed จะเกิด Internal Server Error หรือถูกเมิน ต้องเปลี่ยนวิธีปิด PHP แทน
 

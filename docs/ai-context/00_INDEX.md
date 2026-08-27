@@ -2,7 +2,7 @@
 
 > เอกสารชุดนี้สร้างจากการอ่าน **Source Code + Database Schema จริง** (ไม่ใช่จากเอกสารเดิม)
 > วันที่ตรวจ: 2026-08-26 | Commit ฐาน: `1453c01`
-> อัปเดตล่าสุด: 2026-08-28 — แก้ F-01…F-05, F-08, F-09, F-12…F-29 แล้ว (ชุดทดสอบ 389/389 · 29 ชุด)
+> อัปเดตล่าสุด: 2026-08-28 — แก้ F-01…F-05, F-08, F-09, F-12…F-30 แล้ว (ชุดทดสอบ 395/395 · 29 ชุด)
 > ✅ ผ่านการทดสอบ **ติดตั้งจาก clone สด** แล้ว — ทั้งติดตั้งใหม่, import ข้อมูลตัวอย่าง และอัปเกรดจากเวอร์ชันเก่า
 > ทุกข้อความในชุดนี้อ้างอิง `file:line` ได้ — ถ้าโค้ดเปลี่ยน เอกสารนี้ต้องอัปเดตตาม
 
@@ -17,7 +17,7 @@
 | 5 | [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) | "ปลอดภัยแค่ไหน" — control ที่มีจริง + วิธีที่ยืนยัน |
 | 6 | [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) | "ข้อจำกัดคืออะไร" — ขอบเขตที่พูดตรง ๆ |
 | 7 | [WHERE_TO_EDIT_MAP.md](WHERE_TO_EDIT_MAP.md) | "จะแก้ X ต้องแตะไฟล์ไหน" |
-| 8 | [FINDINGS.md](FINDINGS.md) | จุดที่ Context/Comment **ไม่ตรง** กับโค้ด + บั๊กที่เจอจากการทดสอบ (F-01…F-29) — แก้แล้ว 25 · เชิงบริบท 4 · ไม่มีค้าง |
+| 8 | [FINDINGS.md](FINDINGS.md) | จุดที่ Context/Comment **ไม่ตรง** กับโค้ด + บั๊กที่เจอจากการทดสอบ (F-01…F-30) — แก้แล้ว 26 · เชิงบริบท 4 · ไม่มีค้าง |
 
 ## สรุประบบใน 5 บรรทัด
 
@@ -25,7 +25,7 @@
 - Layered: `Page/API → Service → Repository → PDO → MySQL` + autoloader ใน `bootstrap.php`
 - 8 Service / 9 Repository / 9 ตาราง / 3 role (admin, staff, member)
 - ทุก write flow สำคัญใช้ **Transaction + `SELECT ... FOR UPDATE`** จริง (ไม่ใช่แค่เคลม)
-- 18,500 บรรทัด PHP + ชุดทดสอบ 389 เคส ใน 29 ชุด (**ผ่าน 389/389**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
+- 18,500 บรรทัด PHP + ชุดทดสอบ 395 เคส ใน 29 ชุด (**ผ่าน 395/395**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
 
 ## ชุดข้อมูลสำหรับทดสอบ
 
@@ -43,7 +43,7 @@ L1/L3 กำกับข้อมูลของตัวเองด้วย `
 | รายการ | ผล |
 |--------|-----|
 | ติดตั้ง (`install.php`) | ✅ สำเร็จ — 9 ตาราง, admin, ตัวอย่าง 5 เล่ม/5 หมวด |
-| Test suite (`php tests/run_all_tests.php 123456`) | **389/389 ผ่าน (100%)** — 29 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~8 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
+| Test suite (`php tests/run_all_tests.php 123456`) | **395/395 ผ่าน (100%)** — 29 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~8 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
 | `.htaccess` ป้องกันไฟล์สำคัญ | ✅ `.env`, `app/`, `includes/*.php`, `tests/`, `database/`, `*.sql`, `*.md`, `.installed` → 403 ทั้งหมด |
 | XSS escaping (probe จริง) | ✅ `?search=<script>` ถูก escape เป็น `&lt;script&gt;` |
 | Rate limit login (probe จริง) | ✅ บล็อกตามค่าใน `.env` (ตอนนี้ = 5 ครั้ง / 15 นาที) |

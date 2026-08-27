@@ -1,12 +1,32 @@
-# [SECURITY] ป้องกันเข้าถึงไฟล์สำคัญโดยตรง
-<FilesMatch "\.(env|example|md|json|lock|log|yml|yaml|ini|bak|sql)$">
+# ===================================================
+# [SECURITY] ป้องกันการเข้าถึงไฟล์/โฟลเดอร์ที่ไม่ควรเปิดสู่เว็บ
+# ===================================================
+
+# 🔴 บล็อกโฟลเดอร์ .git ทั้งก้อน
+# 🧠 ทำไมต้องใช้ RedirectMatch ไม่ใช่ FilesMatch:
+#    FilesMatch ดูแค่ "ชื่อไฟล์ตัวสุดท้าย" ของ path — ไฟล์อย่าง
+#    .git/objects/pack/pack-xxxx.pack มีชื่อไฟล์ที่ไม่ได้ขึ้นต้นด้วยจุด
+#    จึงหลุดทุกกฎ → ดาวน์โหลด pack ได้ทั้งก้อนแล้วกู้ซอร์สโค้ดทั้งโปรเจกต์
+#    RedirectMatch ดูทั้ง URL path จึงกันได้จริง
+# 🧠 ทำไมคืน 404 ไม่ใช่ 403:
+#    403 = "มีอยู่แต่ห้ามดู" ซึ่งเป็นการยืนยันให้ผู้โจมตีรู้ว่ามี .git อยู่จริง
+#    404 = "ไม่มีอะไรตรงนี้" ไม่ให้ข้อมูลอะไรเลย
+RedirectMatch 404 "/\.git(/|$)"
+
+# 🛡️ บล็อกไฟล์ซ่อน (ขึ้นต้นด้วยจุด) เช่น .env, .gitignore, .DS_Store, .installed
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# 🛡️ บล็อกตามนามสกุล — เอกสาร, ไฟล์ตั้งค่า, log, backup, dump ฐานข้อมูล
+<FilesMatch "\.(env|example|md|json|lock|log|yml|yaml|ini|bak|sql|sqlite|db|dist|swp|old|orig)$">
     Require all denied
 </FilesMatch>
 
 # ป้องกัน directory listing
 Options -Indexes
 
-# ป้องกันเข้าถึง .installed lock file
+# ป้องกันเข้าถึง .installed lock file (ซ้ำกับกฎไฟล์ซ่อนด้านบน — เก็บไว้ให้ชัดเจน)
 <Files ".installed">
     Require all denied
 </Files>

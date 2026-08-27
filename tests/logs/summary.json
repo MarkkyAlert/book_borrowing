@@ -1,14 +1,14 @@
 {
-    "run_at": "2026-08-28T00:48:16+07:00",
-    "total": 56,
-    "passed": 56,
+    "run_at": "2026-08-28T00:56:52+07:00",
+    "total": 62,
+    "passed": 62,
     "failed": 0,
     "skipped": 0,
     "pass_rate": "100%",
     "details": [
         {
             "test_id": "HP-01",
-            "timestamp": "2026-08-28T00:48:14+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -16,10 +16,10 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "QA User",
-                    "email": "qa_user_1787852894@test.com",
+                    "email": "qa_user_1787853411@test.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "625436092440a4218d8273481c240105f2443e796b7277c8e893cb0ae4c2b8c1"
+                    "csrf_token": "9ee3288a7f5d87c02b415d89c98402014440e4d35724485555d707d2e2286351"
                 }
             },
             "response": {
@@ -30,7 +30,7 @@
         },
         {
             "test_id": "HP-02",
-            "timestamp": "2026-08-28T00:48:14+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -46,7 +46,7 @@
         },
         {
             "test_id": "HP-03",
-            "timestamp": "2026-08-28T00:48:14+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -62,14 +62,14 @@
         },
         {
             "test_id": "HP-04",
-            "timestamp": "2026-08-28T00:48:14+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/logout.php",
                 "body": {
-                    "csrf_token": "50da7507137f581e145151361824250dbc5e514ae8a4c51b5a33066c863c6c84"
+                    "csrf_token": "e3dd7e00a785e2386e1ef106ee003f2b29165ade9b9d623daf1b02fb70e4a967"
                 }
             },
             "response": {
@@ -80,7 +80,7 @@
         },
         {
             "test_id": "HP-05",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -96,7 +96,7 @@
         },
         {
             "test_id": "HP-06",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -114,7 +114,7 @@
         },
         {
             "test_id": "HP-07",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -130,7 +130,7 @@
         },
         {
             "test_id": "HP-08",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -138,7 +138,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 1,
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -149,7 +149,7 @@
         },
         {
             "test_id": "HP-09",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -157,7 +157,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/cancel_reservation.php",
                 "body": {
                     "id": 1,
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -168,7 +168,7 @@
         },
         {
             "test_id": "HP-10",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -178,7 +178,7 @@
                     "action": "update_profile",
                     "name": "QA User Updated",
                     "phone": "0899999999",
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -189,7 +189,7 @@
         },
         {
             "test_id": "HP-11",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:51+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -200,7 +200,7 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -211,17 +211,17 @@
         },
         {
             "test_id": "HP-12",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/book_form.php",
                 "body": {
-                    "title": "QA Book 1787852894",
+                    "title": "QA Book 1787853411",
                     "author": "QA Author",
                     "quantity": 3,
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -232,7 +232,7 @@
         },
         {
             "test_id": "HP-13",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -240,8 +240,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA_Cat_1787852894",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "name": "QA_Cat_1787853411",
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -252,7 +252,7 @@
         },
         {
             "test_id": "HP-14",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -260,19 +260,19 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/add_member.php",
                 "body": {
                     "name": "QA Member",
-                    "email": "qa_member_1787852894@test.com",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "email": "qa_member_1787853411@test.com",
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
                 "status": 200,
                 "body_length": 244,
-                "body_preview": "{\"success\":true,\"message\":\"\\u0e40\\u0e1e\\u0e34\\u0e48\\u0e21\\u0e2a\\u0e21\\u0e32\\u0e0a\\u0e34\\u0e01\\u0e2a\\u0e33\\u0e40\\u0e23\\u0e47\\u0e08\",\"member\":{\"id\":4305,\"name\":\"QA Member\",\"email\":\"qa_member_1787852894@test.com\",\"phone\":\"\",\"password\":\"u485d3at\"}}"
+                "body_preview": "{\"success\":true,\"message\":\"\\u0e40\\u0e1e\\u0e34\\u0e48\\u0e21\\u0e2a\\u0e21\\u0e32\\u0e0a\\u0e34\\u0e01\\u0e2a\\u0e33\\u0e40\\u0e23\\u0e47\\u0e08\",\"member\":{\"id\":4401,\"name\":\"QA Member\",\"email\":\"qa_member_1787853411@test.com\",\"phone\":\"\",\"password\":\"51yate2d\"}}"
             }
         },
         {
             "test_id": "HP-15",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -288,7 +288,7 @@
         },
         {
             "test_id": "HP-16",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -298,7 +298,7 @@
                     "org_name": "QA Library",
                     "card_color_primary": "#1e3a8a",
                     "card_color_secondary": "#3b82f6",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -309,7 +309,7 @@
         },
         {
             "test_id": "HP-17",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -317,7 +317,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/forgot_password.php",
                 "body": {
                     "email": "nobody@example.com",
-                    "csrf_token": "bb0d88b414e2e977f01afc6de0ff371aed30fb74390a55361a5bed86a08a6fb8"
+                    "csrf_token": "c7f49ff614ffdf8c94a4285b2ea9f4141be1353c93d76906e29bac04b9fc866d"
                 }
             },
             "response": {
@@ -328,7 +328,7 @@
         },
         {
             "test_id": "VL-01",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -339,7 +339,7 @@
                     "email": "",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "f12b84fd6a71759e8093001dfd573df10bd17ad96888c8d95420c81a6e661461"
+                    "csrf_token": "166ac6d188b638c14ba87c37b4563288b61ca487e5fb6297f05349caad2e48aa"
                 }
             },
             "response": {
@@ -350,7 +350,7 @@
         },
         {
             "test_id": "VL-02",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -361,7 +361,7 @@
                     "email": "bad",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "e61f7f4172efb9e7ebf385f587573a96a36e9ba32dba37b7d2bd2d5bcd88a2f7"
+                    "csrf_token": "ac71deb709388bb97e60038042c5a54201fa6c178a22be157730218be03c74ce"
                 }
             },
             "response": {
@@ -372,7 +372,7 @@
         },
         {
             "test_id": "VL-03",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -383,7 +383,7 @@
                     "email": "x@x.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "21ae3d25c5c5e85aea5370a3ed2ca8583096d193e13dc73929e31fedf41d5397"
+                    "csrf_token": "ccc3ae607ab5f22b7cdfe3cfa3dac4a8d570fb1b63b58285ce3d98e957d013a6"
                 }
             },
             "response": {
@@ -394,7 +394,7 @@
         },
         {
             "test_id": "VL-04",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -405,7 +405,7 @@
                     "email": "x@x.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "1dbfbbb6650e982b22c715d6235338d0fb28a7921872dd8b640980c9e3aefd33"
+                    "csrf_token": "e757a519d3976fadbb28d48273f3dd9a5dc8ec19fa35bf8a7b7b9a50669b0bcd"
                 }
             },
             "response": {
@@ -416,7 +416,7 @@
         },
         {
             "test_id": "VL-05",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -424,10 +424,10 @@
                 "url": "http:\/\/localhost\/book_borrowing\/register.php",
                 "body": {
                     "name": "T",
-                    "email": "qa_user_1787852894@test.com",
+                    "email": "qa_user_1787853411@test.com",
                     "password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "f831c33a057bd6b9bcc05a45322ba3861220a47e883232d090f27ff23476e35e"
+                    "csrf_token": "43f9767073ef9ec5e597235c4d511addfee1205ae477723e0557a70e84579156"
                 }
             },
             "response": {
@@ -438,16 +438,16 @@
         },
         {
             "test_id": "VL-06",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
-                    "email": "qa_user_1787852894@test.com",
+                    "email": "qa_user_1787853411@test.com",
                     "password": "***",
-                    "csrf_token": "6daea534c99bcb47f3e79d7830781c07e10b7cab02174059c776d86c87efc6fb"
+                    "csrf_token": "b7153e526c12ca1842f00e9dad4c22ac8d4f507d6c58f69b367f77a389965ea9"
                 }
             },
             "response": {
@@ -458,7 +458,7 @@
         },
         {
             "test_id": "VL-07",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -467,7 +467,7 @@
                 "body": {
                     "email": "ghost@x.com",
                     "password": "***",
-                    "csrf_token": "9b8d812412627ac62333eb6e94b9afd626381460551a83cec2d4e52ecd8d49fe"
+                    "csrf_token": "f0a164df84d0e9f85c316323e214d8dfdc06b6ac34fa3563dd1502bfb0135f1a"
                 }
             },
             "response": {
@@ -478,7 +478,7 @@
         },
         {
             "test_id": "VL-08",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -486,7 +486,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 0,
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -497,7 +497,7 @@
         },
         {
             "test_id": "VL-09",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -505,7 +505,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 99999,
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -516,7 +516,7 @@
         },
         {
             "test_id": "VL-10",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -525,7 +525,7 @@
                 "body": {
                     "action": "update_profile",
                     "name": "",
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -536,7 +536,7 @@
         },
         {
             "test_id": "VL-11",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -547,7 +547,7 @@
                     "current_password": "***",
                     "new_password": "***",
                     "confirm_password": "***",
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -558,7 +558,7 @@
         },
         {
             "test_id": "VL-12",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -568,7 +568,7 @@
                     "title": "",
                     "author": "A",
                     "quantity": 1,
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -579,7 +579,7 @@
         },
         {
             "test_id": "VL-13",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -589,7 +589,7 @@
                     "title": "T",
                     "author": "",
                     "quantity": 1,
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -600,7 +600,7 @@
         },
         {
             "test_id": "VL-14",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 400 OK",
             "request": {
@@ -609,7 +609,7 @@
                 "body": {
                     "name": "T",
                     "email": "bad-email",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -620,7 +620,7 @@
         },
         {
             "test_id": "VL-15",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -629,7 +629,7 @@
                 "body": {
                     "action": "add",
                     "name": "",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -640,7 +640,7 @@
         },
         {
             "test_id": "VL-16",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -648,8 +648,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "add",
-                    "name": "QA_Cat_1787852894",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "name": "QA_Cat_1787853411",
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -660,7 +660,7 @@
         },
         {
             "test_id": "EC-01",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -678,7 +678,7 @@
         },
         {
             "test_id": "EC-02",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -696,7 +696,7 @@
         },
         {
             "test_id": "EC-03",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -712,7 +712,7 @@
         },
         {
             "test_id": "EC-04",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -728,7 +728,7 @@
         },
         {
             "test_id": "EC-05",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -744,7 +744,7 @@
         },
         {
             "test_id": "EC-06",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -752,7 +752,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/api\/reserve_book.php",
                 "body": {
                     "book_id": 1,
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -763,7 +763,7 @@
         },
         {
             "test_id": "EC-07",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -772,7 +772,7 @@
                 "body": {
                     "action": "update_profile",
                     "name": "<img src=x onerror=alert(1)>",
-                    "csrf_token": "75b6ab8c56a068188c9c59800efad2f18cee1db11b851e5d5cb3e757b5d6df7a"
+                    "csrf_token": "89936b77fedd5b8b8d7fd358793c56a3157b3b0feb9848f468bcff771e246297"
                 }
             },
             "response": {
@@ -783,7 +783,7 @@
         },
         {
             "test_id": "EC-07b",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -799,7 +799,7 @@
         },
         {
             "test_id": "EC-08",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -815,7 +815,7 @@
         },
         {
             "test_id": "EC-09",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -823,8 +823,8 @@
                 "url": "http:\/\/localhost\/book_borrowing\/admin\/categories.php",
                 "body": {
                     "action": "delete",
-                    "id": "474",
-                    "csrf_token": "beb5554d4f3a3ddaf8f6f3b8e0ff5aecbc4d18925204916d1af53768ad9bfbad"
+                    "id": "507",
+                    "csrf_token": "c4041d6089e5608d15055e1c31b5d1f2c6efb2be1e2a7c619278c078904e40c6"
                 }
             },
             "response": {
@@ -835,7 +835,7 @@
         },
         {
             "test_id": "EC-10",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -843,7 +843,7 @@
                 "url": "http:\/\/localhost\/book_borrowing\/forgot_password.php",
                 "body": {
                     "email": "doesnotexist@nowhere.com",
-                    "csrf_token": "61d90345aa6d16ac689c368d15a1dacdc5923dd02860e0cefbcbee2933c9bb1d"
+                    "csrf_token": "c7c4c7caf0be15785639d89c85beef409b220f3e3f4b85f578bf350f925bad09"
                 }
             },
             "response": {
@@ -854,7 +854,7 @@
         },
         {
             "test_id": "EC-11",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -872,7 +872,7 @@
         },
         {
             "test_id": "EC-12",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
@@ -888,7 +888,7 @@
         },
         {
             "test_id": "SC-01",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -907,7 +907,7 @@
         },
         {
             "test_id": "SC-02",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -927,7 +927,7 @@
         },
         {
             "test_id": "SC-03",
-            "timestamp": "2026-08-28T00:48:15+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -943,7 +943,7 @@
         },
         {
             "test_id": "SC-04",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -959,7 +959,7 @@
         },
         {
             "test_id": "SC-05",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 405 OK",
             "request": {
@@ -975,7 +975,7 @@
         },
         {
             "test_id": "SC-06",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 403 OK",
             "request": {
@@ -991,16 +991,16 @@
         },
         {
             "test_id": "SC-07",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 200 OK",
             "request": {
                 "method": "POST",
                 "url": "http:\/\/localhost\/book_borrowing\/login.php",
                 "body": {
-                    "email": "qa_ratelimit_1787852894@test.com",
+                    "email": "qa_ratelimit_1787853411@test.com",
                     "password": "***",
-                    "csrf_token": "d3d0162f8cef16245074208b0893c48a5e8795835cdb3db446027d06d5568e72"
+                    "csrf_token": "241903577e16581de3b99dae65c932e50a44d32e61bb2bd2e0be279488464ad6"
                 }
             },
             "response": {
@@ -1011,7 +1011,7 @@
         },
         {
             "test_id": "SC-08",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 302 OK",
             "request": {
@@ -1027,7 +1027,7 @@
         },
         {
             "test_id": "SC-09",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 401 OK",
             "request": {
@@ -1045,7 +1045,7 @@
         },
         {
             "test_id": "SC-10",
-            "timestamp": "2026-08-28T00:48:16+07:00",
+            "timestamp": "2026-08-28T00:56:52+07:00",
             "passed": true,
             "message": "Status 403 OK",
             "request": {
@@ -1060,6 +1060,102 @@
                 "status": 403,
                 "body_length": 42,
                 "body_preview": "{\"success\":false,\"message\":\"Unauthorized\"}"
+            }
+        },
+        {
+            "test_id": "SC-11",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 404 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.git\/config",
+                "body": []
+            },
+            "response": {
+                "status": 404,
+                "body_length": 1027,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Object not found!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
+            }
+        },
+        {
+            "test_id": "SC-12",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 404 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.git\/HEAD",
+                "body": []
+            },
+            "response": {
+                "status": 404,
+                "body_length": 1027,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Object not found!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
+            }
+        },
+        {
+            "test_id": "SC-13",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 404 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.git\/logs\/HEAD",
+                "body": []
+            },
+            "response": {
+                "status": 404,
+                "body_length": 1027,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Object not found!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
+            }
+        },
+        {
+            "test_id": "SC-14",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 404 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.git\/objects\/info\/packs",
+                "body": []
+            },
+            "response": {
+                "status": 404,
+                "body_length": 1027,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Object not found!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
+            }
+        },
+        {
+            "test_id": "SC-15",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 403 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.env",
+                "body": []
+            },
+            "response": {
+                "status": 403,
+                "body_length": 1017,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Access forbidden!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
+            }
+        },
+        {
+            "test_id": "SC-16",
+            "timestamp": "2026-08-28T00:56:52+07:00",
+            "passed": true,
+            "message": "Status 403 OK",
+            "request": {
+                "method": "GET",
+                "url": "http:\/\/localhost\/book_borrowing\/.gitignore",
+                "body": []
+            },
+            "response": {
+                "status": 403,
+                "body_length": 1017,
+                "body_preview": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html PUBLIC \"-\/\/W3C\/\/DTD XHTML 1.0 Strict\/\/EN\"\n  \"http:\/\/www.w3.org\/TR\/xhtml1\/DTD\/xhtml1-strict.dtd\">\n<html xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\" lang=\"en\" xml:lang=\"en\">\n<head>\n<title>Access forbidden!<\/title>\n<link rev=\"made\" href=\"mailto:you@example.com\" \/>\n<style type=\"text\/css\"><!--\/*--><![CDATA[\/*><!--*\/ \n    body { color: #000000; background-color: #FFFFFF; }\n    a:link { color: #0000CC; }\n    p, address {margin-left: 3em;}\n    span {font-si"
             }
         }
     ]
