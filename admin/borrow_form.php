@@ -498,20 +498,55 @@ require_once __DIR__ . '/header.php';
 
                         closeAddMemberModal();
 
-                        // Show success toast
+                        // 🔑 ระบบสุ่มรหัสผ่านให้สมาชิกที่เพิ่มทางนี้ (ฟอร์มด่วนไม่มีช่องรหัสผ่าน)
+                        //    รหัสนี้แสดงได้ "ครั้งเดียว" — hash แล้วดึงกลับไม่ได้ และระบบไม่ส่งอีเมล
+                        //    จึงต้องค้างไว้ให้เจ้าหน้าที่จดก่อน ไม่ปิดเองใน 3 วินาทีแบบ toast ปกติ
+                        const pwd = response.member.password;
                         const toast = document.createElement('div');
-                        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-20 flex items-center';
-                        toast.innerHTML = '<i class="bi bi-check-circle-fill mr-2"></i> เพิ่มสมาชิก "' + response.member.name + '" สำเร็จ';
+                        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-20 max-w-sm';
+
+                        if (pwd) {
+                            toast.innerHTML =
+                                '<div class="flex items-start">' +
+                                    '<i class="bi bi-check-circle-fill mr-2 mt-1"></i>' +
+                                    '<div class="flex-1">' +
+                                        '<div class="font-semibold">เพิ่มสมาชิกสำเร็จ</div>' +
+                                        '<div class="text-sm mt-1 opacity-90"></div>' +
+                                        '<div class="mt-2 bg-white/15 rounded-lg px-3 py-2">' +
+                                            '<div class="text-xs opacity-90">รหัสผ่านเริ่มต้น (แสดงครั้งเดียว — กรุณาจดไว้)</div>' +
+                                            '<div class="font-mono text-lg tracking-wider select-all"></div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<button type="button" class="ml-2 opacity-80 hover:opacity-100" aria-label="ปิด">' +
+                                        '<i class="bi bi-x-lg"></i>' +
+                                    '</button>' +
+                                '</div>';
+                            // 🛡️ ใส่ค่าด้วย textContent — ป้องกัน XSS จากชื่อสมาชิก
+                            toast.querySelector('.text-sm.mt-1').textContent = response.member.name;
+                            toast.querySelector('.font-mono').textContent = pwd;
+                            toast.querySelector('button').onclick = function() {
+                                toast.classList.add('translate-y-20', 'opacity-0');
+                                setTimeout(() => toast.remove(), 300);
+                            };
+                        } else {
+                            toast.className += ' flex items-center';
+                            toast.innerHTML = '<i class="bi bi-check-circle-fill mr-2"></i>';
+                            toast.appendChild(document.createTextNode('เพิ่มสมาชิก "' + response.member.name + '" สำเร็จ'));
+                        }
+
                         document.body.appendChild(toast);
 
                         requestAnimationFrame(() => {
                             toast.classList.remove('translate-y-20', 'opacity-0');
                         });
 
-                        setTimeout(() => {
-                            toast.classList.add('translate-y-20', 'opacity-0');
-                            setTimeout(() => toast.remove(), 300);
-                        }, 3000);
+                        // ไม่มีรหัสผ่านให้จด → ปิดเองตามเดิม
+                        if (!pwd) {
+                            setTimeout(() => {
+                                toast.classList.add('translate-y-20', 'opacity-0');
+                                setTimeout(() => toast.remove(), 300);
+                            }, 3000);
+                        }
 
                     } else {
                         alert.removeClass('hidden').addClass('flex');

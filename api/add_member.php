@@ -49,7 +49,12 @@ try {
         'phone' => trim($_POST['phone'] ?? '')
     ]);
     
-    // 📤 คืน JSON สำเร็จ (ไม่คืน password — เพราะ quick add ไม่ต้องแสดง)
+    // 📤 คืน JSON สำเร็จ
+    // 🔑 คืนรหัสผ่านที่ระบบสุ่มให้ กลับไปแสดงบนหน้าจอ "ครั้งเดียว"
+    //    ⚠️ endpoint นี้ไม่ได้ส่ง password เข้าไป → MemberService จะสุ่มให้เสมอ
+    //       ถ้าไม่คืนค่ากลับ จะไม่มีใครรู้รหัสของสมาชิกที่เพิ่งเพิ่ม
+    //       (hash แล้วดึงกลับไม่ได้ + ระบบยังไม่ส่งอีเมล → สมาชิกจะ login ไม่ได้เลย)
+    //    🛡️ ปลอดภัยเพราะ endpoint นี้ผ่าน requireStaffApi() แล้ว — เห็นเฉพาะเจ้าหน้าที่
     echo json_encode([
         'success' => true,
         'message' => 'เพิ่มสมาชิกสำเร็จ',
@@ -57,7 +62,8 @@ try {
             'id' => $result['id'],
             'name' => $result['name'],
             'email' => $result['email'],
-            'phone' => $_POST['phone'] ?? ''
+            'phone' => $_POST['phone'] ?? '',
+            'password' => $result['password']
         ]
     ]);
 } catch (Exception $e) {
