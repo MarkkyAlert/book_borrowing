@@ -245,6 +245,68 @@ APP_URL=https://library.myschool.ac.th
 
 ---
 
+## 5.5 อัปเกรดระบบที่ติดตั้งไปแล้ว
+
+`install.php` ใช้ได้แค่ครั้งแรก — ระบบที่ลูกค้าใช้อยู่แล้วรันซ้ำไม่ได้ (มีล็อคกันไว้)
+เวลาส่งเวอร์ชันใหม่ที่**เปลี่ยนโครงสร้างฐานข้อมูล** ให้ใช้ระบบ migration แทน
+
+### ขั้นตอนอัปเกรด (ฝั่งลูกค้า)
+
+```bash
+# 1. สำรองฐานข้อมูลก่อนเสมอ (ดูหัวข้อ 9)
+mysqldump -u USER -p DBNAME > backup_ก่อนอัปเกรด.sql
+
+# 2. อัปโหลดไฟล์เวอร์ชันใหม่ทับของเดิม (ยกเว้น .env และ uploads/)
+
+# 3. ดูว่ามีอะไรต้องอัปเดตบ้าง
+php database/migrate.php --status
+
+# 4. รันอัปเดต
+php database/migrate.php
+```
+
+ระบบจำเองว่ารันอะไรไปแล้ว — รันซ้ำได้ไม่มีผลข้างเคียง ถ้าล้มกลางทางจะหยุดที่ไฟล์นั้น
+แก้แล้วรันใหม่ ระบบจะทำต่อจากจุดที่ค้าง
+
+> ถ้าเข้า command line ไม่ได้ (shared hosting บางเจ้า) ให้ export คำสั่ง SQL จากไฟล์ migration
+> ไปรันใน phpMyAdmin ด้วยตนเอง แล้วเพิ่มแถวใน `schema_migrations` เองเพื่อบันทึกว่ารันแล้ว
+
+### ขั้นตอนออกเวอร์ชันใหม่ (ฝั่งผู้พัฒนา)
+
+เมื่อต้องเปลี่ยนโครงสร้างฐานข้อมูล ต้องแก้ **3 ที่ให้ตรงกัน**:
+
+| ไฟล์ | เพื่ออะไร |
+|------|-----------|
+| `database/migrations/YYYY_MM_DD_NNNNNN_ชื่อ.php` | ให้ระบบที่ติดตั้งไปแล้วอัปเดตตาม |
+| `install.php` | ให้การติดตั้งใหม่ได้โครงสร้างล่าสุดตั้งแต่แรก |
+| `database/schema.sql` | ให้คนที่สร้าง DB เองด้วยมือได้โครงสร้างตรงกัน |
+
+รูปแบบไฟล์ migration:
+
+```php
+<?php
+return function (PDO $pdo): string {
+    // ต้องเช็คก่อนเสมอ — migration ต้องรันซ้ำได้โดยไม่พัง
+    if ($pdo->query("SHOW COLUMNS FROM `books` LIKE 'new_column'")->rowCount() > 0) {
+        return 'มีคอลัมน์อยู่แล้ว — ข้าม';
+    }
+    $pdo->exec("ALTER TABLE `books` ADD COLUMN `new_column` INT NOT NULL DEFAULT 0");
+    return 'เพิ่มคอลัมน์ new_column แล้ว';
+};
+```
+
+⚠️ MySQL ไม่รองรับ DDL ใน transaction (`ALTER TABLE` จะ commit ทันที) — ถ้า migration
+ต้องทำหลายขั้น ให้เขียนแยกเป็นขั้นที่เช็คสถานะได้ทีละขั้น ไม่ใช่หวังว่าจะ rollback ได้
+
+### ล็อคติดตั้งซ้ำ
+
+ระบบล็อค 2 ชั้น: ไฟล์ `.installed` และแถว `installed_at` ในตาราง `settings`
+
+ชั้น DB มีไว้เพราะบาง server รัน PHP คนละ user กับเจ้าของไฟล์ ทำให้เขียน `.installed` ไม่ได้
+ถ้าเจอกรณีนั้น ตัวติดตั้งจะเตือนไว้ท้ายผลการติดตั้ง — **ยังควรลบ `install.php` ทิ้งอยู่ดี**
+
+---
+
 ## 6. Post-Deployment Verification
 
 ### Checklist ทดสอบหลัง Deploy

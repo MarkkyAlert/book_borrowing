@@ -89,7 +89,7 @@
 | `/README.md` | 403 |
 | `/.installed` | 403 |
 | `/logs/`, `/uploads/covers/` (directory listing) | 403 |
-| `/database/add_is_visible.php` | 403 (แก้แล้ว: CLI guard + `database/.htaccess` — ดู F-02) |
+| `/database/migrate.php` | 403 (CLI guard + `database/.htaccess` กันทั้งโฟลเดอร์ — ดู F-02) |
 
 > ⚠️ `uploads/.htaccess` ใช้ `php_flag` ซึ่งใช้ได้เฉพาะ **mod_php** — ถ้า deploy บน PHP-FPM/LiteSpeed จะเกิด Internal Server Error หรือถูกเมิน ต้องเปลี่ยนวิธีปิด PHP แทน
 

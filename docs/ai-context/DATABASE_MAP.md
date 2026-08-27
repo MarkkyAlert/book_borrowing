@@ -106,7 +106,7 @@ key-value ธรรมดา ใช้จริงแค่ 3 key: `org_name`, `
 
 1. `database/schema.sql` (สำหรับ import มือ)
 2. `install.php` (สำหรับติดตั้งอัตโนมัติ) ← **มักลืม**
-3. Migration script ใน `database/` สำหรับคนที่ติดตั้งไปแล้ว (แบบ `add_is_visible.php`)
+3. ไฟล์ migration ใน `database/migrations/` สำหรับคนที่ติดตั้งไปแล้ว (รันด้วย `php database/migrate.php` — ดู DEPLOYMENT.md §5.5)
 4. Repository ที่ INSERT/UPDATE คอลัมน์นั้น
 5. Report / Import / Export ที่อ้างคอลัมน์
 6. `docs/ARCHITECTURE.md` + `docs/ai-context/DATABASE_MAP.md` (เอกสารชุดนี้)

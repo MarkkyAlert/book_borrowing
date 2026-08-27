@@ -11,10 +11,33 @@
 require_once __DIR__ . '/includes/config.php';
 
 // =====================================================
-// 🔒 INSTALL LOCK — ป้องกันการติดตั้งซ้ำ (ตรวจไฟล์ .installed)
+// 🔒 INSTALL LOCK — ป้องกันการติดตั้งซ้ำ (2 ชั้น)
 // =====================================================
+// 🛡️ [SECURITY] ล็อค 2 ชั้นเพราะชั้นไฟล์อย่างเดียวไม่พอ:
+//    ถ้า web server รันคนละ user กับเจ้าของไฟล์ (เช่น Apache = daemon/www-data)
+//    จะเขียน .installed ไม่ได้ → ตัวติดตั้งขึ้นว่า "สำเร็จ" แต่ไม่ได้ล็อกตัวเอง
+//    → ใครก็เปิด install.php ซ้ำแล้วสร้างบัญชี admin ของตัวเองได้
+//    ชั้นที่ 2 จึงเก็บสถานะไว้ในตาราง settings ซึ่งเขียนได้แน่นอน (ตัวติดตั้งเพิ่งเขียน DB มา)
 $lockFile = __DIR__ . '/.installed';
-$isInstalled = file_exists($lockFile);
+
+/**
+ * 🎯 ตรวจจาก DB ว่าเคยติดตั้งไปแล้วหรือยัง
+ * 🧠 ครั้งแรกสุด database/ตารางยังไม่มี → ต่อไม่ได้ ถือว่ายังไม่ติดตั้ง
+ */
+function isInstalledInDatabase(): bool
+{
+    try {
+        $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'installed_at' LIMIT 1");
+        return $stmt !== false && $stmt->fetchColumn() !== false;
+    } catch (\Throwable $e) {
+        // 📝 ยังไม่มี database/ตาราง settings → ยังไม่เคยติดตั้ง
+        return false;
+    }
+}
+
+$isInstalled = file_exists($lockFile) || isInstalledInDatabase();
 
 // ถ้าติดตั้งแล้ว แสดงข้อความเตือน
 if ($isInstalled) {
@@ -303,9 +326,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $messages[] = "✅ เพิ่มหนังสือตัวอย่าง " . count($books) . " เล่ม";
 
-        // 🔒 สร้าง lock file ป้องกันติดตั้งซ้ำ (จะถูกตรวจตอนเข้าหน้าครั้งถัดไป)
-        //    ถ้าอยากติดตั้งใหม่ ให้ลบ .installed หรือเพิ่ม ?force=1
-        file_put_contents($lockFile, date('Y-m-d H:i:s') . "\nInstalled successfully.");
+        // 📝 บันทึกว่า migration ทุกไฟล์ "รันแล้ว" โดยไม่ต้องรันจริง (baseline)
+        //    🧠 ตารางที่ install.php สร้างเป็นโครงสร้างล่าสุดอยู่แล้ว ถ้าไม่ทำ baseline
+        //       ระบบที่ติดตั้งใหม่จะพยายามรัน migration เก่าซ้ำ (ไม่พังเพราะเขียนให้รันซ้ำได้
+        //       แต่ทำให้ log สับสนว่าเพิ่งอัปเกรดมา)
+        //    ดูรายละเอียดที่ database/migrate.php
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `schema_migrations` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `migration` VARCHAR(191) NOT NULL UNIQUE COMMENT 'ชื่อไฟล์ migration',
+                `applied_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $migrationFiles = glob(__DIR__ . '/database/migrations/*.php') ?: [];
+        $markStmt = $pdo->prepare("INSERT IGNORE INTO schema_migrations (migration) VALUES (?)");
+        foreach ($migrationFiles as $file) {
+            $markStmt->execute([basename($file)]);
+        }
+        $messages[] = "✅ ตั้งค่าเวอร์ชันฐานข้อมูล (" . count($migrationFiles) . " migration)";
+
+        // 🔒 ล็อคชั้นที่ 1: เก็บใน DB — เขียนได้เสมอ ไม่ขึ้นกับสิทธิ์ไฟล์
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('installed_at', ?)
+                       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")
+            ->execute([date('Y-m-d H:i:s')]);
+
+        // 🔒 ล็อคชั้นที่ 2: ไฟล์ .installed (ตรวจได้เร็วโดยไม่ต้องต่อ DB)
+        //    ⚠️ เขียนไม่ได้ถ้า web server รันคนละ user กับเจ้าของโฟลเดอร์ — ต้องเตือนให้รู้
+        //       ไม่งั้นจะเข้าใจผิดว่าล็อคแล้วทั้งที่ยังไม่ได้ล็อค
+        $lockWritten = @file_put_contents($lockFile, date('Y-m-d H:i:s') . "\nInstalled successfully.") !== false;
+        if (!$lockWritten) {
+            $messages[] = "⚠️ เขียนไฟล์ .installed ไม่ได้ (web server ไม่มีสิทธิ์เขียนโฟลเดอร์นี้)";
+            $messages[] = "   ระบบล็อคด้วยข้อมูลใน database แทนแล้ว — แต่ควรลบ install.php ทิ้งเพื่อความปลอดภัย";
+        }
 
         $success = true;
         $messages[] = "";
