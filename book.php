@@ -202,7 +202,7 @@ require_once __DIR__ . '/includes/header.php';
                                         // Re-enable button on network error
                                         if (btn) {
                                             btn.disabled = false;
-                                            btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน 2 วัน)';
+                                            btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน <?= RESERVATION_EXPIRE_DAYS ?> วัน)';
                                         }
                                     });
                                 });

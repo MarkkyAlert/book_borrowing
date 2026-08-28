@@ -4,9 +4,16 @@
  * 
  * ⭐ สำหรับคนมาใหม่:
  * - หน้านี้จัดการค่า settings ที่เก็บใน DB (ตาราง settings)
- * - ปัจจุบันมี: ชื่อหน่วยงาน (org_name), สีบัตรสมาชิก (card_color_*)
+ * - มี 2 ฟอร์มแยกกัน แยกด้วย hidden field `form`:
+ *     form=rules → กฎการยืม-คืน (ค่าปรับ/วันยืม/โควตา/วันหมดอายุการจอง)
+ *     form=card  → บัตรสมาชิก (ชื่อหน่วยงาน + สี 2 สี)
  * - สิทธิ์: admin เท่านั้น (staff แก้ไม่ได้)
- * - ค่าเหล่านี้ต่างจาก .env config — .env คือค่าระบบ, settings คือค่าที่ admin ปรับได้
+ * 
+ * 🧠 กฎการยืมต่างจากค่าอื่นตรงที่อ่านเรียง 3 ชั้น: settings → .env → default
+ *    ทะเบียนกฎ (label/หน่วย/min/max) อยู่ที่ ruleDefinitions() ใน includes/rules.php
+ *    **ที่เดียว** — หน้านี้ทั้งสร้างฟอร์มและตรวจค่าจากทะเบียนตัวเดียวกัน
+ *    จะได้ไม่มีทางที่ฟอร์มยอมรับค่าที่ระบบเอาไปใช้ไม่ได้
+ *    ⚙️ เพิ่มกฎใหม่ → เพิ่มใน ruleDefinitions() อย่างเดียว หน้านี้ไม่ต้องแก้
  * 
  * 📂 Flow:
  * 1. POST → validate + บันทึกผ่าน SettingsRepository::set() (upsert)
@@ -23,6 +30,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🛡️ [SECURITY] CSRF — ป้องกันถูกหลอกให้เปลี่ยนค่าระบบโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
+    } elseif (($_POST['form'] ?? 'card') === 'rules') {
+        // ══════════════════════════════════════════════════
+        // 📥 ฟอร์ม "กฎการยืม-คืน"
+        // ══════════════════════════════════════════════════
+        // 🧠 วนตามทะเบียนกฎ — ไม่ hardcode ชื่อ field ทีละอัน
+        //    เพิ่มกฎใหม่ใน ruleDefinitions() แล้วส่วนนี้รองรับเองทันที
+        $errors  = [];
+        $toSave  = [];
+
+        foreach (ruleDefinitions() as $constant => $rule) {
+            $raw = trim((string) ($_POST[$rule['setting']] ?? ''));
+
+            if ($raw === '') {
+                $errors[] = 'กรุณากรอก' . $rule['label'];
+                continue;
+            }
+            // 🛡️ [VALIDATION] ต้องเป็นจำนวนเต็มไม่ติดลบเท่านั้น
+            //    ctype_digit ปฏิเสธทั้งค่าติดลบ ทศนิยม และตัวอักษรในคราวเดียว
+            if (!ctype_digit($raw)) {
+                $errors[] = $rule['label'] . ' ต้องเป็นตัวเลขจำนวนเต็ม';
+                continue;
+            }
+
+            $value = (int) $raw;
+            if ($value < $rule['min'] || $value > $rule['max']) {
+                $errors[] = sprintf(
+                    '%s ต้องอยู่ระหว่าง %s ถึง %s %s',
+                    $rule['label'],
+                    number_format($rule['min']),
+                    number_format($rule['max']),
+                    $rule['unit']
+                );
+                continue;
+            }
+
+            $toSave[$rule['setting']] = (string) $value;
+        }
+
+        if (!empty($errors)) {
+            setFlash('error', implode(' | ', $errors));
+        } else {
+            foreach ($toSave as $key => $value) {
+                updateSetting($key, $value);
+            }
+            setFlash('success', 'บันทึกกฎการยืม-คืนเรียบร้อยแล้ว — มีผลกับรายการที่บันทึกหลังจากนี้');
+        }
+        redirect('settings.php');
     } else {
         // 📥 รับค่าจาก form + validate ก่อนบันทึก
         $orgName = trim($_POST['org_name'] ?? '');
@@ -78,8 +132,61 @@ require_once __DIR__ . '/header.php';
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Settings Form -->
-    <div class="lg:col-span-2">
+    <!-- Settings Forms -->
+    <div class="lg:col-span-2 space-y-6">
+
+        <!-- ══ กฎการยืม-คืน ══ -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h5 class="font-bold text-gray-800 flex items-center">
+                    <i class="bi bi-sliders mr-2 text-primary-600"></i>กฎการยืม-คืน
+                </h5>
+                <p class="text-xs text-gray-500 mt-0.5">แก้แล้วมีผลกับรายการที่บันทึกหลังจากนี้ — ไม่ย้อนไปแก้รายการเดิม</p>
+            </div>
+
+            <div class="p-6">
+                <form method="POST" class="space-y-6">
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <input type="hidden" name="form" value="rules">
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <?php foreach (ruleDefinitions() as $constant => $rule): ?>
+                            <div>
+                                <label for="<?= e($rule['setting']) ?>" class="block text-sm font-medium text-gray-700 mb-1">
+                                    <?= e($rule['label']) ?>
+                                </label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="number"
+                                           id="<?= e($rule['setting']) ?>"
+                                           name="<?= e($rule['setting']) ?>"
+                                           value="<?= e((string) constant($constant)) ?>"
+                                           min="<?= (int) $rule['min'] ?>"
+                                           max="<?= (int) $rule['max'] ?>"
+                                           step="1" required
+                                           class="flex-1 rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm">
+                                    <span class="text-sm text-gray-500 whitespace-nowrap w-10"><?= e($rule['unit']) ?></span>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500"><?= e($rule['help']) ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-800 leading-relaxed">
+                        <i class="bi bi-info-circle mr-1"></i>
+                        ค่าที่กรอกที่นี่จะถูกใช้ก่อนค่าในไฟล์ตั้งค่าของระบบเสมอ
+                        ถ้าอยากกลับไปใช้ค่าเดิมของผู้ติดตั้ง ให้ติดต่อผู้ดูแลระบบเพื่อล้างค่าที่บันทึกไว้
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-100 flex justify-end">
+                        <button type="submit" class="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl shadow-lg shadow-primary-500/30 transition-all transform hover:scale-105">
+                            <i class="bi bi-save mr-2"></i>บันทึกกฎการยืม-คืน
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ══ บัตรสมาชิก ══ -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <h5 class="font-bold text-gray-800">ตั้งค่าบัตรสมาชิก (Member Card)</h5>
@@ -88,6 +195,7 @@ require_once __DIR__ . '/header.php';
             <div class="p-6">
                 <form method="POST" class="space-y-6">
                     <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <input type="hidden" name="form" value="card">
                     
                     <div>
                         <label for="org_name" class="block text-sm font-medium text-gray-700 mb-1">
