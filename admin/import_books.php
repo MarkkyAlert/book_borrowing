@@ -84,6 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $isbn = trim($row[2] ?? '');
                         $categoryName = trim($row[3] ?? 'General');
                         $qty = max(1, (int)($row[4] ?? 1));
+                        // 📚 คอลัมน์ที่ 6 (ไม่บังคับ) — หนังสืออ้างอิง อ่านในห้องสมุดเท่านั้น
+                        //    วางไว้ท้ายสุดเพื่อให้ไฟล์ CSV เดิมของลูกค้าใช้ได้เหมือนเดิม (ไม่มี = 0)
+                        //    รับได้ทั้ง 1 / yes / y / true / ใช่ เผื่อคนกรอกคนละแบบ
+                        $refRaw = strtolower(trim($row[5] ?? ''));
+                        $isReference = in_array($refRaw, ['1', 'yes', 'y', 'true', 'ใช่'], true) ? 1 : 0;
                         
                         // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ book_form.php)
                         $bookErrors = validateBookData(['title' => $title, 'author' => $author, 'isbn' => $isbn]);
@@ -129,7 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                                 'author' => $author,
                                 'isbn' => $isbn ?: null,
                                 'category_id' => $categoryId,
-                                'quantity' => $qty
+                                'quantity' => $qty,
+                                'is_reference' => $isReference
                             ]);
                             $createdCount++;
                         }
@@ -189,15 +195,20 @@ require_once __DIR__ . '/header.php';
                 <h4 class="text-sm font-bold text-gray-700 mb-2">1. เตรียมไฟล์ CSV</h4>
                 <p class="text-sm text-gray-600 mb-2">สร้างไฟล์ CSV โดยมีคอลัมน์เรียงตามลำดับดังนี้:</p>
                 <div class="bg-gray-800 text-gray-200 p-3 rounded-lg font-mono text-xs overflow-x-auto mb-3">
-                    Title, Author, ISBN, Category, Quantity
+                    Title, Author, ISBN, Category, Quantity, Reference
                 </div>
                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm">
                     <strong>ตัวอย่างข้อมูล:</strong><br>
-                    Harry Potter, J.K. Rowling, 978-1234567890, Fantasy, 5<br>
-                    Clean Code, Robert C. Martin, , Computer, 3
+                    ปลายฝนต้นหนาว, สมชาย ใจดี, 9786161234567, นวนิยาย, 5<br>
+                    พจนานุกรมไทย ฉบับราชบัณฑิตยสถาน, ราชบัณฑิตยสถาน, , หนังสืออ้างอิง, 2, 1
+                    <p class="text-xs text-gray-500 mt-2">
+                        คอลัมน์สุดท้าย <strong>Reference</strong> ไม่บังคับ — ใส่ <code>1</code>
+                        ถ้าเป็นหนังสืออ้างอิงที่อ่านในห้องสมุดเท่านั้น (ยืม/จองไม่ได้)
+                        ไฟล์เดิมที่ไม่มีคอลัมน์นี้ยังใช้ได้ตามปกติ
+                    </p>
                 </div>
                 <div class="mt-2">
-                    <a href="data:text/csv;charset=utf-8,Title,Author,ISBN,Category,Quantity%0AExample Book,John Doe,123456789,Fiction,5" download="template_books.csv" class="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center">
+                    <a href="data:text/csv;charset=utf-8,Title,Author,ISBN,Category,Quantity,Reference%0AExample Book,John Doe,123456789,Fiction,5,0" download="template_books.csv" class="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center">
                         <i class="bi bi-download mr-1"></i>ดาวน์โหลดเทมเพลต (Template)
                     </a>
                 </div>

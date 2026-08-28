@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS `books` (
     `quantity` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนทั้งหมด',
     `available` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนที่ว่าง',
     `is_visible` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'แสดงให้สาธารณะเห็น',
+    `is_reference` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'หนังสืออ้างอิง — อ่านในห้องสมุดเท่านั้น ยืม/จองไม่ได้',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_available` (`available`),

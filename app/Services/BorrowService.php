@@ -446,6 +446,15 @@ class BorrowService
             return ['success' => false, 'reason' => "หนังสือ ID: {$bookId} ไม่พบ"];
         }
 
+        // 📚 [BUSINESS RULE] หนังสืออ้างอิงยืมออกไม่ได้ — อ่านในห้องสมุดเท่านั้น
+        //    🛡️ ต้องตรวจที่นี่ (Service) ไม่ใช่แค่ซ่อนปุ่มบนหน้าจอ
+        //       เพราะ admin/borrow_form.php รับ book_ids[] จาก POST ตรง ๆ
+        //       ถ้าเช็คแค่ฝั่งหน้าเว็บ ยิง POST ตรงก็ยืมได้อยู่ดี (รูปแบบเดียวกับที่เคยพลาดใน F-01)
+        //    📌 borrowSingleBook() เป็นจุดเดียวที่ทุกเส้นทางการยืมผ่าน จึงคุมได้ครบด้วยด่านเดียว
+        if (!empty($book['is_reference'])) {
+            return ['success' => false, 'reason' => $book['title'] . ' (หนังสืออ้างอิง อ่านในห้องสมุดเท่านั้น)'];
+        }
+
         // 📝 ตรวจ stock (ภายใต้ lock)
         if ($book['available'] <= 0) {
             return ['success' => false, 'reason' => $book['title'] . ' (ไม่มีเล่มว่าง)'];

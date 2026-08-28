@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 $search = trim($_GET['search'] ?? '');
 $category = $_GET['category'] ?? '';
 $status = $_GET['status'] ?? '';
+$isReference = $_GET['is_reference'] ?? '';   // 📚 '' = ทั้งหมด, '1' = เฉพาะอ้างอิง, '0' = เฉพาะที่ยืมออกได้
 $sort = $_GET['sort'] ?? 'newest';
 $page = (int) ($_GET['page'] ?? 1);
 
@@ -69,6 +70,8 @@ $bookFilters = [
     'search' => $search,
     'category_id' => $category,
     'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
+    // 🛡️ whitelist — รับเฉพาะ '0' กับ '1' ค่าอื่นถือว่าไม่กรอง
+    'is_reference' => in_array($isReference, ['0', '1'], true) ? $isReference : '',
     'sort' => $sort
 ];
 
@@ -81,7 +84,8 @@ $bookFilters['offset'] = $pagination['offset'];
 $books = $bookService->getBooks($bookFilters);
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
-$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'sort' => $sort];
+// 📄 ทุกตัวกรองต้องอยู่ในลิงก์เลขหน้า ไม่งั้นกดหน้า 2 แล้วตัวกรองหลุด
+$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'sort' => $sort];
 $paginationUnit = 'เล่ม';
 
 // ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
@@ -135,6 +139,14 @@ require_once __DIR__ . '/header.php';
                 <option value="available" <?= $status === 'available' ? 'selected' : '' ?>>มีของ</option>
                 <option value="out_of_stock" <?= $status === 'out_of_stock' ? 'selected' : '' ?>>หนังสือหมด</option>
                 <option value="low_stock" <?= $status === 'low_stock' ? 'selected' : '' ?>>ใกล้หมด (≤2)</option>
+            </select>
+        </div>
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-700 mb-1">ประเภทการยืม</label>
+            <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="is_reference">
+                <option value="">ทั้งหมด</option>
+                <option value="0" <?= $isReference === '0' ? 'selected' : '' ?>>ยืมออกได้</option>
+                <option value="1" <?= $isReference === '1' ? 'selected' : '' ?>>อ้างอิง (อ่านในห้องสมุด)</option>
             </select>
         </div>
         <div class="md:col-span-2">
@@ -214,6 +226,11 @@ require_once __DIR__ . '/header.php';
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                         <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
                                         หมด
+                                    </span>
+                                <?php endif; ?>
+                                <?php if (!empty($book['is_reference'])): ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-1" title="หนังสืออ้างอิง — ยืมออกและจองไม่ได้">
+                                        <i class="bi bi-building mr-1"></i>อ้างอิง
                                     </span>
                                 <?php endif; ?>
                                 <?php if (empty($book['is_visible'])): ?>

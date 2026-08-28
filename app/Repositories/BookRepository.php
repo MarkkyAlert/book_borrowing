@@ -260,11 +260,14 @@ class BookRepository
     public function findByIdOrIsbn(string $identifier): ?array
     {
         // 📝 SQL: ค้นด้วย ID หรือ ISBN ใน query เดียว (OR)
-        // SELECT เฉพาะ 4 field ที่หน้ายืมต้องการ (เบา ไม่ดึงทั้งหมด)
+        // SELECT เฉพาะ field ที่หน้ายืมต้องการ (เบา ไม่ดึงทั้งหมด)
+        // ⚠️ ถ้าเพิ่มกฎที่ต้องตรวจตอนสแกน ต้องเพิ่มคอลัมน์ตรงนี้ด้วย
+        //    ไม่งั้นด่านที่ไปเขียนไว้ในหน้ายืมจะอ่านค่าไม่เจอแล้วปล่อยผ่านเงียบ ๆ
+        //    (เคยพลาดมาแล้วตอนเพิ่ม is_reference — ด่านมีอยู่แต่ไม่ทำงานเพราะคอลัมน์ไม่ถูกดึงมา)
         // 🧠 ทำไมรับเป็น string? เพราะ ISBN เป็นตัวอักษร แต่ ID เป็นเลข
         //    MySQL จะ cast ให้อัตโนมัติตอนเทียบ id = ?
         $stmt = $this->pdo->prepare("
-            SELECT id, title, author, available 
+            SELECT id, title, author, available, is_reference
             FROM books WHERE id = ? OR isbn = ?
         ");
         // 🚀 ส่ง $identifier ซ้ำ 2 ครั้ง → ลองจับคู่ทั้ง id และ isbn
@@ -283,11 +286,13 @@ class BookRepository
      */
     public function findAvailable(): array
     {
-        // 📝 SQL: ดึงหนังสือที่ available > 0 เรียงตามชื่อ A-Z
+        // 📝 SQL: ดึงหนังสือที่ available > 0 และยืมออกได้ เรียงตามชื่อ A-Z
+        // 📚 ตัดหนังสืออ้างอิงออก — ยืมไม่ได้อยู่แล้ว ไม่ควรให้เลือกได้ตั้งแต่แรก
+        //    (ด่านจริงอยู่ที่ BorrowService::borrowSingleBook() ตรงนี้แค่ไม่ให้เลือกผิด)
         // 🧠 ใช้ query() แทน prepare() เพราะไม่มี user input (ปลอดภัย)
         // ⚠️ ถ้าเพิ่ม parameter ในอนาคต ต้องเปลี่ยนเป็น prepare()
         return $this->pdo->query("
-            SELECT * FROM books WHERE available > 0 ORDER BY title
+            SELECT * FROM books WHERE available > 0 AND is_reference = 0 ORDER BY title
         ")->fetchAll();
     }
     /**
@@ -390,6 +395,13 @@ class BookRepository
             $where[] = "b.is_visible = 1";
         }
 
+        // 📚 Filter: หนังสืออ้างอิง — ใช้ในหน้าจัดการหนังสือเพื่อไล่ดูเฉพาะกลุ่ม
+        // 🧠 ใช้ isset ไม่ใช่ !empty เพราะ '0' (เฉพาะเล่มที่ยืมออกได้) เป็นค่าที่ต้องกรองจริง
+        if (isset($filters['is_reference']) && $filters['is_reference'] !== '') {
+            $where[] = "b.is_reference = ?";
+            $params[] = (int) $filters['is_reference'];
+        }
+
         // 🔗 ประกอบ WHERE clause จาก array → "WHERE cond1 AND cond2 AND ..."
         // ถ้าไม่มีเงื่อนไข → string ว่าง (= SELECT ทั้งหมด)
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -489,8 +501,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, quantity, available, is_visible)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, quantity, available, is_visible, is_reference)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -509,7 +521,10 @@ class BookRepository
             $data['cover_image'] ?? null, // ชื่อไฟล์รูปปก (ไม่บังคับ)
             $quantity,                   // จำนวนทั้งหมด
             $quantity,                   // จำนวนที่ว่าง = จำนวนทั้งหมด
-            $data['is_visible'] ?? 1     // 👁️ การมองเห็น (default: แสดง)
+            $data['is_visible'] ?? 1,    // 👁️ การมองเห็น (default: แสดง)
+            // 📚 หนังสืออ้างอิง (default: 0 = ยืมออกได้ตามปกติ)
+            //    ห้ามเดาจากหมวดหมู่ — บางห้องสมุดใช้ชื่อหมวด "หนังสืออ้างอิง" กับเล่มที่ยืมได้
+            $data['is_reference'] ?? 0
         ]);
 
         // 📤 คืน ID ของหนังสือที่เพิ่งสร้าง (AUTO_INCREMENT)
@@ -543,7 +558,7 @@ class BookRepository
             UPDATE books SET 
                 title = ?, author = ?, isbn = ?, search_tokens = ?, category_id = ?, 
                 description = ?, cover_image = COALESCE(?, cover_image), 
-                quantity = ?, available = ?, is_visible = ?
+                quantity = ?, available = ?, is_visible = ?, is_reference = ?
             WHERE id = ?
         ");
 
@@ -561,7 +576,8 @@ class BookRepository
             $data['quantity'],           // 8. จำนวนทั้งหมด
             $data['available'],          // 9. จำนวนที่ว่าง
             $data['is_visible'] ?? 1,    // 10. 👁️ การมองเห็น
-            $id                          // 11. WHERE id = ?
+            $data['is_reference'] ?? 0,  // 11. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
+            $id                          // 12. WHERE id = ?
         ]);
     }
 

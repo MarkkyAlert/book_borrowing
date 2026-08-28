@@ -172,6 +172,7 @@ $gapSuites = [
     'Payment Gap Analysis'       => 'test_payment_gap_analysis.php',
     'Authentication Gap'         => 'test_authentication_gap_analysis.php',
     'Book Management'            => 'test_book_management.php',
+    'หนังสืออ้างอิง'             => 'test_reference_books.php',       // ยืม/จองไม่ได้ แต่ยังค้นเจอ
     'Profile Security'           => 'test_profile_security.php',
     // 📌 3 ตัวนี้เพิ่งซ่อม (2026-08-28) — เดิมทิ้งขยะไว้/query คอลัมน์ที่ไม่มีอยู่จริง
     'Member Management'          => 'test_member_management.php',

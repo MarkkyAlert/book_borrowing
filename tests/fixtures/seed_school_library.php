@@ -288,6 +288,7 @@ foreach ($specialBooks as $sb) {
         'isbn'     => $isbn,
         'cat'      => $catIds[$sb['cat']],
         'hidden'   => !empty($sb['hidden']) ? 0 : 1,
+        'ref'      => 0,
         'note'     => $sb['tag'],
     ];
     $usedTitle[$sb['title']] = true;
@@ -302,13 +303,20 @@ while (count($rows) < $needBooks && $guard++ < 20000) {
     $title = sprintf(pick($TITLE_PATTERNS), $topic);
     if (isset($usedTitle[$title])) continue;
     $usedTitle[$title] = true;
+    // 📚 หนังสืออ้างอิงจริง — พจนานุกรม/สารานุกรม/แผนที่/ตารางธาตุ ในหมวดอ้างอิง
+    //    ยืมออกและจองไม่ได้ แต่ยังค้นเจอตามปกติ (ดู ROADMAP ข้อ 1)
+    //    🧠 ดูจาก "ชื่อเรื่อง" ไม่ใช่ "หมวดหมู่" — หมวดอ้างอิงมีหนังสือที่ยืมออกได้ปนอยู่ด้วย
+    //       เช่น "คู่มือการเขียนบรรณานุกรม" ซึ่งควรยืมกลับบ้านไปอ่านได้
+    $isReference = (int) (bool) preg_match('/^(พจนานุกรม|สารานุกรม|แผนที่|ตารางธาตุ|ปฏิทินร้อยปี|อภิธานศัพท์)/u', $title);
+
     $rows[] = [
         'title'  => $title,
         'author' => pick($AUTHOR_FIRST) . ' ' . pick($AUTHOR_LAST),
         'isbn'   => '978616' . (++$isbnSeq),
         'cat'    => $catIds[$cname],
         'hidden' => 1,
-        'note'   => '',
+        'ref'    => $isReference,
+        'note'   => $isReference ? 'หนังสืออ้างอิง (ยืม/จองไม่ได้)' : '',
     ];
 }
 
@@ -316,16 +324,16 @@ while (count($rows) < $needBooks && $guard++ < 20000) {
 $bookIds = [];
 $notes   = [];      // id → หมายเหตุเคสพิเศษ (ไว้พิมพ์สรุปท้ายสคริปต์)
 foreach (array_chunk($rows, 200) as $chunk) {
-    $ph = implode(',', array_fill(0, count($chunk), '(?,?,?,?,?,?,?,?,?)'));
+    $ph = implode(',', array_fill(0, count($chunk), '(?,?,?,?,?,?,?,?,?,?)'));
     $vals = [];
     foreach ($chunk as $r) {
         // 🔎 ต้องเติม search_tokens เองเพราะ INSERT ตรง ๆ ไม่ผ่าน BookRepository::create()
         //    ถ้าลืม การค้นหาภาษาไทยจะไม่เจอเล่มพวกนี้เลย (ดู FINDINGS F-24)
         $tokens = buildSearchTokens(trim($r['title'] . ' ' . $r['author'] . ' ' . ($r['isbn'] ?? '')));
         array_push($vals, $r['title'], $r['author'], $r['isbn'], $tokens, $r['cat'],
-                   'หนังสือในความดูแลของห้องสมุดโรงเรียน — ' . $r['title'], 1, 1, $r['hidden']);
+                   'หนังสือในความดูแลของห้องสมุดโรงเรียน — ' . $r['title'], 1, 1, $r['hidden'], $r['ref']);
     }
-    $sql = "INSERT INTO books (title, author, isbn, search_tokens, category_id, description, quantity, available, is_visible) VALUES $ph";
+    $sql = "INSERT INTO books (title, author, isbn, search_tokens, category_id, description, quantity, available, is_visible, is_reference) VALUES $ph";
     $pdo->prepare($sql)->execute($vals);
     $first = (int) $pdo->lastInsertId();
     foreach ($chunk as $i => $r) {
@@ -387,6 +395,13 @@ foreach ($soldOut  as $b) $notes[$b] = 'ถูกยืมออกหมดท�
 foreach ($lastCopy as $b) $notes[$b] = 'เหลือให้ยืมเล่มสุดท้าย (ใช้ทดสอบกดพร้อมกัน)';
 
 $borrowable = array_merge($pool, $soldOut, $lastCopy);   // ทุกเล่มยกเว้น zeroQty
+
+// 📚 ตัดหนังสืออ้างอิงออกจากกองที่จะสุ่มให้มีคนยืม/จอง — ของจริงยืมไม่ได้อยู่แล้ว
+$referenceIds = $pdo->query("SELECT id FROM books WHERE is_reference = 1")->fetchAll(PDO::FETCH_COLUMN);
+if ($referenceIds) {
+    $refSet = array_flip(array_map('intval', $referenceIds));
+    $borrowable = array_values(array_filter($borrowable, fn($id) => !isset($refSet[$id])));
+}
 
 $spare = [];
 foreach ($bookIds as $b) $spare[$b] = mt_rand(1, 4);
@@ -681,6 +696,8 @@ function verifyData(PDO $pdo): void
         ['หนังสือถูกยืมออกหมด',        "SELECT COUNT(*) FROM books WHERE available=0 AND quantity>0", 5],
         ['หนังสือเหลือเล่มสุดท้าย',     "SELECT COUNT(*) FROM books WHERE available=1", 4],
         ['การจองหมดอายุแต่ยังค้าง',    "SELECT COUNT(*) FROM reservations WHERE status='pending' AND expires_at<NOW()", 1],
+        ['หนังสืออ้างอิง (ยืมไม่ได้)',  "SELECT COUNT(*) FROM books WHERE is_reference=1", 3],
+        ['อ้างอิงที่ถูกยืมอยู่ (ต้อง 0)', "SELECT (SELECT COUNT(*) FROM borrows b JOIN books k ON k.id=b.book_id WHERE k.is_reference=1 AND b.status='borrowing')=0", 1],
     ];
     foreach ($cases as [$label, $sql, $min]) {
         $n = (int) $pdo->query($sql)->fetchColumn();

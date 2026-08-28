@@ -124,7 +124,16 @@ require_once __DIR__ . '/includes/header.php';
                     }
                     ?>
 
-                    <?php if ($userReserved): ?>
+                    <?php if (!empty($book['is_reference'])): ?>
+                        <!-- 📚 หนังสืออ้างอิง: ค้นเจอและเห็นได้ตามปกติ แต่ยืม/จองไม่ได้ -->
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                            <i class="bi bi-building text-amber-500 text-3xl mb-2 block"></i>
+                            <h3 class="text-amber-800 font-bold mb-1">อ่านที่ห้องสมุดเท่านั้น</h3>
+                            <p class="text-amber-600 text-sm">
+                                หนังสืออ้างอิงเล่มนี้ไม่ให้ยืมออก เชิญอ่านได้ที่ห้องสมุด
+                            </p>
+                        </div>
+                    <?php elseif ($userReserved): ?>
                         <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
                             <i class="bi bi-clock-history text-amber-500 text-3xl mb-2 block"></i>
                             <h3 class="text-amber-800 font-bold mb-1">คุณจองหนังสือเล่มนี้ไว้</h3>
@@ -147,7 +156,7 @@ require_once __DIR__ . '/includes/header.php';
                     <?php else: ?>
                         <button disabled class="w-full py-3 px-4 bg-gray-100 text-gray-400 font-bold rounded-xl cursor-not-allowed flex items-center justify-center">
                             <i class="bi bi-x-circle-fill mr-2"></i>
-                            สินค้าหมด
+                            ถูกยืมหมดแล้ว
                         </button>
                     <?php endif; ?>
 

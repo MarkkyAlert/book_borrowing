@@ -64,7 +64,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'scan') {
             $book = $bookRepo->findByIdOrIsbn($id);
 
             if ($book) {
-                if ($book['available'] > 0) {
+                // 📚 หนังสืออ้างอิงยืมออกไม่ได้ — บอกตั้งแต่ตอนสแกน ไม่ต้องรอไปโดนปฏิเสธตอนกดบันทึก
+                if (!empty($book['is_reference'])) {
+                    echo json_encode(['success' => false, 'message' => 'หนังสืออ้างอิง อ่านในห้องสมุดเท่านั้น']);
+                } elseif ($book['available'] > 0) {
                     echo json_encode(['success' => true, 'data' => $book]);
                 } else {
                     echo json_encode(['success' => false, 'message' => 'หนังสือหมด']);
