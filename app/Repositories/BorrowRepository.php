@@ -181,9 +181,13 @@ class BorrowRepository
         //
         // 📤 Output: [{borrow fields + user_name, user_email, user_phone, book_title, book_author}, ...]
         // ⚠️ user_email + user_phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงใน HTML
+        // 💰 bk.price as book_price → ใช้เติมค่าตั้งต้นในกล่องแจ้งหาย/ชำรุด
+        // ⚠️ หน้าไหนต้องอ่านคอลัมน์ใหม่ของ books ต้องมาเพิ่มใน SELECT ตรงนี้ด้วย
+        //    (เคยพลาดกับ is_reference มาแล้ว — ด่านมีอยู่แต่ไม่ทำงานเพราะไม่ได้ดึงคอลัมน์มา)
         $stmt = $this->pdo->prepare("
             SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
-                   bk.title as book_title, bk.author as book_author
+                   bk.title as book_title, bk.author as book_author,
+                   bk.price as book_price
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
@@ -400,6 +404,105 @@ class BorrowRepository
         $stmt->execute([$newDue, $borrowId, $maxRenew]);
 
         return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ปิดรายการยืมเป็น "หาย" หรือ "ชำรุด" + บันทึกค่าชดใช้
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $borrowId     รายการยืม
+     * @param string $status       'lost' | 'damaged' (Service ตรวจมาแล้ว)
+     * @param float  $charge       ค่าชดใช้ที่คิดจริง — **snapshot ไว้ ณ ตอนแจ้ง**
+     * @param int|null $reportedBy ผู้แจ้ง (users.id)
+     * @param string $note         รายละเอียด/เหตุผล (บังคับกรอกที่ชั้น Service)
+     *
+     * 📤 Output: @return bool true = อัปเดตสำเร็จ
+     *
+     * 🧠 ทำไมเก็บค่าชดใช้ลง fine_amount ไม่สร้างคอลัมน์ใหม่:
+     *    payments มี UNIQUE(borrow_id) → 1 รายการยืมมีได้แค่ 1 การชำระอยู่แล้ว
+     *    และกติกาคือ "ค่าชดใช้แทนที่ค่าปรับเกินกำหนด ไม่คิดซ้ำ"
+     *    ทำแบบนี้หน้ารับชำระ/ยกเว้น/รายงานรายได้ทำงานต่อได้ทันที
+     *    โดยไม่ต้องสร้างระบบเงินคู่ขนาน — ดูว่าเป็นเงินประเภทไหนได้จาก status
+     *
+     * 🔴 ห้ามอ่านราคาสดจาก books.price ตอนแสดงยอดค้าง — ต้องใช้ค่าที่ snapshot ไว้นี้
+     *    ไม่งั้นบรรณารักษ์แก้ราคาหนังสือทีหลัง หนี้ที่ค้างอยู่จะเปลี่ยนตามเงียบ ๆ
+     *
+     * ⚠️ **ไม่แตะ return_date** — รายงาน "คืนวันนี้/คืนเดือนนี้" นับจาก return_date
+     *    โดยไม่กรอง status (ดู ReportRepository::getDailySummary / getRevenueReport)
+     *    ถ้าใส่ return_date ให้เล่มที่หาย ตัวเลขคืนจะพองด้วยเล่มที่ไม่เคยถูกคืน
+     *
+     * 🛡️ WHERE status = 'borrowing' → กันแจ้งซ้ำแม้ยิงพร้อมกัน 2 ครั้ง
+     *    (คู่กับ FOR UPDATE lock ที่ Service — สำคัญมาก เพราะ Service จะลด quantity ตาม)
+     *
+     * ✅ Use case: BorrowService::markAsLost()
+     */
+    public function markAsLost(int $borrowId, string $status, float $charge, ?int $reportedBy, string $note): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE borrows
+            SET status = ?, fine_amount = ?,
+                lost_reported_at = NOW(), lost_reported_by = ?, lost_note = ?
+            WHERE id = ? AND status = 'borrowing'
+        ");
+        $stmt->execute([$status, $charge, $reportedBy, $note, $borrowId]);
+
+        // 📌 rowCount() = 0 แปลว่ามีคนแจ้งไปแล้ว หรือคืนไปแล้ว → ไม่ถือว่าสำเร็จ
+        //    ต้องเป็นแบบนี้ ไม่งั้น Service จะลด quantity ซ้ำ
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ย้อนการแจ้งหาย/ชำรุด (หาหนังสือเจอทีหลัง)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $borrowId  รายการที่แจ้งหายไว้
+     * @param float  $newFine   ค่าปรับที่เหลือหลังย้อน (Service คำนวณมา)
+     * @param string $note      ต่อท้าย lost_note เดิม — เก็บร่องรอยไว้ ไม่ลบทิ้ง
+     *
+     * 📤 Output: @return bool true = ย้อนสำเร็จ
+     *
+     * 🧠 ทำไมไม่ล้าง lost_note ทิ้ง:
+     *    ต้องตรวจย้อนหลังได้ว่าเคยแจ้งหายแล้วย้อน — ใครแจ้ง ใครย้อน เพราะอะไร
+     *    (กติกาที่ตกลงไว้: ย้อนได้ แต่ต้องมีร่องรอย)
+     *
+     * 🛡️ WHERE status IN ('lost','damaged') → ย้อนได้เฉพาะรายการที่แจ้งไว้จริง
+     *    และกันย้อนซ้ำ ซึ่งจะทำให้ quantity เพิ่มเกิน
+     *
+     * ✅ Use case: BorrowService::undoLost()
+     */
+    public function undoLost(int $borrowId, float $newFine, string $note): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE borrows
+            SET status = 'returned', return_date = CURDATE(), fine_amount = ?,
+                lost_note = CONCAT(COALESCE(lost_note, ''), ' | ', ?)
+            WHERE id = ? AND status IN ('lost', 'damaged')
+        ");
+        $stmt->execute([$newFine, $note, $borrowId]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ล็อคแถวที่แจ้งหาย/ชำรุดไว้ (สำหรับย้อน)
+     * ==========================================================================
+     * 🧠 ต่างจาก findByIdForUpdate() ที่กรองเฉพาะ status='borrowing'
+     * ✅ Use case: BorrowService::undoLost()
+     */
+    public function findLostByIdForUpdate(int $borrowId): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM borrows WHERE id = ? AND status IN ('lost', 'damaged') FOR UPDATE
+        ");
+        $stmt->execute([$borrowId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 
     /**

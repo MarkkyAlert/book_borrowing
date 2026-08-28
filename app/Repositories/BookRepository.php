@@ -267,7 +267,7 @@ class BookRepository
         // 🧠 ทำไมรับเป็น string? เพราะ ISBN เป็นตัวอักษร แต่ ID เป็นเลข
         //    MySQL จะ cast ให้อัตโนมัติตอนเทียบ id = ?
         $stmt = $this->pdo->prepare("
-            SELECT id, title, author, available, is_reference
+            SELECT id, title, author, available, is_reference, price, quantity
             FROM books WHERE id = ? OR isbn = ?
         ");
         // 🚀 ส่ง $identifier ซ้ำ 2 ครั้ง → ลองจับคู่ทั้ง id และ isbn
@@ -484,6 +484,40 @@ class BookRepository
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: ลดจำนวนหนังสือลง 1 เพราะเล่มนั้นหาย/ชำรุด (ไม่แตะ available)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id
+     * 📤 Output: @return bool true = ลดสำเร็จ
+     *
+     * 🧠 **ทำไมไม่แตะ available** — invariant ของระบบคือ
+     *        available = quantity − (กำลังยืม) − (จองค้าง)
+     *    ตอนแจ้งหาย รายการยืมนั้นออกจากสถานะ 'borrowing' → ตัวลบหายไป 1
+     *    ถ้าไม่ลด quantity ตาม available จะต้องเพิ่ม 1 (เท่ากับได้หนังสือคืนมา)
+     *    ลด quantity ลง 1 พร้อมกัน = ทั้ง 2 ฝั่งหักล้างกันพอดี available คงเดิม
+     *
+     * 🛡️ WHERE quantity > available → กันไม่ให้ชน CHECK constraint
+     *    chk_books_quantity_gte_available (quantity >= available)
+     *    ในทางปฏิบัติเงื่อนไขนี้ผ่านเสมอเมื่อเล่มนั้นถูกยืมอยู่จริง
+     *    (available ≤ quantity − 1 เพราะอย่างน้อยเล่มนี้ออกไปแล้ว)
+     *    แต่ใส่ไว้เป็นด่านสุดท้ายระดับ DB เผื่อ Service เรียกผิดที่
+     *
+     * ✅ Use case: BorrowService::markAsLost()
+     */
+    public function decrementQuantityForLoss(int $id): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE books SET quantity = quantity - 1
+            WHERE id = ? AND quantity > available
+        ");
+        $stmt->execute([$id]);
+
+        // 📌 rowCount() = 0 แปลว่าลดแล้วจะทำให้ quantity < available → ไม่ยอมทำ
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: สร้างหนังสือใหม่ (available = quantity)
      * ==========================================================================
      *
@@ -501,8 +535,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, quantity, available, is_visible, is_reference)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, price, quantity, available, is_visible, is_reference)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -519,6 +553,10 @@ class BookRepository
             $data['category_id'] ?? null, // หมวดหมู่ (ไม่บังคับ)
             $data['description'] ?? null, // รายละเอียด (ไม่บังคับ)
             $data['cover_image'] ?? null, // ชื่อไฟล์รูปปก (ไม่บังคับ)
+            // 💰 ราคาปก — null = ยังไม่ระบุ ห้ามแปลงเป็น 0
+            //    เพราะ 0 แปลว่า "ฟรี" ส่วน null แปลว่า "ไม่รู้ราคา"
+            //    ตอนแจ้งหายจะบังคับให้กรอกถ้าเป็น null (ห้ามคิดค่าชดใช้ 0 เงียบ ๆ)
+            $data['price'] ?? null,
             $quantity,                   // จำนวนทั้งหมด
             $quantity,                   // จำนวนที่ว่าง = จำนวนทั้งหมด
             $data['is_visible'] ?? 1,    // 👁️ การมองเห็น (default: แสดง)
@@ -558,7 +596,7 @@ class BookRepository
             UPDATE books SET 
                 title = ?, author = ?, isbn = ?, search_tokens = ?, category_id = ?, 
                 description = ?, cover_image = COALESCE(?, cover_image), 
-                quantity = ?, available = ?, is_visible = ?, is_reference = ?
+                price = ?, quantity = ?, available = ?, is_visible = ?, is_reference = ?
             WHERE id = ?
         ");
 
@@ -573,11 +611,12 @@ class BookRepository
             $data['category_id'] ?? null, // 5. หมวดหมู่
             $data['description'] ?? null, // 6. รายละเอียด
             $data['cover_image'] ?? null, // 7. รูปปก (null = เก็บรูปเดิม)
-            $data['quantity'],           // 8. จำนวนทั้งหมด
-            $data['available'],          // 9. จำนวนที่ว่าง
-            $data['is_visible'] ?? 1,    // 10. 👁️ การมองเห็น
-            $data['is_reference'] ?? 0,  // 11. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
-            $id                          // 12. WHERE id = ?
+            $data['price'] ?? null,      // 8. 💰 ราคาปก (null = ยังไม่ระบุ ไม่ใช่ 0)
+            $data['quantity'],           // 9. จำนวนทั้งหมด
+            $data['available'],          // 10. จำนวนที่ว่าง
+            $data['is_visible'] ?? 1,    // 11. 👁️ การมองเห็น
+            $data['is_reference'] ?? 0,  // 12. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
+            $id                          // 13. WHERE id = ?
         ]);
     }
 

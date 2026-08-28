@@ -187,6 +187,20 @@ $cookieFile = tempnam(sys_get_temp_dir(), 'cookie_settings_test_member');
 // If not, we just Register new one.
 echo "  Registering new staff for test...\n";
 $staffEmail = 'staff_test_' . time() . '@test.com';
+
+// 🧹 ลบบัญชีที่สมัครไว้เสมอ — อยู่ใน register_shutdown_function เพื่อให้ล้างแม้เทสต์ตายกลางคัน
+//    ไม่งั้นทุกครั้งที่รันชุดเต็มจะทิ้งสมาชิกปลอมไว้ 1 คน แล้วยอด "สมาชิกทั้งหมด" ค่อย ๆ พองขึ้น
+//    (อาการเดียวกับ F-52 — เคยแก้ให้ไฟล์อื่นมาแล้ว)
+register_shutdown_function(function () use ($staffEmail) {
+    try {
+        $db = getDB();
+        $st = $db->prepare("DELETE FROM users WHERE email = ? AND role = 'member'");
+        $st->execute([$staffEmail]);
+        if ($st->rowCount() > 0) echo "  🧹 ลบบัญชีทดสอบ {$staffEmail}\n";
+    } catch (Throwable $e) {
+        echo "  ⚠️ ลบบัญชีทดสอบไม่สำเร็จ: " . $e->getMessage() . "\n";
+    }
+});
 request('POST', '/register.php', [
     'csrf_token' => getCsrfToken(request('GET', '/register.php')['body']),
     'name' => 'Test Staff',

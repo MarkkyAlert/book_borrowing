@@ -158,8 +158,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `description` TEXT DEFAULT NULL,
                 `cover_image` VARCHAR(255) DEFAULT NULL,
                 `quantity` INT NOT NULL DEFAULT 1,
+                `price` DECIMAL(10,2) NULL DEFAULT NULL COMMENT 'ราคาปก — ใช้ตั้งต้นค่าชดใช้ตอนแจ้งหาย',
                 `available` INT NOT NULL DEFAULT 1,
                 `is_visible` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'แสดงให้สาธารณะเห็น',
+                `is_reference` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'หนังสืออ้างอิง — อ่านในห้องสมุดเท่านั้น ยืม/จองไม่ได้',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_available` (`available`),
@@ -182,9 +184,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `book_id` INT NOT NULL,
                 `borrow_date` DATE NOT NULL,
                 `due_date` DATE NOT NULL,
+                `renew_count` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'ต่ออายุไปแล้วกี่ครั้ง',
                 `return_date` DATE DEFAULT NULL,
-                `status` ENUM('borrowing', 'returned') NOT NULL DEFAULT 'borrowing',
+                `lost_reported_at` DATETIME NULL DEFAULT NULL COMMENT 'เวลาที่แจ้งหาย/ชำรุด',
+                `lost_reported_by` INT NULL DEFAULT NULL COMMENT 'ผู้แจ้ง',
+                `lost_note` VARCHAR(255) NULL DEFAULT NULL COMMENT 'รายละเอียด/เหตุผล',
+                `status` ENUM('borrowing', 'returned', 'lost', 'damaged') NOT NULL DEFAULT 'borrowing',
                 `fine_amount` DECIMAL(10,2) DEFAULT 0,
+                `fine_waived_at` DATETIME NULL DEFAULT NULL COMMENT 'เวลาที่ยกเว้นค่าปรับ (NULL = ยังไม่ยกเว้น)',
+                `fine_waived_by` INT NULL DEFAULT NULL COMMENT 'ผู้ยกเว้น',
+                `fine_waived_note` VARCHAR(255) NULL DEFAULT NULL COMMENT 'เหตุผลที่ยกเว้น',
                 `notes` TEXT DEFAULT NULL,
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -193,7 +202,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INDEX `idx_book` (`book_id`),
                 INDEX `idx_due_date` (`due_date`),
                 FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-                FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+                FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+                CONSTRAINT `fk_borrows_waived_by` FOREIGN KEY (`fine_waived_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+                CONSTRAINT `fk_borrows_lost_reported_by` FOREIGN KEY (`lost_reported_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
         $messages[] = "✅ สร้างตาราง `borrows` สำเร็จ";

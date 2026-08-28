@@ -80,6 +80,16 @@ function ruleDefinitions(): array
             'unit'    => 'ครั้ง',
             'help'    => 'ต่อได้เฉพาะตอนยังไม่เกินกำหนด และต้องไม่มีคนจองเล่มนั้นรออยู่ · ตั้ง 0 = ปิดการต่ออายุ',
         ],
+        'LOST_BOOK_FEE' => [
+            'setting' => 'rule_lost_book_fee',
+            'env'     => 'LOST_BOOK_FEE',
+            'default' => 0,
+            'min'     => 0,
+            'max'     => 100000,
+            'label'   => 'ค่าดำเนินการหนังสือหาย',
+            'unit'    => 'บาท',
+            'help'    => 'บวกเพิ่มจากราคาปกตอนแจ้งหาย/ชำรุด · ตั้ง 0 = คิดเท่าราคาปกเฉย ๆ · ไม่คิดค่าปรับเกินกำหนดซ้ำ',
+        ],
         'FINE_WAIVE_STAFF_LIMIT' => [
             'setting' => 'rule_waive_staff_limit',
             'env'     => 'FINE_WAIVE_STAFF_LIMIT',

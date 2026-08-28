@@ -722,7 +722,7 @@ class ReportRepository
      * @return array[] [{user_name, user_phone, book_title, return_date, fine_amount}, ...]
      *
      * 🧠 เหตุผล:
-     * - กรอง: status='returned' + fine_amount > 0 + NOT IN payments
+     * - กรอง: status IN ('returned','lost','damaged') + fine_amount > 0 + NOT IN payments
      * - NOT IN (SELECT borrow_id FROM payments) = ยังไม่ได้ชำระ
      * - date filter เป็น optional (null = ไม่กรอง)
      * ✅ Use case: admin/reports.php, export_pdf.php (รายงานค้างชำระ)
@@ -735,18 +735,23 @@ class ReportRepository
         // 📥 Input: $startDate, $endDate → กรองช่วงวันที่ (optional, null = ไม่กรอง)
 
         // 📝 สร้าง date filter แบบ dynamic
-        //    ถ้ามี date range → เพิ่ม AND b.return_date BETWEEN ? AND ?
+        //    ถ้ามี date range → เพิ่ม AND DATE(COALESCE(return_date, lost_reported_at)) BETWEEN ? AND ?
         //    ถ้าไม่มี → $dateFilter = '' (ดึงทั้งหมด)
         $dateFilter = '';
         $params = [];
         
         if ($startDate && $endDate) {
-            $dateFilter = 'AND b.return_date BETWEEN ? AND ?';
+            // 🧠 หนังสือที่แจ้งหายไม่มี return_date (ไม่ได้ถูกคืน) → ใช้ lost_reported_at แทน
+            //    ถ้าใช้ return_date เฉย ๆ รายการหายจะหลุดทันทีที่เลือกช่วงวันที่
+            $dateFilter = 'AND DATE(COALESCE(b.return_date, b.lost_reported_at)) BETWEEN ? AND ?';
             $params = [$startDate, $endDate];
         }
         
         // 📝 SQL อธิบาย:
-        //    - WHERE status = 'returned' → เฉพาะที่คืนแล้ว (ถ้ายังไม่คืน → ยังไม่มีค่าปรับ)
+        //    - WHERE status IN ('returned','lost','damaged') → รายการที่ปิดแล้วเท่านั้น
+        //      🔴 ต้องมี lost/damaged ด้วย ไม่งั้นค่าชดใช้หนังสือหายจะโผล่ใน 5 หน้า
+        //         แต่หายไปจากรายงานนี้หน้าเดียว — ระบบมี 6 query ที่นิยาม "ค้างชำระ"
+        //         และนี่เป็นตัวเดียวที่กรอง status (อาการเดียวกับ F-35)
         //    - AND fine_amount > 0 → เฉพาะที่มีค่าปรับ
         //    - AND b.id NOT IN (SELECT borrow_id FROM payments)
         //      → เฉพาะที่ยังไม่มี record การชำระ
@@ -762,12 +767,14 @@ class ReportRepository
         $stmt = $this->pdo->prepare("
             SELECT u.name as user_name, u.phone as user_phone,
                    bk.title as book_title,
-                   DATE_FORMAT(b.return_date, '%d/%m/%Y') as return_date,
+                   -- 🧠 หนังสือที่แจ้งหายไม่มี return_date → แสดงวันที่แจ้งแทน ไม่งั้นช่องนี้ว่าง
+                   DATE_FORMAT(COALESCE(b.return_date, b.lost_reported_at), '%d/%m/%Y') as return_date,
+                   b.status,
                    b.fine_amount
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
-            WHERE b.status = 'returned' 
+            WHERE b.status IN ('returned', 'lost', 'damaged')
               AND b.fine_amount > 0
               AND b.id NOT IN (SELECT borrow_id FROM payments)
               AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)

@@ -373,6 +373,15 @@ function getBorrowStatusLabel(string $status, ?string $dueDate = null): string
     if ($status === 'returned') {
         return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="bi bi-check-circle-fill mr-1"></i>คืนแล้ว</span>';
     }
+
+    // 📚 หาย/ชำรุด — ปิดรายการแล้วเหมือนกัน แต่หนังสือไม่ได้กลับเข้าชั้น
+    //    ต้องมาก่อนตัวเช็คเกินกำหนด ไม่งั้นเล่มที่หายตอนเลยกำหนดจะขึ้นว่า "เกินกำหนด"
+    if ($status === 'lost') {
+        return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"><i class="bi bi-question-octagon-fill mr-1"></i>แจ้งหาย</span>';
+    }
+    if ($status === 'damaged') {
+        return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"><i class="bi bi-bandaid-fill mr-1"></i>ชำรุด</span>';
+    }
     
     if ($dueDate && strtotime($dueDate) < strtotime('today')) {
         return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="bi bi-exclamation-circle-fill mr-1"></i>เกินกำหนด</span>';

@@ -182,6 +182,14 @@ function getDaysRemaining($dueDate): int {
                     if ($borrow['status'] === 'returned') {
                         $statusClass = 'bg-green-100 text-green-800';
                         $statusLabel = 'คืนแล้ว';
+                    // 📚 หาย/ชำรุด ต้องมาก่อนตัวเช็คเกินกำหนด
+                    //    ไม่งั้นเล่มที่แจ้งหายตอนเลยกำหนดจะขึ้นป้าย "ครบกำหนดคืนแล้ว" ทั้งที่ปิดรายการไปแล้ว
+                    } elseif ($borrow['status'] === 'lost') {
+                        $statusClass = 'bg-orange-100 text-orange-800';
+                        $statusLabel = 'แจ้งหาย';
+                    } elseif ($borrow['status'] === 'damaged') {
+                        $statusClass = 'bg-purple-100 text-purple-800';
+                        $statusLabel = 'ชำรุด';
                     } elseif ($isOverdue) {
                         $statusClass = 'bg-red-100 text-red-800';
                         $statusLabel = 'ครบกำหนดคืนแล้ว';
@@ -224,10 +232,33 @@ function getDaysRemaining($dueDate): int {
                                                     <span class="text-gray-400">(เหลือ <?= $daysRemaining ?> วัน)</span>
                                                 <?php endif; ?>
                                             </span>
+                                        <?php elseif (in_array($borrow['status'], ['lost', 'damaged'], true)): ?>
+                                            <?php // 📚 หาย/ชำรุด — ไม่มี return_date (หนังสือไม่ได้กลับมา)
+                                                  //    ถ้าใช้ strtotime(null) จะได้ 01/01/1970 + คำเตือน deprecated บน PHP 8.1+ ?>
+                                            <span class="text-orange-600">
+                                                <i class="bi bi-exclamation-triangle mr-1"></i>
+                                                แจ้ง<?= $borrow['status'] === 'lost' ? 'หาย' : 'ชำรุด' ?>เมื่อ:
+                                                <?= !empty($borrow['lost_reported_at']) ? date('d/m/Y', strtotime($borrow['lost_reported_at'])) : '-' ?>
+                                            </span>
+                                            <?php if ($borrow['fine_amount'] > 0): ?>
+                                                <?php if (!empty($borrow['fine_waived_at'])): ?>
+                                                    <span class="text-gray-500 font-medium" title="ห้องสมุดยกเว้นค่าชดใช้ให้แล้ว">
+                                                        <i class="bi bi-check-circle mr-1"></i>
+                                                        ค่าชดใช้ <?= number_format($borrow['fine_amount'], 2) ?> บาท — <span class="text-green-600">ยกเว้นแล้ว</span>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <?php // 💰 เรียกว่า "ค่าชดใช้" ไม่ใช่ "ค่าปรับ" — คนละเรื่องกัน
+                                                          //    ค่าปรับคือคืนช้า ค่าชดใช้คือหนังสือหายไปเลย ?>
+                                                    <span class="text-red-600 font-medium">
+                                                        <i class="bi bi-cash-coin mr-1"></i>
+                                                        ค่าชดใช้: <?= number_format($borrow['fine_amount'], 2) ?> บาท
+                                                    </span>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
                                         <?php else: ?>
                                             <span class="text-green-600">
                                                 <i class="bi bi-check-circle mr-1"></i>
-                                                คืนเมื่อ: <?= date('d/m/Y', strtotime($borrow['return_date'])) ?>
+                                                คืนเมื่อ: <?= !empty($borrow['return_date']) ? date('d/m/Y', strtotime($borrow['return_date'])) : '-' ?>
                                             </span>
                                             <?php if ($borrow['fine_amount'] > 0): ?>
                                                 <?php if (!empty($borrow['fine_waived_at'])): ?>

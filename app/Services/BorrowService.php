@@ -432,6 +432,232 @@ class BorrowService
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: แจ้งหนังสือหาย / ชำรุดจนใช้ไม่ได้ + คิดค่าชดใช้
+     * ==========================================================================
+     * State: borrowing → lost | damaged
+     *
+     * 🔄 Flow:
+     * 1. ตรวจ input ก่อนเปิด transaction
+     * 2. BEGIN TX → lock borrow (FOR UPDATE + status='borrowing')
+     * 3. คิดค่าชดใช้ = ราคาที่ระบุ + ค่าดำเนินการ  (**ไม่คิดค่าปรับเกินกำหนดซ้ำ**)
+     * 4. markAsLost() + decrementQuantityForLoss()
+     * 5. COMMIT
+     *
+     * 📥 Input:
+     * @param int        $borrowId   รายการยืมที่ยัง borrowing อยู่
+     * @param string     $type       'lost' = หาย | 'damaged' = ชำรุดจนใช้ไม่ได้
+     * @param float|null $price      ราคาหนังสือที่ใช้คิดค่าชดใช้
+     *                               null = ใช้ books.price · ถ้า books.price ก็ null → error
+     * @param string     $note       รายละเอียด/เหตุผล (บังคับ)
+     * @param int|null   $reportedBy ผู้แจ้ง (users.id)
+     *
+     * 📤 Output: @return array {success, status, charge, message}
+     *
+     * 🧠 **ทำไมไม่คิดค่าปรับเกินกำหนดซ้ำ** (กติกาที่ตกลงไว้ใน ROADMAP)
+     *    หนังสือ 200 บาทที่หายไป 60 วันจะกลายเป็นหนี้ 800 บาท ซึ่งไม่มีใครจ่าย
+     *    และห้องสมุดจริงไม่คิดแบบนั้น — ค่าชดใช้ "แทนที่" ค่าปรับ ไม่ใช่บวกเพิ่ม
+     *
+     * 🔴 **ห้ามคิดค่าชดใช้เป็น 0 เงียบ ๆ** ถ้าไม่รู้ราคา
+     *    หนังสือทุกเล่มในระบบเดิม price = NULL → ถ้าปล่อยผ่านเป็น 0
+     *    จะกลายเป็น "ทำหายแล้วไม่ต้องจ่าย" ต้องบังคับให้คนกรอกราคา
+     *
+     * 🛡️ Race: FOR UPDATE lock + WHERE status='borrowing' ใน UPDATE
+     *    ยิงพร้อมกัน 2 ครั้ง → ลด quantity ครั้งเดียว
+     *
+     * ✅ Use case: admin/borrows.php → ปุ่ม "แจ้งหาย/ชำรุด"
+     */
+    public function markAsLost(
+        int $borrowId,
+        string $type,
+        ?float $price,
+        string $note,
+        ?int $reportedBy = null
+    ): array {
+        // 📝 ตรวจ input ก่อนเปิด transaction — ไม่ต้องไปล็อคแถวถ้ายังไงก็ไม่ผ่าน
+        if (!in_array($type, ['lost', 'damaged'], true)) {
+            throw new Exception('ประเภทไม่ถูกต้อง — ต้องเป็น "หาย" หรือ "ชำรุด" เท่านั้น');
+        }
+
+        $note = trim($note);
+        if ($note === '') {
+            throw new Exception('กรุณากรอกรายละเอียด — เป็นเรื่องเงิน ต้องมีร่องรอยว่าทำไมถึงคิดเงิน');
+        }
+        if (mb_strlen($note) > 255) {
+            throw new Exception('รายละเอียดต้องไม่เกิน 255 ตัวอักษร');
+        }
+        if ($price !== null && $price < 0) {
+            throw new Exception('ราคาหนังสือติดลบไม่ได้');
+        }
+
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $type, $price, $note, $reportedBy) {
+            $this->pdo->beginTransaction();
+
+            try {
+                // 🔒 Step 1: ล็อคแถว borrow (FOR UPDATE + WHERE status='borrowing')
+                //    ถ้าคืนไปแล้ว หรือแจ้งหายไปแล้ว → คืน null
+                $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
+
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการยืม — อาจคืนไปแล้ว หรือแจ้งหายไปแล้ว');
+                }
+
+                // 📝 Step 2: หาราคาที่จะใช้คิด
+                //    ลำดับ: ราคาที่เจ้าหน้าที่กรอกตอนแจ้ง → books.price
+                $book = $this->bookRepo->findById((int) $borrow['book_id']);
+                $bookPrice = ($book && $book['price'] !== null) ? (float) $book['price'] : null;
+                $usePrice  = $price ?? $bookPrice;
+
+                if ($usePrice === null) {
+                    // 🔴 ไม่รู้ราคา = หยุด ห้ามคิด 0
+                    throw new Exception(
+                        'หนังสือเล่มนี้ยังไม่ได้ระบุราคาปก — กรุณากรอกราคาที่ใช้คิดค่าชดใช้ '
+                        . '(หรือไปใส่ราคาปกในหน้าแก้ไขหนังสือก่อน)'
+                    );
+                }
+
+                // 💰 Step 3: ค่าชดใช้ = ราคาหนังสือ + ค่าดำเนินการ
+                //    ⚙️ ค่าดำเนินการแก้ได้ที่หน้า "ตั้งค่าระบบ" (LOST_BOOK_FEE, ค่าเริ่มต้น 0)
+                $charge = round($usePrice + (float) LOST_BOOK_FEE, 2);
+
+                // 📝 Step 4: 2 writes ใน 1 transaction (atomic)
+                //    4a. ปิดรายการยืม + snapshot ค่าชดใช้ลง fine_amount
+                $ok = $this->borrowRepo->markAsLost($borrowId, $type, $charge, $reportedBy, $note);
+                if (!$ok) {
+                    // 🛡️ มีคนแจ้งไปแล้วระหว่างที่เรากำลังทำ → ห้ามลด quantity ซ้ำ
+                    throw new Exception('รายการนี้ถูกแจ้งไปแล้ว');
+                }
+
+                //    4b. ลด quantity ลง 1 (ไม่แตะ available — ดูเหตุผลที่ Repository)
+                if (!$this->bookRepo->decrementQuantityForLoss((int) $borrow['book_id'])) {
+                    throw new Exception('ลดจำนวนหนังสือไม่สำเร็จ — ยกเลิกการแจ้งทั้งหมด');
+                }
+
+                $this->pdo->commit();
+
+                $typeLabel = $type === 'lost' ? 'หาย' : 'ชำรุด';
+                $feeNote   = LOST_BOOK_FEE > 0
+                    ? sprintf(' (ราคาหนังสือ %s + ค่าดำเนินการ %s)', number_format($usePrice, 2), number_format((float) LOST_BOOK_FEE, 2))
+                    : '';
+
+                return [
+                    'success' => true,
+                    'status'  => $type,
+                    'charge'  => $charge,
+                    'message' => sprintf(
+                        'บันทึกหนังสือ%s แล้ว | ค่าชดใช้ %s บาท%s | จำนวนหนังสือในระบบลดลง 1 เล่ม',
+                        $typeLabel,
+                        number_format($charge, 2),
+                        $feeNote
+                    ),
+                ];
+            } catch (Exception $e) {
+                // ❌ rollback → status ยังเป็น borrowing + quantity ไม่ถูกลด
+                $this->pdo->rollBack();
+                error_log("[BorrowService::markAsLost] borrowId={$borrowId} error: " . $e->getMessage());
+                throw $e;
+            }
+        }, 'BorrowService::markAsLost');
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ย้อนการแจ้งหาย/ชำรุด — หาหนังสือเจอทีหลัง
+     * ==========================================================================
+     * State: lost | damaged → returned
+     *
+     * 📥 Input:
+     * @param int      $borrowId
+     * @param string   $note      เหตุผลที่ย้อน (บังคับ)
+     * @param int|null $undoneBy  ผู้ย้อน (users.id)
+     *
+     * 📤 Output: @return array {success, refundNeeded, paidAmount, message}
+     *
+     * 🧠 หนังสือหาแล้วเจอเป็นเรื่องปกติของห้องสมุด และกล่องยืนยันหลายอันในระบบนี้
+     *    ไม่บอกว่ากำลังทำอะไรกับใคร (F-47) — กดผิดแถวแล้วย้อนไม่ได้
+     *    จะเสียทั้งสต็อกและเก็บเงินผิดคน จึงต้องย้อนได้ แต่ต้องเหลือร่องรอย
+     *
+     * 💰 เรื่องเงิน:
+     *    - ยังไม่ได้จ่าย → ล้างค่าชดใช้ทิ้ง (fine_amount = 0)
+     *    - จ่ายไปแล้ว   → **ไม่แตะเงิน** เก็บ payment ไว้เหมือนเดิม แล้วบอกให้คนคืนเงินเอง
+     *      (ระบบไม่มีระบบคืนเงิน จะลบ payment ทิ้งเงียบ ๆ ไม่ได้ รายงานรายได้จะเพี้ยน)
+     *
+     * ⚠️ ตั้ง return_date = วันนี้ ตรงนี้ถูกต้อง เพราะหนังสือกลับเข้าชั้นจริง
+     *    (ต่างจากตอนแจ้งหายที่ห้ามตั้ง — ดูหมายเหตุใน BorrowRepository::markAsLost)
+     *
+     * ✅ Use case: admin/borrows.php → ปุ่ม "ย้อนการแจ้ง"
+     */
+    public function undoLost(int $borrowId, string $note, ?int $undoneBy = null): array
+    {
+        $note = trim($note);
+        if ($note === '') {
+            throw new Exception('กรุณากรอกเหตุผลที่ย้อนการแจ้ง');
+        }
+        if (mb_strlen($note) > 200) {
+            throw new Exception('เหตุผลต้องไม่เกิน 200 ตัวอักษร');
+        }
+
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $note, $undoneBy) {
+            $this->pdo->beginTransaction();
+
+            try {
+                // 🔒 ล็อคเฉพาะแถวที่แจ้งหาย/ชำรุดไว้จริง — กันย้อนซ้ำ (quantity จะเกิน)
+                $borrow = $this->borrowRepo->findLostByIdForUpdate($borrowId);
+
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการที่แจ้งหาย/ชำรุดไว้ — อาจถูกย้อนไปแล้ว');
+                }
+
+                // 💰 เช็คว่าจ่ายค่าชดใช้ไปหรือยัง
+                $paid       = $this->paymentRepo->findByBorrowId($borrowId);
+                $paidAmount = $paid ? (float) $paid['amount'] : 0.0;
+
+                // 📝 ยังไม่จ่าย → ล้างหนี้ทิ้ง · จ่ายแล้ว → คงยอดเดิมไว้คู่กับ payment
+                $newFine = $paid ? (float) $borrow['fine_amount'] : 0.0;
+
+                $trail = sprintf(
+                    '[ย้อนการแจ้ง %s โดย #%s] %s',
+                    date('Y-m-d H:i'),
+                    $undoneBy ?? '-',
+                    $note
+                );
+
+                if (!$this->borrowRepo->undoLost($borrowId, $newFine, $trail)) {
+                    throw new Exception('ย้อนการแจ้งไม่สำเร็จ — อาจมีคนย้อนไปแล้ว');
+                }
+
+                // 📚 คืนหนังสือเข้าระบบ: quantity +1 และ available +1
+                //    invariant: รายการนี้เป็น 'returned' แล้ว ไม่ถูกนับเป็นกำลังยืม
+                //    available = quantity − ยืม − จอง → ต้องขึ้นทั้งคู่
+                $this->bookRepo->addQuantity((int) $borrow['book_id'], 1);
+
+                $this->pdo->commit();
+
+                $msg = 'ย้อนการแจ้งแล้ว | หนังสือกลับเข้าระบบ 1 เล่ม';
+                if ($paidAmount > 0) {
+                    $msg .= sprintf(
+                        ' | ⚠️ ชำระค่าชดใช้ไปแล้ว %s บาท ระบบไม่คืนเงินให้อัตโนมัติ — ต้องคืนเงินเอง',
+                        number_format($paidAmount, 2)
+                    );
+                } else {
+                    $msg .= ' | ยกเลิกค่าชดใช้ที่ค้างอยู่';
+                }
+
+                return [
+                    'success'      => true,
+                    'refundNeeded' => $paidAmount > 0,
+                    'paidAmount'   => $paidAmount,
+                    'message'      => $msg,
+                ];
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                error_log("[BorrowService::undoLost] borrowId={$borrowId} error: " . $e->getMessage());
+                throw $e;
+            }
+        }, 'BorrowService::undoLost');
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: ต่ออายุการยืม — เลื่อนกำหนดคืนออกไปอีกรอบ
      * ==========================================================================
      * State: borrowing (ยังไม่เกินกำหนด) → borrowing (due_date ใหม่)

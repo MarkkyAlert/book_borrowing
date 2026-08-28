@@ -61,6 +61,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     }
 
+    // 📚 แจ้งหนังสือหาย / ชำรุด — ปิดรายการยืม + ลดจำนวนในระบบ + คิดค่าชดใช้
+    if ($action === 'mark_lost') {
+        $borrowId = (int) ($_POST['borrow_id'] ?? 0);
+        $type     = $_POST['loss_type'] ?? 'lost';
+        $note     = trim($_POST['loss_note'] ?? '');
+
+        // 💰 ราคาที่เจ้าหน้าที่กรอก — เว้นว่าง = ให้ Service ไปหยิบ books.price เอง
+        //    🔴 ห้ามแปลงค่าว่างเป็น 0 ที่นี่ ไม่งั้นจะข้ามด่าน "บังคับกรอกราคา" ของ Service
+        //       และกลายเป็นทำหนังสือหายแล้วไม่ต้องจ่าย
+        $priceRaw = trim((string) ($_POST['loss_price'] ?? ''));
+        $price    = ($priceRaw === '') ? null : (float) $priceRaw;
+
+        // [IDEMPOTENCY] กันกดซ้ำ — สำคัญกว่าปกติเพราะ action นี้ลด quantity
+        $idempotencyKey = 'mark_lost_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        }
+
+        try {
+            // [STATE] borrowing → lost | damaged
+            //    Service ตรวจ: ประเภทถูกต้อง · มีเหตุผล · รู้ราคา (ห้ามคิด 0 เงียบ ๆ)
+            $result = $borrowService->markAsLost($borrowId, $type, $price, $note, $_SESSION['user_id']);
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+            setFlash('warning', $result['message']);
+        } catch (Exception $e) {
+            setFlash('error', $e->getMessage());
+        }
+        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    }
+
+    // ↩️ ย้อนการแจ้งหาย/ชำรุด — หาหนังสือเจอทีหลัง
+    if ($action === 'undo_lost') {
+        $borrowId = (int) ($_POST['borrow_id'] ?? 0);
+        $note     = trim($_POST['undo_note'] ?? '');
+
+        // 🧠 idempotency key คนละตัวกับ mark_lost — ไม่งั้นแจ้งหายแล้วย้อนไม่ได้ในเซสชันเดียว
+        $idempotencyKey = 'undo_lost_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        }
+
+        try {
+            // [STATE] lost | damaged → returned
+            $result = $borrowService->undoLost($borrowId, $note, $_SESSION['user_id']);
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+
+            // ⚠️ ถ้าจ่ายค่าชดใช้ไปแล้ว ต้องเตือนให้เด่น — ระบบไม่คืนเงินให้เอง
+            setFlash($result['refundNeeded'] ? 'warning' : 'success', $result['message']);
+        } catch (Exception $e) {
+            setFlash('error', $e->getMessage());
+        }
+        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    }
+
     if ($action === 'return') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         $payNow = isset($_POST['pay_now']);
@@ -107,7 +163,8 @@ $borrowRepo = new \App\Repositories\BorrowRepository($pdo);
 
 // 🔧 สร้าง filter array — เฉพาะค่าที่ valid เท่านั้น
 $filters = ['search' => $search];
-if ($status === 'borrowing' || $status === 'returned') {
+// 🧠 ต้องมี lost/damaged ด้วย ไม่งั้นรายการที่แจ้งหายจะกรองดูแยกไม่ได้เลย
+if (in_array($status, ['borrowing', 'returned', 'lost', 'damaged'], true)) {
     $filters['status'] = $status;
 }
 if ($filter === 'overdue') {
@@ -165,6 +222,8 @@ require_once __DIR__ . '/header.php';
                 <option value="">ทั้งหมด</option>
                 <option value="borrowing" <?= $status === 'borrowing' ? 'selected' : '' ?>>กำลังยืม</option>
                 <option value="returned" <?= $status === 'returned' ? 'selected' : '' ?>>คืนแล้ว</option>
+                <option value="lost" <?= $status === 'lost' ? 'selected' : '' ?>>แจ้งหาย</option>
+                <option value="damaged" <?= $status === 'damaged' ? 'selected' : '' ?>>ชำรุด</option>
             </select>
         </div>
         <div class="md:col-span-4 flex flex-wrap gap-2">
@@ -292,6 +351,25 @@ require_once __DIR__ . '/header.php';
                                             data-overdue-days="<?= $fine['days'] ?>">
                                         <i class="bi bi-check-lg mr-1.5"></i>คืน
                                     </button>
+                                    <?php // 📚 แจ้งหาย/ชำรุด — ลดจำนวนหนังสือในระบบ จึงแยกสีให้เห็นว่าไม่ใช่การคืนปกติ ?>
+                                    <button type="button" class="btn-lost inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-orange-700 bg-orange-100 hover:bg-orange-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                                            onclick="openLostModal(this)"
+                                            data-borrow-id="<?= $borrow['id'] ?>"
+                                            data-book-title="<?= e($borrow['book_title']) ?>"
+                                            data-user-name="<?= e($borrow['user_name']) ?>"
+                                            data-price="<?= $borrow['book_price'] !== null ? (float) $borrow['book_price'] : '' ?>">
+                                        <i class="bi bi-exclamation-triangle mr-1.5"></i>หาย/ชำรุด
+                                    </button>
+                                <?php elseif (in_array($borrow['status'], ['lost', 'damaged'], true)): ?>
+                                    <?php // ↩️ หาหนังสือเจอทีหลังเป็นเรื่องปกติ — ต้องย้อนได้ แต่ต้องเหลือร่องรอย ?>
+                                    <button type="button" class="btn-undo-lost inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+                                            onclick="openUndoLostModal(this)"
+                                            data-borrow-id="<?= $borrow['id'] ?>"
+                                            data-book-title="<?= e($borrow['book_title']) ?>"
+                                            data-user-name="<?= e($borrow['user_name']) ?>"
+                                            data-charge="<?= number_format((float) $borrow['fine_amount'], 2) ?>">
+                                        <i class="bi bi-arrow-counterclockwise mr-1.5"></i>ย้อนการแจ้ง
+                                    </button>
                                 <?php else: ?>
                                     <span class="text-xs text-gray-400 font-medium italic">ดำเนินการแล้ว</span>
                                 <?php endif; ?>
@@ -403,6 +481,245 @@ function closeRenewModal() {
     setTimeout(() => modal.classList.add('hidden'), 200);
 }
 </script>
+
+<?php // 📚 Modal แจ้งหาย/ชำรุด — ต้องบอกให้ชัดว่าคิดเงินเท่าไร กับใคร และสต็อกจะลด ?>
+<div id="lostModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="lostBackdrop"></div>
+
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="lostPanel">
+
+            <div class="bg-gradient-to-r from-orange-500 to-amber-600 px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold leading-6 text-white flex items-center">
+                        <i class="bi bi-exclamation-triangle mr-2"></i>แจ้งหนังสือหาย / ชำรุด
+                    </h3>
+                    <button type="button" class="text-white/80 hover:text-white focus:outline-none" onclick="closeLostModal()">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form method="POST" id="lostForm">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <input type="hidden" name="action" value="mark_lost">
+                <input type="hidden" name="borrow_id" id="lostBorrowId" value="">
+
+                <div class="px-6 py-5 space-y-4">
+                    <div>
+                        <p class="text-center text-gray-600 text-sm">กำลังแจ้งหนังสือ</p>
+                        <p class="text-center font-bold text-gray-900 mt-1" id="lostBookTitle"></p>
+                        <p class="text-center text-sm text-gray-500 mt-0.5">
+                            <i class="bi bi-person mr-1"></i>ผู้ยืม: <span id="lostUserName"></span>
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">เกิดอะไรขึ้น <span class="text-red-500">*</span></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-300 rounded-xl cursor-pointer text-sm has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50 has-[:checked]:text-orange-700 has-[:checked]:font-medium transition-colors">
+                                <input type="radio" name="loss_type" value="lost" checked class="text-orange-600 focus:ring-orange-500">
+                                หาย
+                            </label>
+                            <label class="flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-300 rounded-xl cursor-pointer text-sm has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50 has-[:checked]:text-purple-700 has-[:checked]:font-medium transition-colors">
+                                <input type="radio" name="loss_type" value="damaged" class="text-purple-600 focus:ring-purple-500">
+                                ชำรุดจนใช้ไม่ได้
+                            </label>
+                        </div>
+                        <p class="mt-1.5 text-xs text-gray-500">ชำรุดแต่ยังอ่านได้ ให้กดคืนตามปกติแล้วบันทึกไว้ในหมายเหตุแทน</p>
+                    </div>
+
+                    <div>
+                        <label for="lostPrice" class="block text-sm font-medium text-gray-700 mb-1.5">
+                            ราคาหนังสือ <span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <input type="number" name="loss_price" id="lostPrice" step="0.01" min="0" required
+                                   class="w-full rounded-xl border-gray-300 focus:border-orange-500 focus:ring-orange-500 shadow-sm pr-12"
+                                   placeholder="กรอกราคาหนังสือ">
+                            <span class="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 pointer-events-none">บาท</span>
+                        </div>
+                        <p class="mt-1.5 text-xs text-gray-500" id="lostPriceHint"></p>
+                    </div>
+
+                    <div>
+                        <label for="lostNote" class="block text-sm font-medium text-gray-700 mb-1.5">
+                            รายละเอียด <span class="text-red-500">*</span>
+                        </label>
+                        <textarea name="loss_note" id="lostNote" rows="2" required maxlength="255"
+                                  class="w-full rounded-xl border-gray-300 focus:border-orange-500 focus:ring-orange-500 shadow-sm text-sm"
+                                  placeholder="เช่น ผู้ยืมแจ้งว่าทำหายระหว่างเดินทาง"></textarea>
+                        <p class="mt-1 text-xs text-gray-500">เป็นเรื่องเงิน ต้องบันทึกไว้ว่าทำไมถึงคิดเงิน</p>
+                    </div>
+
+                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-3.5 text-sm">
+                        <div class="flex justify-between text-gray-700">
+                            <span>ค่าชดใช้ที่จะเรียกเก็บ</span>
+                            <span class="font-bold text-orange-700 text-base" id="lostCharge">-</span>
+                        </div>
+                        <?php if (LOST_BOOK_FEE > 0): ?>
+                            <p class="mt-1 text-xs text-gray-500">ราคาหนังสือ + ค่าดำเนินการ <?= number_format((float) LOST_BOOK_FEE, 2) ?> บาท</p>
+                        <?php endif; ?>
+                        <ul class="mt-2 space-y-0.5 text-xs text-gray-600 list-disc list-inside">
+                            <li>จำนวนหนังสือในระบบจะลดลง 1 เล่ม</li>
+                            <li>ไม่คิดค่าปรับเกินกำหนดซ้ำ — ค่าชดใช้แทนที่ค่าปรับ</li>
+                            <li>ถ้าหาเจอทีหลัง ย้อนได้จากปุ่มในแถวเดียวกัน</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <button type="button" onclick="closeLostModal()" class="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-orange-600 rounded-xl hover:bg-orange-700 transition-colors shadow-lg shadow-orange-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>ยืนยันการแจ้ง
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php // ↩️ Modal ย้อนการแจ้ง — บอกให้ชัดว่าเงินที่จ่ายไปแล้วระบบไม่คืนให้เอง ?>
+<div id="undoLostModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="undoLostBackdrop"></div>
+
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="undoLostPanel">
+
+            <div class="bg-gradient-to-r from-slate-600 to-slate-700 px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold leading-6 text-white flex items-center">
+                        <i class="bi bi-arrow-counterclockwise mr-2"></i>ย้อนการแจ้งหาย/ชำรุด
+                    </h3>
+                    <button type="button" class="text-white/80 hover:text-white focus:outline-none" onclick="closeUndoLostModal()">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form method="POST" id="undoLostForm">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <input type="hidden" name="action" value="undo_lost">
+                <input type="hidden" name="borrow_id" id="undoLostBorrowId" value="">
+
+                <div class="px-6 py-5 space-y-4">
+                    <div>
+                        <p class="text-center text-gray-600 text-sm">หาหนังสือเจอแล้วใช่ไหม</p>
+                        <p class="text-center font-bold text-gray-900 mt-1" id="undoLostBookTitle"></p>
+                        <p class="text-center text-sm text-gray-500 mt-0.5">
+                            <i class="bi bi-person mr-1"></i>ผู้ยืม: <span id="undoLostUserName"></span>
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="undoNote" class="block text-sm font-medium text-gray-700 mb-1.5">
+                            เหตุผลที่ย้อน <span class="text-red-500">*</span>
+                        </label>
+                        <textarea name="undo_note" id="undoNote" rows="2" required maxlength="200"
+                                  class="w-full rounded-xl border-gray-300 focus:border-slate-500 focus:ring-slate-500 shadow-sm text-sm"
+                                  placeholder="เช่น ผู้ยืมนำหนังสือมาคืนแล้ว"></textarea>
+                        <p class="mt-1 text-xs text-gray-500">เก็บต่อท้ายบันทึกเดิม ไม่ลบร่องรอยการแจ้งทิ้ง</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-gray-600">
+                        <ul class="space-y-0.5 list-disc list-inside">
+                            <li>หนังสือกลับเข้าระบบ 1 เล่ม</li>
+                            <li>ค่าชดใช้ <span class="font-medium" id="undoLostCharge"></span> บาทที่<span class="font-medium">ยังไม่ได้จ่าย</span> จะถูกยกเลิก</li>
+                            <li class="text-amber-700">ถ้าจ่ายไปแล้ว ระบบ<span class="font-bold">ไม่คืนเงินให้อัตโนมัติ</span> ต้องคืนเงินเอง</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <button type="button" onclick="closeUndoLostModal()" class="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-slate-700 rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>ยืนยันการย้อน
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// 📚 ค่าดำเนินการหนังสือหาย — อ่านจากหน้าตั้งค่าระบบ ไม่ hardcode
+const LOST_BOOK_FEE = <?= (float) LOST_BOOK_FEE ?>;
+
+// 💰 คำนวณยอดให้เห็นสด ๆ ระหว่างพิมพ์ราคา — ต้องรู้ก่อนกดว่าจะเรียกเก็บเท่าไร
+function updateLostCharge() {
+    const raw = document.getElementById('lostPrice').value;
+    const el  = document.getElementById('lostCharge');
+    if (raw === '' || isNaN(parseFloat(raw))) {
+        el.textContent = '-';
+        return;
+    }
+    const total = Math.round((Math.max(0, parseFloat(raw)) + LOST_BOOK_FEE) * 100) / 100;
+    el.textContent = total.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' บาท';
+}
+
+function openLostModal(btn) {
+    document.getElementById('lostBorrowId').value = btn.dataset.borrowId;
+    document.getElementById('lostBookTitle').textContent = btn.dataset.bookTitle;
+    document.getElementById('lostUserName').textContent = btn.dataset.userName;
+
+    // 💰 เติมราคาปกให้ถ้ามี — ถ้าไม่มีต้องให้คนกรอกเอง ห้ามปล่อยเป็น 0
+    const price = btn.dataset.price;
+    const input = document.getElementById('lostPrice');
+    const hint  = document.getElementById('lostPriceHint');
+    input.value = price !== '' ? price : '';
+    hint.textContent = price !== ''
+        ? 'เติมจากราคาปกที่บันทึกไว้ แก้ได้ถ้าราคาจริงต่างไป'
+        : 'หนังสือเล่มนี้ยังไม่ได้ระบุราคาปก ต้องกรอกเอง';
+    hint.className = price !== '' ? 'mt-1.5 text-xs text-gray-500' : 'mt-1.5 text-xs text-amber-600 font-medium';
+
+    document.getElementById('lostNote').value = '';
+    updateLostCharge();
+
+    const modal = document.getElementById('lostModal');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('lostBackdrop').classList.remove('opacity-0');
+        document.getElementById('lostPanel').classList.remove('opacity-0', 'translate-y-4', 'sm:scale-95');
+    }, 10);
+}
+
+function closeLostModal() {
+    document.getElementById('lostBackdrop').classList.add('opacity-0');
+    document.getElementById('lostPanel').classList.add('opacity-0', 'translate-y-4', 'sm:scale-95');
+    setTimeout(() => document.getElementById('lostModal').classList.add('hidden'), 200);
+}
+
+function openUndoLostModal(btn) {
+    document.getElementById('undoLostBorrowId').value = btn.dataset.borrowId;
+    document.getElementById('undoLostBookTitle').textContent = btn.dataset.bookTitle;
+    document.getElementById('undoLostUserName').textContent = btn.dataset.userName;
+    document.getElementById('undoLostCharge').textContent = btn.dataset.charge;
+    document.getElementById('undoNote').value = '';
+
+    const modal = document.getElementById('undoLostModal');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('undoLostBackdrop').classList.remove('opacity-0');
+        document.getElementById('undoLostPanel').classList.remove('opacity-0', 'translate-y-4', 'sm:scale-95');
+    }, 10);
+}
+
+function closeUndoLostModal() {
+    document.getElementById('undoLostBackdrop').classList.add('opacity-0');
+    document.getElementById('undoLostPanel').classList.add('opacity-0', 'translate-y-4', 'sm:scale-95');
+    setTimeout(() => document.getElementById('undoLostModal').classList.add('hidden'), 200);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const p = document.getElementById('lostPrice');
+    if (p) p.addEventListener('input', updateLostCharge);
+});
+</script>
+
 
 <!-- Return Confirmation Modal (Tailwind CSS) -->
 <div id="returnModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

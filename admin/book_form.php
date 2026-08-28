@@ -45,6 +45,7 @@ $book = [
     'description' => '',
     'cover_image' => '',
     'quantity' => 1,
+    'price' => null,      // 💰 null = ยังไม่ระบุราคาปก (ไม่ใช่ 0 = ฟรี)
     'available' => 1
 ];
 $isEdit = false;
@@ -79,6 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
     $book['description'] = trim($_POST['description'] ?? '');
     $book['quantity'] = max(0, (int) ($_POST['quantity'] ?? 1)); // ขั้นต่ำ 0 เล่ม (สำหรับซ่อนหนังสือที่หาย/ชำรุด)
+    // 💰 ราคาปก — เว้นว่างได้ แปลว่า "ยังไม่ระบุ" ไม่ใช่ "ฟรี"
+    //    🔴 ห้ามแปลงค่าว่างเป็น 0 เพราะตอนแจ้งหนังสือหายระบบใช้ค่านี้คิดค่าชดใช้
+    //       ถ้าเป็น 0 จะกลายเป็นทำหายแล้วไม่ต้องจ่าย ต้องคง null ไว้ให้ระบบบังคับกรอก
+    $priceRaw = trim((string) ($_POST['price'] ?? ''));
+    $book['price'] = ($priceRaw === '') ? null : round(max(0, (float) $priceRaw), 2);
     $book['is_visible'] = isset($_POST['is_visible']) ? 1 : 0; // 👁️ การมองเห็น
     $book['is_reference'] = isset($_POST['is_reference']) ? 1 : 0; // 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
     $isEdit = !empty($_POST['id']);
@@ -156,6 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'description' => $book['description'] ?: null,
             'cover_image' => $coverImage,
             'quantity' => $book['quantity'],
+            'price' => $book['price'],          // 💰 null = ยังไม่ระบุ
             'is_visible' => $book['is_visible'] ?? 1,
             'is_reference' => $book['is_reference'] ?? 0
         ];
@@ -285,6 +292,23 @@ require_once __DIR__ . '/header.php';
                         <?php if ($isEdit && isset($book['available'])): ?>
                             <p class="mt-1 text-xs text-green-600 font-medium">ว่าง <?= $book['available'] ?> เล่ม</p>
                         <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- 💰 ราคาปก — ใช้ตั้งต้นค่าชดใช้ตอนแจ้งหนังสือหาย -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-1">
+                        <label for="price" class="block text-sm font-medium text-gray-700 mb-1">ราคาปก</label>
+                        <div class="relative">
+                            <input type="number" id="price" name="price" step="0.01" min="0"
+                                value="<?= $book['price'] !== null && $book['price'] !== '' ? e($book['price']) : '' ?>"
+                                placeholder="เว้นว่างได้"
+                                class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm pr-12">
+                            <span class="absolute inset-y-0 right-0 flex items-center pr-4 text-sm text-gray-400 pointer-events-none">บาท</span>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            ใช้ตั้งต้นค่าชดใช้เวลาแจ้งหนังสือหาย — เว้นว่างไว้ได้ แล้วค่อยกรอกตอนแจ้ง
+                        </p>
                     </div>
                 </div>
 
