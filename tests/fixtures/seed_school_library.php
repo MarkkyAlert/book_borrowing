@@ -567,6 +567,14 @@ foreach ($bookIds as $bid) {
     $sp      = $spare[$bid];
     $upd->execute([$active + $pending + $sp, $sp, $bid]);
 }
+// 🕐 created_at ต้องไล่ตามวันที่ยืมจริง ไม่ใช่เวลาที่สคริปต์เขียนลงฐานข้อมูล
+//    ไม่งั้นหน้า "การยืมล่าสุด" และการเรียงลำดับในตารางจะเพี้ยนทั้งระบบ
+$pdo->exec("UPDATE borrows SET created_at = TIMESTAMP(borrow_date, SEC_TO_TIME(FLOOR(RAND()*28800)+28800)),
+                               updated_at = TIMESTAMP(COALESCE(return_date, borrow_date), SEC_TO_TIME(FLOOR(RAND()*28800)+28800))");
+$pdo->exec("UPDATE payments p JOIN borrows b ON b.id = p.borrow_id
+            SET p.created_at = TIMESTAMP(COALESCE(b.return_date, b.borrow_date), SEC_TO_TIME(FLOOR(RAND()*28800)+28800))");
+$pdo->exec("UPDATE reservations SET created_at = DATE_SUB(expires_at, INTERVAL 2 DAY)");
+
 recomputeStock($pdo);   // เล่มเดิมจาก sample_data ก็ให้ invariant ถูกด้วย
 say('📦 คำนวณสต็อกใหม่จาก borrows + reservations จริงแล้ว');
 
