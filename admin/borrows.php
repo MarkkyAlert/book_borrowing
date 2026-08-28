@@ -38,6 +38,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('borrows.php');
     }
     
+    // 🔄 ต่ออายุการยืม — เลื่อนกำหนดคืน ไม่แตะสต็อก
+    if ($action === 'renew') {
+        $borrowId = (int) ($_POST['borrow_id'] ?? 0);
+
+        // [IDEMPOTENCY] ป้องกัน double-submit แบบเดียวกับการคืน
+        $idempotencyKey = 'renew_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        }
+
+        try {
+            // [STATE] borrowing → borrowing (due_date ใหม่)
+            //    Service ตรวจ: ยังไม่เกินกำหนด · ยังไม่เต็มโควตา · ไม่มีคนจองรอ
+            $result = $borrowService->renewBorrow($borrowId);
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+            setFlash('success', $result['message']);
+        } catch (Exception $e) {
+            setFlash('error', $e->getMessage());
+        }
+        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    }
+
     if ($action === 'return') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         $payNow = isset($_POST['pay_now']);
@@ -101,6 +124,12 @@ $filters['offset'] = $pagination['offset'];
 
 // 📊 ดึงข้อมูล "เฉพาะหน้านี้" พร้อม JOIN (book_title, user_name, ฯลฯ)
 $borrows = $borrowRepo->findAll($filters);
+
+// 🔖 หนังสือที่มีคนจองรออยู่ — ดึงทีเดียวเป็นชุด ไม่ยิง query ทีละแถว
+//    ใช้ตัดสินว่าปุ่ม "ต่ออายุ" ของแถวไหนควรกดได้ (มีคนรอ = ต่อไม่ได้)
+$booksWithPendingReservation = array_flip(array_map('intval',
+    $pdo->query("SELECT DISTINCT book_id FROM reservations WHERE status = 'pending'")->fetchAll(PDO::FETCH_COLUMN)
+));
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
 $paginationParams = ['search' => $search, 'status' => $status, 'filter' => $filter];
@@ -226,6 +255,34 @@ require_once __DIR__ . '/header.php';
                             </td>
                             <td class="px-6 py-4">
                                 <?php if ($borrow['status'] === 'borrowing'): ?>
+                                    <?php
+                                        // 🔄 ต่ออายุได้ไหม — เช็ค 3 เงื่อนไขเดียวกับที่ Service ตรวจ
+                                        //    ถ้าไม่ได้ ยังแสดงปุ่มแต่กดไม่ได้ + บอกเหตุผลบน tooltip
+                                        //    (แบบเดียวกับปุ่มลบหนังสือ — ผู้ใช้ต้องรู้ว่าทำไมกดไม่ได้)
+                                        $renewCount  = (int) ($borrow['renew_count'] ?? 0);
+                                        $hasReserver = isset($booksWithPendingReservation[(int) $borrow['book_id']]);
+                                        $renewBlock  = null;
+                                        if (MAX_RENEW_COUNT < 1)          $renewBlock = 'ระบบปิดการต่ออายุไว้';
+                                        elseif ($isOverdue)               $renewBlock = 'เลยกำหนดคืนแล้ว ต่ออายุไม่ได้ — ต้องคืนก่อนแล้วยืมใหม่';
+                                        elseif ($renewCount >= MAX_RENEW_COUNT) $renewBlock = 'ต่ออายุครบแล้ว (' . MAX_RENEW_COUNT . ' ครั้ง)';
+                                        elseif ($hasReserver)             $renewBlock = 'มีสมาชิกจองหนังสือเล่มนี้รออยู่';
+                                    ?>
+                                    <?php if ($renewBlock === null): ?>
+                                        <button type="button" class="btn-renew inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                                onclick="openRenewModal(this)"
+                                                data-borrow-id="<?= $borrow['id'] ?>"
+                                                data-book-title="<?= e($borrow['book_title']) ?>"
+                                                data-user-name="<?= e($borrow['user_name']) ?>"
+                                                data-due-date="<?= formatDate($borrow['due_date']) ?>"
+                                                data-new-due="<?= formatDate(date('Y-m-d', strtotime($borrow['due_date'] . ' +' . DEFAULT_BORROW_DAYS . ' days'))) ?>">
+                                            <i class="bi bi-arrow-clockwise mr-1.5"></i>ต่ออายุ
+                                        </button>
+                                    <?php else: ?>
+                                        <button type="button" disabled title="<?= e($renewBlock) ?>"
+                                                class="inline-flex items-center px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-300 bg-gray-50 cursor-not-allowed">
+                                            <i class="bi bi-arrow-clockwise mr-1.5"></i>ต่ออายุ
+                                        </button>
+                                    <?php endif; ?>
                                     <button type="button" class="btn-return inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
                                             onclick="openReturnModal(this)"
                                             data-borrow-id="<?= $borrow['id'] ?>"
@@ -249,6 +306,103 @@ require_once __DIR__ . '/header.php';
 
 <?php // 📄 แถบเลือกหน้า (ไม่แสดงถ้ามีหน้าเดียว) ?>
 <?php require __DIR__ . '/../includes/pagination.php'; ?>
+
+<?php // 🔄 Modal ยืนยันต่ออายุ — บอกให้ชัดว่ากำหนดคืนจะเปลี่ยนจากวันไหนเป็นวันไหน ?>
+<div id="renewModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="renewBackdrop"></div>
+
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="renewPanel">
+
+            <div class="bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold leading-6 text-white flex items-center">
+                        <i class="bi bi-arrow-clockwise mr-2"></i>ยืนยันการต่ออายุ
+                    </h3>
+                    <button type="button" class="text-white/80 hover:text-white focus:outline-none" onclick="closeRenewModal()">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form method="POST" id="renewForm">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <input type="hidden" name="action" value="renew">
+                <input type="hidden" name="borrow_id" id="renewBorrowId" value="">
+
+                <div class="px-6 py-5">
+                    <div class="flex items-center justify-center mb-4">
+                        <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                            <i class="bi bi-calendar-plus text-3xl text-blue-600"></i>
+                        </div>
+                    </div>
+
+                    <p class="text-center text-gray-600 text-sm">ต่ออายุการยืมหนังสือ</p>
+                    <p class="text-center font-bold text-gray-900 mt-1" id="renewBookTitle"></p>
+                    <p class="text-center text-sm text-gray-500 mt-0.5">
+                        <i class="bi bi-person mr-1"></i><span id="renewUserName"></span>
+                    </p>
+
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mt-4">
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="text-center flex-1">
+                                <div class="text-xs text-gray-500 mb-0.5">กำหนดคืนเดิม</div>
+                                <div class="font-medium text-gray-700" id="renewOldDue"></div>
+                            </div>
+                            <i class="bi bi-arrow-right text-blue-400 mx-2"></i>
+                            <div class="text-center flex-1">
+                                <div class="text-xs text-gray-500 mb-0.5">กำหนดคืนใหม่</div>
+                                <div class="font-bold text-blue-700" id="renewNewDue"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="mt-3 text-xs text-gray-500 text-center">
+                        ต่อได้ <?= MAX_RENEW_COUNT ?> ครั้ง · นับเพิ่มอีก <?= DEFAULT_BORROW_DAYS ?> วันจากกำหนดเดิม
+                    </p>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <button type="button" onclick="closeRenewModal()" class="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>ยืนยันต่ออายุ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// 🔄 เปิด/ปิด modal ต่ออายุ — จังหวะเดียวกับ modal คืนหนังสือ
+function openRenewModal(btn) {
+    document.getElementById('renewBorrowId').value = btn.dataset.borrowId;
+    document.getElementById('renewBookTitle').textContent = btn.dataset.bookTitle;
+    document.getElementById('renewUserName').textContent = btn.dataset.userName;
+    document.getElementById('renewOldDue').textContent = btn.dataset.dueDate;
+    document.getElementById('renewNewDue').textContent = btn.dataset.newDue;
+
+    const modal = document.getElementById('renewModal');
+    const backdrop = document.getElementById('renewBackdrop');
+    const panel = document.getElementById('renewPanel');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        panel.classList.remove('opacity-0', 'translate-y-4', 'sm:scale-95');
+    }, 10);
+}
+
+function closeRenewModal() {
+    const modal = document.getElementById('renewModal');
+    const backdrop = document.getElementById('renewBackdrop');
+    const panel = document.getElementById('renewPanel');
+    backdrop.classList.add('opacity-0');
+    panel.classList.add('opacity-0', 'translate-y-4', 'sm:scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+}
+</script>
 
 <!-- Return Confirmation Modal (Tailwind CSS) -->
 <div id="returnModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

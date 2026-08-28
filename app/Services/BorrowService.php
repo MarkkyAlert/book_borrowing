@@ -432,6 +432,110 @@ class BorrowService
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: ต่ออายุการยืม — เลื่อนกำหนดคืนออกไปอีกรอบ
+     * ==========================================================================
+     * State: borrowing (ยังไม่เกินกำหนด) → borrowing (due_date ใหม่)
+     *
+     * 🔄 Flow:
+     * 1. BEGIN TX → lock borrow (FOR UPDATE, status='borrowing')
+     * 2. ตรวจ 3 ข้อ: ยังไม่เกินกำหนด · ยังไม่เกินโควตาต่ออายุ · ไม่มีคนจองรออยู่
+     * 3. UPDATE due_date + renew_count → COMMIT
+     *
+     * 📥 Input:
+     * @param int $borrowId รายการยืม
+     * @param int|null $days จำนวนวันที่ต่อ (null = DEFAULT_BORROW_DAYS)
+     *
+     * 📤 Output: @return array {success, due_date, renew_count, message}
+     * @throws Exception ถ้าคืนแล้ว / เลยกำหนด / เต็มโควตา / มีคนจองรอ
+     *
+     * 🧠 เลื่อนจาก **กำหนดคืนเดิม** ไม่ใช่จากวันนี้
+     *    ต่อวันไหนก็ได้เท่ากัน = "ได้เพิ่มอีก 7 วันจากกำหนดเดิม" อธิบายง่ายและไม่ลงโทษคนมาต่อเร็ว
+     *
+     * 🔴 ทำไมห้ามต่อเมื่อเลยกำหนดแล้ว — เป็นข้อจำกัดทางเทคนิค ไม่ใช่แค่นโยบาย:
+     *    ระบบนี้ไม่เก็บค่าปรับของรายการที่ยังไม่คืน (fine_amount = 0 จนกว่าจะคืน)
+     *    ค่าปรับคำนวณสดจาก due_date ตอนคืน → เลื่อน due_date = **ลบค่าปรับที่เกิดไปแล้วทิ้ง**
+     *    กลายเป็นช่องหนีค่าปรับที่เจ้าหน้าที่กดให้เองได้ (ดู ROADMAP ข้อ 3)
+     *
+     * 🔴 ทำไมห้ามต่อเมื่อมีคนจองรออยู่:
+     *    ถ้าปล่อยให้ต่อได้ คนที่จองไว้จะไม่มีวันได้หนังสือ — เป็นกติกามาตรฐานห้องสมุด
+     *
+     * ✅ Use case: admin/borrows.php → ปุ่ม "ต่ออายุ"
+     */
+    public function renewBorrow(int $borrowId, ?int $days = null): array
+    {
+        $days = $days ?? DEFAULT_BORROW_DAYS;
+
+        // 📝 ปิดการต่ออายุทั้งระบบได้ด้วยการตั้งค่าเป็น 0 (หน้าตั้งค่าระบบ)
+        if (MAX_RENEW_COUNT < 1) {
+            throw new Exception('ระบบปิดการต่ออายุการยืมไว้');
+        }
+
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $days) {
+            $this->pdo->beginTransaction();
+
+            try {
+                // 🔒 Step 1: lock แถว borrow (กรอง status='borrowing' อยู่แล้ว)
+                $borrow = $this->borrowRepo->findByIdForUpdate($borrowId);
+
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการยืม หรือรายการนี้คืนไปแล้ว');
+                }
+
+                // 📅 Step 2: ต้องยังไม่เกินกำหนด (วันครบกำหนดพอดียังต่อได้)
+                if ($borrow['due_date'] < date('Y-m-d')) {
+                    $overdueDays = (int) ((strtotime('today') - strtotime($borrow['due_date'])) / 86400);
+                    throw new Exception(sprintf(
+                        'เลยกำหนดคืนมาแล้ว %d วัน ต่ออายุไม่ได้ — ต้องคืนก่อนแล้วยืมใหม่',
+                        $overdueDays
+                    ));
+                }
+
+                // 🔢 Step 3: โควตาการต่ออายุ
+                $renewCount = (int) ($borrow['renew_count'] ?? 0);
+                if ($renewCount >= MAX_RENEW_COUNT) {
+                    throw new Exception(sprintf(
+                        'ต่ออายุครบจำนวนที่กำหนดแล้ว (%d ครั้ง) — ต้องคืนก่อนแล้วยืมใหม่',
+                        MAX_RENEW_COUNT
+                    ));
+                }
+
+                // 🔖 Step 4: มีคนจองเล่มนี้รออยู่หรือไม่ (ภายใต้ transaction เดียวกัน)
+                //    ถ้ามี ต้องให้คิวได้หนังสือ ไม่ใช่ให้คนเดิมถือต่อ
+                if ($this->reservationRepo->countPendingByBook((int) $borrow['book_id']) > 0) {
+                    throw new Exception('มีสมาชิกจองหนังสือเล่มนี้รออยู่ ต่ออายุไม่ได้');
+                }
+
+                // 📝 Step 5: เลื่อนกำหนดคืนจากกำหนดเดิม
+                $newDue = date('Y-m-d', strtotime($borrow['due_date'] . " +{$days} days"));
+
+                if (!$this->borrowRepo->renewBorrow($borrowId, $newDue, MAX_RENEW_COUNT)) {
+                    // 📌 มาถึงตรงนี้แปลว่ามีคนต่ออายุตัดหน้าไปแล้วระหว่าง lock
+                    throw new Exception('ต่ออายุไม่สำเร็จ — รายการนี้อาจถูกต่ออายุหรือคืนไปแล้ว');
+                }
+
+                $this->pdo->commit();
+
+                return [
+                    'success' => true,
+                    'due_date' => $newDue,
+                    'renew_count' => $renewCount + 1,
+                    'message' => sprintf(
+                        'ต่ออายุสำเร็จ | กำหนดคืนใหม่: %s (ต่อครั้งที่ %d จาก %d)',
+                        date('d/m/Y', strtotime($newDue)),
+                        $renewCount + 1,
+                        MAX_RENEW_COUNT
+                    ),
+                ];
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                error_log("[BorrowService::renewBorrow] borrowId={$borrowId} error: " . $e->getMessage());
+                throw $e;
+            }
+        }, 'BorrowService::renewBorrow');
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: ยกเว้นค่าปรับ (ไม่เก็บเงิน แต่ไม่นับเป็นค้างชำระอีก)
      * ==========================================================================
      * State: fine ค้างชำระ → ยกเว้นแล้ว

@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS `borrows` (
     `book_id` INT NOT NULL COMMENT 'หนังสือที่ยืม',
     `borrow_date` DATE NOT NULL COMMENT 'วันที่ยืม',
     `due_date` DATE NOT NULL COMMENT 'กำหนดคืน',
+    `renew_count` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'ต่ออายุไปแล้วกี่ครั้ง',
     `return_date` DATE DEFAULT NULL COMMENT 'วันที่คืนจริง',
     `status` ENUM('borrowing', 'returned') NOT NULL DEFAULT 'borrowing' COMMENT 'สถานะ',
     `fine_amount` DECIMAL(10,2) DEFAULT 0 COMMENT 'ค่าปรับ',

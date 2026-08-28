@@ -70,6 +70,16 @@ function ruleDefinitions(): array
             'unit'    => 'บาท',
             'help'    => 'คิดตอนคืนหนังสือ นับทุกวันตามปฏิทิน (ยังไม่มีตารางวันหยุดทำการ)',
         ],
+        'MAX_RENEW_COUNT' => [
+            'setting' => 'rule_max_renew',
+            'env'     => 'MAX_RENEW_COUNT',
+            'default' => 1,
+            'min'     => 0,          // 📝 0 = ปิดการต่ออายุทั้งระบบ
+            'max'     => 10,
+            'label'   => 'ต่ออายุการยืมได้',
+            'unit'    => 'ครั้ง',
+            'help'    => 'ต่อได้เฉพาะตอนยังไม่เกินกำหนด และต้องไม่มีคนจองเล่มนั้นรออยู่ · ตั้ง 0 = ปิดการต่ออายุ',
+        ],
         'FINE_WAIVE_STAFF_LIMIT' => [
             'setting' => 'rule_waive_staff_limit',
             'env'     => 'FINE_WAIVE_STAFF_LIMIT',

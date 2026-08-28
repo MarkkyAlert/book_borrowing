@@ -30,3 +30,8 @@ tmp/
 
 # manifest ของ L2 seeder (เฉพาะเครื่อง)
 tests/fixtures/.school_seed.json
+
+# ผลรันชุดทดสอบ — สร้างใหม่ทุกครั้งที่รัน ไม่ใช่ของที่ลูกค้าต้องได้
+tests/logs/full_suite_*.json
+tests/logs/qa_run_*.jsonl
+tests/logs/cookie_*.txt

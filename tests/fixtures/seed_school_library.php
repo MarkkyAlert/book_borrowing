@@ -697,11 +697,17 @@ function verifyData(PDO $pdo): void
         ['หนังสือเหลือเล่มสุดท้าย',     "SELECT COUNT(*) FROM books WHERE available=1", 4],
         ['การจองหมดอายุแต่ยังค้าง',    "SELECT COUNT(*) FROM reservations WHERE status='pending' AND expires_at<NOW()", 1],
         ['หนังสืออ้างอิง (ยืมไม่ได้)',  "SELECT COUNT(*) FROM books WHERE is_reference=1", 3],
-        ['อ้างอิงที่ถูกยืมอยู่ (ต้อง 0)', "SELECT (SELECT COUNT(*) FROM borrows b JOIN books k ON k.id=b.book_id WHERE k.is_reference=1 AND b.status='borrowing')=0", 1],
+        // $min = 0 หมายถึง "ต้องไม่มีเลย" — นับตัวที่ละเมิดตรง ๆ ไม่ใช่เขียนเป็น boolean
+        // (เคยเขียนเป็น `SELECT (...)=0` แล้วจอแสดง "1 รายการ ✅" ซึ่งอ่านแล้วเข้าใจกลับด้าน)
+        ['อ้างอิงที่ถูกยืมอยู่',        "SELECT COUNT(*) FROM borrows b JOIN books k ON k.id=b.book_id WHERE k.is_reference=1 AND b.status='borrowing'", 0],
     ];
     foreach ($cases as [$label, $sql, $min]) {
         $n = (int) $pdo->query($sql)->fetchColumn();
-        printf("   %-28s %4d รายการ   %s\n", $label, $n, $n >= $min ? '✅' : '⚠️  ต้องมีอย่างน้อย ' . $min);
+        if ($min === 0) {
+            printf("   %-28s %4d รายการ   %s\n", $label, $n, $n === 0 ? '✅ (ต้องเป็น 0)' : '❌ ต้องเป็น 0');
+        } else {
+            printf("   %-28s %4d รายการ   %s\n", $label, $n, $n >= $min ? '✅' : '⚠️  ต้องมีอย่างน้อย ' . $min);
+        }
     }
 
     // 🛡️ invariant ต้องไม่พังหลัง seed

@@ -372,6 +372,38 @@ class BorrowRepository
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: ต่ออายุการยืม — เลื่อน due_date + นับจำนวนครั้ง
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $borrowId รายการยืม
+     * @param string $newDue   กำหนดคืนใหม่ (Y-m-d) — Service คำนวณมาให้แล้ว
+     *
+     * 📤 Output: @return bool true = อัปเดตสำเร็จ
+     *
+     * 🛡️ เงื่อนไขใน WHERE เป็นด่านสุดท้าย กันต่ออายุซ้ำแม้ยิงพร้อมกัน 2 ครั้ง:
+     *    - status = 'borrowing' → คืนไปแล้วต่อไม่ได้
+     *    - renew_count < MAX     → เกินโควตาต่อไม่ได้
+     *    (คู่กับ FOR UPDATE lock ที่ Service)
+     *
+     * ⚠️ ไม่แตะ available — ต่ออายุไม่เปลี่ยนสต็อก หนังสือยังอยู่กับคนเดิม
+     *
+     * ✅ Use case: BorrowService::renewBorrow()
+     */
+    public function renewBorrow(int $borrowId, string $newDue, int $maxRenew): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE borrows
+            SET due_date = ?, renew_count = renew_count + 1
+            WHERE id = ? AND status = 'borrowing' AND renew_count < ?
+        ");
+        $stmt->execute([$newDue, $borrowId, $maxRenew]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: บันทึกการยกเว้นค่าปรับ (ไม่แตะ fine_amount เดิม)
      * ==========================================================================
      *
