@@ -19,7 +19,10 @@
 > F-32, F-33 เจอตอนตรวจพฤติกรรมตอน DB ล่ม และทดสอบบน PHP 8.5 — **แก้แล้วทั้งคู่**
 > F-34 เจอตอนวัดโหลด — **แก้แล้ว** (🟠 rate limit ของ API ค้นหาไม่ทำงานเลย ยิง 200 ครั้งไม่ถูกบล็อก)
 > F-07 "Export PDF" ไม่ใช่ PDF — **แก้แล้ว** (แก้คำโฆษณาให้ตรงกับของ + ปรับ print CSS ให้พิมพ์หลายหน้าได้ดี)
-> F-06, F-10, F-11 เป็นข้อมูลเชิงบริบท — ไม่ใช่บั๊ก ต้องตัดสินใจเชิงผลิตภัณฑ์ก่อนถึงจะแก้ได้
+> F-06, F-10, F-11 เป็นข้อมูลเชิงบริบท (ไม่ใช่บั๊ก) — **ตรวจซ้ำและอัปเดตเอกสารให้ตรงกับโค้ดแล้ว 2026-08-28**
+>
+> ## ✅ ปิดครบทุกข้อแล้ว — F-01…F-34 ไม่มีรายการค้าง
+> ชุดทดสอบ **396/396** ใน 29 ชุด · ทดสอบบน PHP 8.2.4 และ 8.5.8
 >
 > F-12…F-14 เจอตอนตรวจว่าข้อมูลตัวอย่างครอบคลุมพอสำหรับทดสอบทุก flow หรือไม่ — ทั้งสามอยู่ใน `database/sample_data.sql`
 
@@ -129,15 +132,36 @@ GET /api/search_books.php?search=Atomic → พบ (2 ครั้ง)  ❌ ร�
 
 ---
 
-## 🔵 F-06 — Context §4 บอกว่ามี "Business Setting" ในหน้า Settings — จริง ๆ ไม่มี
+## ✅ F-06 — [ตรวจแล้ว · เอกสารตรงกับโค้ดแล้ว] หน้า Settings ปรับได้แค่ 3 อย่าง
 
-ตาราง `settings` ใช้จริงแค่ **3 key**: `org_name`, `card_color_primary`, `card_color_secondary` (`admin/settings.php`)
+**Context §4 เดิมบอกว่ามี "Business Setting" ในหน้า Settings — จริง ๆ ไม่มี**
 
-กฎธุรกิจทั้งหมด (จำนวนวันยืม, โควตา, ค่าปรับ, rate limit, session) เป็น **PHP constant ที่อ่านจาก `.env` ตอน boot** ไม่ได้อยู่ในตาราง settings → ลูกค้าเปลี่ยนเองผ่านหน้าเว็บไม่ได้ ต้องแก้ไฟล์ `.env`
+**ตรวจซ้ำเมื่อ 2026-08-28 — ยังเป็นแบบเดิม:** `admin/settings.php` จัดการแค่ **3 key**
+`org_name`, `card_color_primary`, `card_color_secondary`
 
-ถ้าต้องการให้ปรับผ่านหน้าเว็บ: ต้องย้ายค่าเหล่านี้ไปตาราง `settings` แล้วแก้ทุกจุดที่อ้าง constant (`BorrowService`, `ReservationService`, `config.php`) — เป็นงานที่มีผลกระทบกว้าง ต้องตัดสินใจก่อน
+กฎธุรกิจทั้งหมด (จำนวนวันยืม, โควตา, ค่าปรับ, rate limit, session, จำนวนต่อหน้า)
+เป็น **PHP constant ที่อ่านจาก `.env` ตอน boot** ไม่ได้อยู่ในตาราง `settings`
+→ ลูกค้าเปลี่ยนเองผ่านหน้าเว็บไม่ได้ ต้องแก้ไฟล์ `.env`
+
+**🔍 เจอเพิ่มตอนตรวจซ้ำ — key ที่ไม่มีใครใช้:**
+ตาราง `settings` ในฐานข้อมูลมี 4 key ที่ `sample_data.sql` ใส่ไว้ —
+`library_name`, `library_address`, `library_phone`, `library_email` —
+แต่ **ไม่มีโค้ดไหนอ่านเลยสักบรรทัด** และไม่มีในหน้า Settings ด้วย
+→ ถ้าใครเปิด phpMyAdmin ไปเจอแล้วแก้ จะไม่มีอะไรเปลี่ยน
+📌 ยังไม่ลบทิ้ง เพราะเป็นการตัดสินใจของเจ้าของโปรเจกต์ (อาจตั้งใจเผื่อไว้ใช้ทีหลัง)
+
+**เอกสารที่แก้ให้ตรงแล้ว:**
+- `FAQ_FOR_SALER.md` เคยเขียนกำกวมว่า "ตั้งค่าชื่อเว็บ ค่าปรับ จำนวนวันยืม **ได้เอง**"
+  ผู้ขายพูดตามแล้วลูกค้าจะเข้าใจว่าปรับในหน้าเว็บได้ → เติมว่า "(แก้ในไฟล์ตั้งค่า `.env` — ไม่ใช่ในหน้าเว็บ)"
+  พร้อมเพิ่มหมายเหตุให้ผู้ขายว่าหน้า Settings ปรับได้แค่ 3 อย่าง และควรตอบลูกค้ายังไง
+- `docs/FAQ.md` เขียนถูกอยู่แล้ว ("ผ่านไฟล์ `.env`")
+- `LIMITATIONS.md` และ `FEATURE_MATRIX.md` เขียนถูกอยู่แล้ว ("แค่ 3 key" / "ยังปรับผ่านหน้าเว็บไม่ได้")
+
+**ถ้าจะทำให้ปรับผ่านหน้าเว็บได้:** ต้องย้ายค่าไปตาราง `settings` แล้วแก้ทุกจุดที่อ้าง constant
+(`BorrowService`, `ReservationService`, `config.php`) — ผลกระทบกว้าง ยังไม่ทำ
 
 ---
+
 ## ✅ F-07 — [แก้แล้ว] "Export PDF" ไม่ใช่ PDF — แก้คำโฆษณาให้ตรงกับของ
 
 **ปัญหา:** ปุ่มและเอกสารเขียนว่า "Export PDF" แต่ระบบ**ไม่ได้สร้างไฟล์ PDF** —
@@ -263,17 +287,45 @@ Tailwind ที่ใช้อยู่คือตัวคอมไพล์�
 
 ---
 
-## 🔵 F-10 — Idempotency เป็นแบบ session (Context §10 สั่งให้ตรวจ — ตรวจแล้ว)
+## ✅ F-10 — [ตรวจแล้ว · เอกสารตรงกับโค้ดแล้ว] Idempotency เป็นแบบ session
 
-Key เก็บใน `$_SESSION['processed_actions']` อายุ 5 นาที (`includes/functions.php:746`) ครอบ 8 flow (ดู SECURITY_CHECKLIST §9)
-กันได้เฉพาะ double-submit ใน session เดียวกัน — request ซ้ำจากคนละเครื่อง/คนละ session พึ่ง **row lock + UNIQUE constraint** ซึ่งมีจริงและทดสอบผ่าน (DB constraint test 11/11)
+**Context §10 สั่งให้ตรวจ — ตรวจแล้ว และตรวจซ้ำเมื่อ 2026-08-28**
+
+Key เก็บใน `$_SESSION['processed_actions']` อายุ 5 นาที
+(`cleanupIdempotencyKeys()` — `includes/functions.php:758`)
+ครอบ **8 ไฟล์** ที่ทำ action สำคัญ:
+`admin/books.php`, `admin/borrows.php`, `admin/borrow_form.php`, `admin/members.php`,
+`admin/payments.php`, `admin/reservations.php`, `api/reserve_book.php`, `api/cancel_reservation.php`
+
+**ป้องกันได้แค่ไหน:** กันการกดซ้ำ (double-submit) ใน session เดียวกันเท่านั้น
+request ซ้ำจากคนละเครื่อง/คนละ session **ไม่ได้พึ่ง idempotency** แต่พึ่ง
+**row lock (`SELECT … FOR UPDATE`) + UNIQUE constraint** ซึ่งมีจริงและทดสอบผ่าน
+(DB Constraint Tests 11/11 · Concurrency Gap Analysis 19/19 · Deadlock Retry 6/6)
+
+**นี่คือการออกแบบที่สมเหตุผล ไม่ใช่ข้อบกพร่อง** — idempotency แบบ session เป็นชั้นแรก
+ที่ราคาถูกและกันเคสที่พบบ่อยที่สุด (ผู้ใช้กดปุ่มรัว) ส่วนความถูกต้องจริง ๆ
+รับประกันที่ชั้นฐานข้อมูล ซึ่งเป็นที่ที่ควรอยู่
+
+⚠️ ข้อจำกัดที่ต้องรู้: session เก็บใน filesystem → ถ้าขยายเป็นหลาย server
+ต้องย้าย session ไป Redis/DB ก่อน ไม่งั้นชั้นนี้จะใช้ไม่ได้ (บันทึกไว้ใน KNOWN_LIMITATIONS §1)
 
 ---
 
-## 🔵 F-11 — Context §12 บอกว่ามีเอกสาร ~9 ชุด — จริง ๆ มี 11 ไฟล์
+## ✅ F-11 — [ตรวจแล้ว · เอกสารตรงกับโค้ดแล้ว] จำนวนเอกสาร
 
-`docs/` มี: ARCHITECTURE, DEPLOYMENT, FAQ, **FAQ_FOR_SALER**, FLOW, INSTALL, LIMITATIONS, QA_CHECKLIST, STUDY_GUIDE, **SUPPORT**, WHERE_TO_EDIT
-(commit `e5926f5` ลบเอกสารชุดเก่าออกหลายไฟล์ เช่น `API.md`, `DATABASE.md`, `CUSTOMIZATION.md` — ถ้ามีเอกสาร/ลิงก์ไหนยังอ้างถึงไฟล์เหล่านั้นอยู่ ถือว่าลิงก์เสีย)
+**Context §12 บอกว่ามีเอกสาร ~9 ชุด — นับจริงเมื่อ 2026-08-28 มี 11 ไฟล์**
+
+`docs/` (11 ไฟล์): ARCHITECTURE, DEPLOYMENT, FAQ, FAQ_FOR_SALER, FLOW, INSTALL,
+LIMITATIONS, QA_CHECKLIST, STUDY_GUIDE, SUPPORT, WHERE_TO_EDIT
+
+`docs/ai-context/` (9 ไฟล์): 00_INDEX, PROJECT_MAP, DATABASE_MAP, FEATURE_MATRIX,
+BUSINESS_RULES, SECURITY_CHECKLIST, KNOWN_LIMITATIONS, WHERE_TO_EDIT_MAP, FINDINGS
+
+**รวม 20 ไฟล์**
+
+commit `e5926f5` เคยลบเอกสารชุดเก่าออก (`API.md`, `DATABASE.md`, `CUSTOMIZATION.md`)
+→ **ตรวจลิงก์ทั้งหมดแล้วเมื่อ 2026-08-28: ลิงก์ `.md` ทุกอันในทุกเอกสารชี้ไฟล์ที่มีอยู่จริง
+ไม่มีลิงก์เสียเหลืออยู่** (ตรวจด้วยสคริปต์ไล่ทุก `[...](....md)` ใน `docs/` และ `README.md`)
 
 ---
 
