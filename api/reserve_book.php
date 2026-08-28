@@ -62,12 +62,22 @@ if (!checkRateLimit($rateLimitKey, 10, 5, false)) {
 }
 incrementRateLimit($rateLimitKey, false);
 
+// 🔄 โหมด: จองปกติ (เล่มว่าง) หรือ เข้าคิวรอ (เล่มถูกยืมหมด)
+//    ⚠️ ห้ามให้ฝั่งหน้าเว็บเป็นคนตัดสินว่าจองได้ไหม — ส่งมาแค่ "เจตนา"
+//       Service เป็นคนเช็คสต็อกภายใต้ lock อีกที และปฏิเสธถ้าเจตนาไม่ตรงกับสภาพจริง
+$mode = ($_POST['mode'] ?? '') === 'queue' ? 'queue' : 'reserve';
+
 // 🛡️ [IDEMPOTENCY] ป้องกัน double-submit (กดจองซ้ำเร็วๆ)
-//    ใช้ user_id + book_id เป็น key — ถ้าจองเล่มเดียวกันซ้ำภายใน 5 วินาทีจะถูกบล็อก
-$idempotencyKey = 'reserve_' . $userId . '_' . $bookId;
+//    ใช้ user_id + book_id + mode เป็น key
+//    🧠 ต้องมี mode ด้วย ไม่งั้นคนที่เพิ่งกดจองไม่สำเร็จแล้วกดเข้าคิวทันที
+//       จะได้ข้อความ "จองเรียบร้อยแล้ว" ทั้งที่ยังไม่ได้เข้าคิว
+$idempotencyKey = 'reserve_' . $mode . '_' . $userId . '_' . $bookId;
 if (isset($_SESSION['processed_actions'][$idempotencyKey]) 
     && (time() - $_SESSION['processed_actions'][$idempotencyKey]) < 5) {
-    echo json_encode(['success' => true, 'message' => 'จองหนังสือเรียบร้อยแล้ว']);
+    echo json_encode([
+        'success' => true,
+        'message' => $mode === 'queue' ? 'เข้าคิวเรียบร้อยแล้ว' : 'จองหนังสือเรียบร้อยแล้ว'
+    ]);
     exit;
 }
 
@@ -78,7 +88,10 @@ try {
     
     // 📝 Service จัดการทั้งหมด:
     //    expire เก่า, lock book, check stock, check duplicate, insert, decrement stock
-    $result = $reservationService->createReservation($userId, $bookId);
+    //    🔄 โหมดคิว: ไม่แตะสต็อกเลย แต่เช็คว่าถูกยืมหมดจริงภายใต้ lock ก่อน
+    $result = $mode === 'queue'
+        ? $reservationService->joinQueue($userId, $bookId)
+        : $reservationService->createReservation($userId, $bookId);
     
     // 🛡️ [IDEMPOTENCY] บันทึกว่า process แล้ว
     $_SESSION['processed_actions'][$idempotencyKey] = time();

@@ -131,6 +131,13 @@ class ReservationRepository
                         WHERE id = ? AND available < quantity
                     ");
                     $stockStmt->execute([$res['book_id']]);
+
+                    // 🔄 คนแรกไม่มารับ → เล่มต้องตกไปที่คนถัดไปในคิว ไม่ใช่ขึ้นชั้นให้ใครก็ได้
+                    //    อยู่ในทรานแซกชันเดียวกับการ expire อยู่แล้ว
+                    //    ⚠️ ห้ามลบ — ถ้าลบ คิวจะขยับเฉพาะตอนคืนหนังสือ
+                    //       ส่วนคนที่รอต่อจากคนที่ไม่มารับจะค้างอยู่ตลอดกาล
+                    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . RESERVATION_EXPIRE_DAYS . ' days'));
+                    $this->promoteNextInQueue((int) $res['book_id'], $expiresAt);
                 }
             }
             
@@ -391,14 +398,17 @@ class ReservationRepository
             return false;
         }
         
-        // 📝 SQL: เปลี่ยน status (เฉพาะจาก pending เท่านั้น)
-        // 🛡️ [SQL GUARD] WHERE status='pending' = ป้องกัน state machine
+        // 📝 SQL: เปลี่ยน status (เฉพาะจากสถานะที่ยัง "มีชีวิต")
+        // 🛡️ [SQL GUARD] WHERE status IN ('waiting','pending') = ป้องกัน state machine
+        //    waiting → {cancelled}                 (ยกเลิกคิว)
+        //    waiting → pending                     ทำผ่าน promoteToPending() ไม่ใช่ที่นี่
         //    pending → {fulfilled, cancelled, expired}
         //    fulfilled/cancelled/expired → ไม่สามารถเปลี่ยน (0 rows affected)
+        // 🧠 ต้องรับ waiting ด้วย ไม่งั้นสมาชิกยกเลิกคิวของตัวเองไม่ได้
         $stmt = $this->pdo->prepare("
             UPDATE reservations 
             SET status = ? 
-            WHERE id = ? AND status = 'pending'
+            WHERE id = ? AND status IN ('waiting', 'pending')
         ");
         $stmt->execute([$newStatus, $id]);
         
@@ -468,6 +478,36 @@ class ReservationRepository
             SELECT * FROM reservations 
             WHERE status = 'pending' AND expires_at < NOW()
         ")->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ล็อกการจองที่ยัง "มีชีวิต" — ทั้งคิวรอและของที่พร้อมแล้ว
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $id, @param int|null $userId (null = admin ยกเลิกได้ทุกคน)
+     * 📤 Output: @return array|null แถวที่ถูกล็อก
+     *
+     * 🧠 ต่างจาก findPendingForUpdate() ที่รับเฉพาะ pending —
+     *    เมธอดนี้รับ waiting ด้วย เพราะสมาชิกต้องยกเลิกคิวของตัวเองได้
+     *    ผู้เรียกต้องดู status ที่คืนมาเพื่อตัดสินว่าต้องคืนสต็อกไหม
+     *    (waiting ไม่ได้กินสต็อก จึงไม่มีอะไรให้คืน)
+     *
+     * ✅ Use case: ReservationService::cancelReservation()
+     */
+    public function findActiveForUpdate(int $id, ?int $userId = null): ?array
+    {
+        $sql = "SELECT * FROM reservations WHERE id = ? AND status IN ('waiting','pending') FOR UPDATE";
+        $params = [$id];
+
+        if ($userId !== null) {
+            $sql = "SELECT * FROM reservations WHERE id = ? AND user_id = ? AND status IN ('waiting','pending') FOR UPDATE";
+            $params = [$id, $userId];
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetch() ?: null;
     }
 
     /**
@@ -618,12 +658,228 @@ class ReservationRepository
      */
     public function countPendingByBook(int $bookId): int
     {
-        // 📝 SQL: นับ pending reservations ของหนังสือนี้
-        // 🧠 ใช้เป็น guard ก่อนลบหนังสือ
-        //    ถ้ามีคนจองอยู่ → ห้ามลบ
+        // 📝 SQL: นับเฉพาะ pending — คือการจองที่ **กินสต็อก** อยู่จริง
+        // 🔴 ห้ามเพิ่ม waiting เข้ามาที่เมธอดนี้
+        //    ถ้าต้องการ "มีใครรอเล่มนี้อยู่ไหม" ให้ใช้ countActiveByBook() แทน
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM reservations 
             WHERE book_id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$bookId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เข้าคิวรอหนังสือที่ถูกยืมหมด (ไม่แตะสต็อก)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $userId, @param int $bookId
+     * 📤 Output: @return int Reservation ID
+     *
+     * ⚠️ **ไม่หัก available** — คิวรอไม่กินสต็อก เพราะหนังสือยังอยู่กับคนอื่น
+     *    ต่างจาก create() ที่เป็นการจองเล่มที่ว่างอยู่แล้ว จึงต้องกันเล่มไว้
+     * ⚠️ **expires_at = NULL** — คิวรอไม่มีวันหมดอายุ (ตกลงไว้ใน ROADMAP)
+     *    หนังสือดังอาจรอเป็นเดือน ถ้าให้หมดอายุคนต้องมากดใหม่เรื่อย ๆ ซึ่งไร้ประโยชน์
+     *
+     * ✅ Use case: ReservationService::joinQueue()
+     */
+    public function createWaiting(int $userId, int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO reservations (user_id, book_id, status, queued_at, expires_at)
+            VALUES (?, ?, 'waiting', NOW(), NULL)
+        ");
+        $stmt->execute([$userId, $bookId]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ล็อกคิวคนถัดไปของหนังสือเล่มนี้ (FOR UPDATE)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return array|null แถวคิวคนแรก หรือ null ถ้าไม่มีใครรอ
+     *
+     * 🧠 เรียงด้วย COALESCE(queued_at, created_at) แล้วค่อย id
+     *    - COALESCE เพราะแถวที่สร้างก่อน migration ไม่มี queued_at
+     *    - ต่อท้ายด้วย id เพราะ 2 คนอาจเข้าคิววินาทีเดียวกัน ต้องมีตัวตัดสินที่แน่นอน
+     *      ไม่งั้นลำดับคิวจะสลับไปมาได้ทุกครั้งที่ query
+     *
+     * 🔒 FOR UPDATE — ต้องเรียกใน transaction เดียวกับการคืนหนังสือเสมอ
+     *    ไม่งั้นจะเกิดช่วงที่ available = 1 แล้วคนอื่นชิงยืมไปก่อนคนที่รอคิว
+     *
+     * ✅ Use case: ReservationService::promoteNextInQueue()
+     */
+    public function findNextInQueueForUpdate(int $bookId): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM reservations
+            WHERE book_id = ? AND status = 'waiting'
+            ORDER BY COALESCE(queued_at, created_at) ASC, id ASC
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $stmt->execute([$bookId]);
+
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เลื่อนคิวเป็น "ของพร้อมแล้ว" (waiting → pending)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $reservationId, @param string $expiresAt
+     * 📤 Output: @return bool true = เลื่อนสำเร็จ
+     *
+     * 🛡️ WHERE status = 'waiting' → กันเลื่อนซ้ำแม้ยิงพร้อมกัน
+     *    สำคัญมาก เพราะผู้เรียกจะหัก available ตามผลลัพธ์นี้
+     *    ถ้าเลื่อนซ้ำได้ สต็อกจะถูกหัก 2 ครั้งสำหรับเล่มเดียว
+     *
+     * ⚠️ **ไม่แตะ available ที่นี่** — ให้ Service เป็นคนหักในทรานแซกชันเดียวกัน
+     *    เพื่อให้เห็นชัดว่าสต็อกถูกแตะที่ไหนบ้าง (Repository ตัวอื่นก็ทำแบบนี้)
+     *
+     * ✅ Use case: ReservationService::promoteNextInQueue()
+     */
+    public function promoteToPending(int $reservationId, string $expiresAt): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE reservations
+            SET status = 'pending', expires_at = ?
+            WHERE id = ? AND status = 'waiting'
+        ");
+        $stmt->execute([$expiresAt, $reservationId]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เลื่อนคิวคนถัดไป + กันเล่มไว้ให้ — **ที่เดียวในระบบ**
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId, @param string $expiresAt
+     * 📤 Output: @return array|null ข้อมูลคนที่ถูกเลื่อน หรือ null ถ้าไม่มีใครรอ
+     *
+     * 🔴 **ต้องเรียกใน transaction ที่เปิดไว้แล้วเท่านั้น** — ไม่เปิด/ปิดเอง
+     *    เพราะต้องอยู่ทรานแซกชันเดียวกับเหตุการณ์ที่ทำให้หนังสือว่าง
+     *    ไม่งั้นจะมีช่วงที่ available > 0 แล้วคนนอกคิวชิงยืมไปก่อน
+     *
+     * 🧠 **ทำไมอยู่ที่ Repository ไม่ใช่ Service**
+     *    markExpiredReservations() ซึ่งอยู่ชั้น Repository ต้องใช้ตัวนี้ด้วย
+     *    (มันเป็น lazy expire ที่ถูกเรียกจาก 8 ที่ทั่วระบบ)
+     *    ถ้าเขียนแยกไว้ที่ Service ชั้น Repository จะต้องมีสำเนาของตรรกะเดียวกัน
+     *    ซึ่งวันหนึ่งจะแก้ไม่ครบทั้งสองที่ — จึงรวมไว้ที่นี่แล้วให้ Service เรียกใช้
+     *    (ตัวไฟล์นี้ยุ่งกับตาราง books อยู่แล้วตั้งแต่ markExpiredReservations)
+     *
+     * ⚠️ ถ้าหัก available ไม่สำเร็จ = โยน exception ให้ทรานแซกชัน rollback
+     *    ห้ามปล่อยผ่าน ไม่งั้นจะได้ pending ที่ไม่มีเล่มรองรับ
+     */
+    public function promoteNextInQueue(int $bookId, string $expiresAt): ?array
+    {
+        // 🔒 ล็อกแถวคิวคนแรก — กัน 2 เหตุการณ์พร้อมกันเลื่อนคนเดียวกัน 2 รอบ
+        $next = $this->findNextInQueueForUpdate($bookId);
+        if (!$next) {
+            return null;
+        }
+
+        if (!$this->promoteToPending((int) $next['id'], $expiresAt)) {
+            // 🛡️ มีคนเลื่อนไปแล้วระหว่างที่เรากำลังทำ → ห้ามหัก available ซ้ำ
+            return null;
+        }
+
+        // 📦 กันเล่มไว้ให้คนในคิว
+        // 🛡️ WHERE available > 0 = ด่านเดียวกับ BookRepository::decrementAvailable()
+        $stock = $this->pdo->prepare("
+            UPDATE books SET available = available - 1
+            WHERE id = ? AND available > 0
+        ");
+        $stock->execute([$bookId]);
+
+        if ($stock->rowCount() === 0) {
+            throw new \Exception('เลื่อนคิวไม่สำเร็จ — ไม่มีเล่มว่างให้กันไว้สำหรับคิวถัดไป');
+        }
+
+        return [
+            'reservation_id' => (int) $next['id'],
+            'user_id'        => (int) $next['user_id'],
+            'expires_at'     => $expiresAt,
+        ];
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดูว่าอยู่คิวที่เท่าไรของหนังสือเล่มนี้
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $reservationId
+     * 📤 Output: @return int ลำดับคิว (1 = คนถัดไป) หรือ 0 ถ้าไม่ได้อยู่ในคิว
+     *
+     * 🧠 นับว่ามีคนเข้าคิวก่อนหน้ากี่คน แล้ว +1
+     *    ใช้เกณฑ์เรียงชุดเดียวกับ findNextInQueueForUpdate() เป๊ะ
+     *    ไม่งั้นเลขที่โชว์ให้สมาชิกดูจะไม่ตรงกับลำดับที่ระบบเลื่อนจริง
+     *
+     * ✅ Use case: book.php, my_reservations.php
+     */
+    public function getQueuePosition(int $reservationId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) + 1
+            FROM reservations r
+            JOIN reservations me ON me.id = ?
+            WHERE r.book_id = me.book_id
+              AND r.status = 'waiting'
+              AND (
+                    COALESCE(r.queued_at, r.created_at) < COALESCE(me.queued_at, me.created_at)
+                 OR (COALESCE(r.queued_at, r.created_at) = COALESCE(me.queued_at, me.created_at) AND r.id < me.id)
+              )
+              AND me.status = 'waiting'
+        ");
+        $stmt->execute([$reservationId]);
+        $row = $stmt->fetch(PDO::FETCH_NUM);
+
+        return $row ? (int) $row[0] : 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนคนที่ต่อคิวรอหนังสือเล่มนี้
+     * ==========================================================================
+     * ✅ Use case: book.php แสดง "มีคนรออยู่ N คน"
+     */
+    public function countWaitingByBook(int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations WHERE book_id = ? AND status = 'waiting'
+        ");
+        $stmt->execute([$bookId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการจองที่ยัง "มีชีวิต" ของหนังสือ — รวมคิวรอด้วย
+     * ==========================================================================
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return int จำนวน waiting + pending
+     *
+     * 🧠 **ต่างจาก countPendingByBook() ตรงไหน**
+     *    countPendingByBook() ตอบว่า "กันสต็อกไว้กี่เล่ม" → ใช้กับสูตรสต็อก
+     *    เมธอดนี้ตอบว่า "มีคนรอเล่มนี้อยู่ไหม" → ใช้กับด่านที่ห้ามทำอะไรกับเล่มนั้น
+     *    สองคำถามนี้ให้คำตอบต่างกันตั้งแต่มีคิวรอ ห้ามใช้สลับกัน
+     *
+     * ✅ Use case: BookService::deleteBook() (ห้ามลบเล่มที่มีคนรอ)
+     *              BorrowService::renewBorrow() (ห้ามต่ออายุถ้ามีคนรอ)
+     */
+    public function countActiveByBook(int $bookId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations 
+            WHERE book_id = ? AND status IN ('waiting', 'pending')
         ");
         $stmt->execute([$bookId]);
         return (int) $stmt->fetchColumn();
@@ -640,12 +896,50 @@ class ReservationRepository
      */
     public function countPendingByUser(int $userId): int
     {
-        // 📝 SQL: นับ pending reservations ของ user นี้
-        // 🧠 ใช้เป็น guard ก่อนลบสมาชิก
-        //    ถ้ามีการจองค้างอยู่ → ห้ามลบ
+        // 📝 SQL: นับเฉพาะ pending — คือการจองที่จะกลายเป็นการยืม
+        // 🔴 ห้ามเพิ่ม waiting เข้ามาที่เมธอดนี้ — เมธอดนี้ใช้คิด **โควตา**
+        //    และกติกาที่ตกลงไว้คือ "คิวรอไม่กินโควตา"
+        //    (ถ้ากิน คนที่เข้าคิวรอ 3 เล่มจะยืมหนังสือที่วางบนชั้นตรงหน้าไม่ได้
+        //     ทั้งที่ยังไม่ได้ถืออะไรเลย)
+        //    ถ้าต้องการ "มีการจองค้างอยู่ไหม" ให้ใช้ countActiveByUser() แทน
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM reservations 
             WHERE user_id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับการจองที่ยัง "มีชีวิต" ของสมาชิก — รวมคิวรอด้วย
+     * ==========================================================================
+     * 📥 Input: @param int $userId
+     * 📤 Output: @return int จำนวน waiting + pending
+     * ✅ Use case: MemberService::deleteMember() (ห้ามลบคนที่ยังมีคิวค้าง)
+     */
+    public function countActiveByUser(int $userId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations 
+            WHERE user_id = ? AND status IN ('waiting', 'pending')
+        ");
+        $stmt->execute([$userId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับคิวรอของสมาชิก (ใช้จำกัดจำนวนคิวต่อคน)
+     * ==========================================================================
+     * 📥 Input: @param int $userId
+     * 📤 Output: @return int จำนวน waiting
+     * ✅ Use case: ReservationService::joinQueue() — จำกัดคิวต่อคน
+     */
+    public function countWaitingByUser(int $userId): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM reservations WHERE user_id = ? AND status = 'waiting'
         ");
         $stmt->execute([$userId]);
         return (int) $stmt->fetchColumn();
@@ -662,11 +956,13 @@ class ReservationRepository
      */
     public function hasPending(int $userId, int $bookId): bool
     {
-        // 📝 SQL: ตรวจว่า user จองหนังสือนี้อยู่แล้วหรือไม่ (pending)
+        // 📝 SQL: ตรวจว่า user มีการจองเล่มนี้ค้างอยู่ไหม — **รวมคิวรอด้วย**
         // 🧠 ใช้เป็น guard ก่อนสร้างการจองใหม่ — ป้องกันจองซ้ำ
+        // 🔴 ต้องรวม waiting ไม่งั้นคนที่เข้าคิวอยู่จะกดจองซ้ำเล่มเดิมได้
+        //    (และจะไปชน UNIQUE uq_reservation_active ที่ระดับ DB แทน ซึ่งข้อความ error อ่านไม่รู้เรื่อง)
         $stmt = $this->pdo->prepare("
             SELECT id FROM reservations 
-            WHERE user_id = ? AND book_id = ? AND status = 'pending'
+            WHERE user_id = ? AND book_id = ? AND status IN ('waiting', 'pending')
         ");
         $stmt->execute([$userId, $bookId]);
         // 📤 fetch() !== false = มี pending อยู่ (true → ห้ามจองซ้ำ)

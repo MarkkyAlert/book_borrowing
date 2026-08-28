@@ -85,6 +85,13 @@ $cleanup = function () use (&$created, &$cleanupDone, $pdo, $COOKIE) {
     $cleanupDone = true;
     echo "\n── CLEANUP ──\n";
     try {
+        // 🔴 ถ้าเทสต์ตายกลางทรานแซกชัน ต้อง rollback ก่อน ไม่งั้น DELETE ด้านล่าง
+        //    จะถูก rollback ไปพร้อมกัน แล้วข้อมูลทดสอบค้างในระบบทั้งชุด
+        //    (เจอมาแล้ว — เทสต์ตายที่ fatal error แล้วเหลือหนังสือ 12 เล่ม + สมาชิก 4 คน)
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+            echo "  ↩️  rollback transaction ที่ค้างอยู่ก่อนล้างข้อมูล\n";
+        }
         if ($created['borrows']) {
             $in = implode(',', array_map('intval', $created['borrows']));
             $pdo->exec("DELETE FROM payments WHERE borrow_id IN ($in)");

@@ -54,6 +54,7 @@ require_once __DIR__ . '/includes/header.php';
             <?php
             $tabs = [
                 '' => 'ทั้งหมด',
+                'waiting' => 'ต่อคิวรอ',
                 'pending' => 'รอดำเนินการ',
                 'fulfilled' => 'ยืมแล้ว',
                 'cancelled' => 'ยกเลิก',
@@ -88,12 +89,14 @@ require_once __DIR__ . '/includes/header.php';
             <?php foreach ($reservations as $reservation): ?>
                 <?php
                 $statusClasses = [
+                    'waiting' => 'bg-indigo-100 text-indigo-800',
                     'pending' => 'bg-yellow-100 text-yellow-800',
                     'fulfilled' => 'bg-green-100 text-green-800',
                     'cancelled' => 'bg-gray-100 text-gray-800',
                     'expired' => 'bg-red-100 text-red-800'
                 ];
                 $statusLabels = [
+                    'waiting' => 'ต่อคิวรอ',
                     'pending' => 'รอดำเนินการ',
                     'fulfilled' => 'ยืมแล้ว',
                     'cancelled' => 'ยกเลิก',
@@ -139,6 +142,21 @@ require_once __DIR__ . '/includes/header.php';
                                                 <i class="bi bi-clock mr-1"></i>
                                                 หมดอายุ: <?= date('d/m/Y H:i', strtotime($reservation['expires_at'])) ?>
                                             </span>
+                                        <?php elseif ($reservation['status'] === 'waiting'): ?>
+                                            <?php // 🔄 คิวรอไม่มีวันหมดอายุ (expires_at เป็น NULL)
+                                                  //    บอกลำดับกับจำนวนวันที่รอแทน ให้เห็นว่าคิวขยับจริง
+                                                  $queuedAt = $reservation['queued_at'] ?? $reservation['created_at'];
+                                                  $waitDays = max(0, (int) floor((time() - strtotime($queuedAt)) / 86400));
+                                                  $pos = $reservationRepo->getQueuePosition((int) $reservation['id']);
+                                            ?>
+                                            <span class="text-indigo-600 font-medium">
+                                                <i class="bi bi-people mr-1"></i>
+                                                คิวที่ <?= $pos ?>
+                                            </span>
+                                            <span>
+                                                <i class="bi bi-hourglass mr-1"></i>
+                                                รอมาแล้ว <?= $waitDays ?> วัน
+                                            </span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -151,11 +169,13 @@ require_once __DIR__ . '/includes/header.php';
                                 <?= $statusLabel ?>
                             </span>
 
-                            <?php if ($reservation['status'] === 'pending'): ?>
+                            <?php // 🔄 ยกเลิกได้ทั้งการจองและคิวรอ — คิวไม่มีวันหมดอายุ
+                                  //    ถ้าไม่ให้ยกเลิก คนจะติดคิวหนังสือที่ไม่อยากอ่านแล้วตลอดกาล ?>
+                            <?php if (in_array($reservation['status'], ['pending', 'waiting'], true)): ?>
                                 <button onclick="confirmCancel(<?= $reservation['id'] ?>, '<?= e(addslashes($reservation['book_title'])) ?>')"
                                     class="inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
                                     <i class="bi bi-x-circle mr-1"></i>
-                                    ยกเลิก
+                                    <?= $reservation['status'] === 'waiting' ? 'ออกจากคิว' : 'ยกเลิก' ?>
                                 </button>
                             <?php endif; ?>
                         </div>

@@ -196,6 +196,140 @@ class ReservationService
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: เข้าคิวรอหนังสือที่ถูกยืมหมด
+     * ==========================================================================
+     * State: (ไม่มี) → waiting
+     *
+     * 🧠 **ต่างจาก createReservation() ยังไง**
+     *    createReservation() = จองเล่มที่ว่างบนชั้น → หัก available ทันที กันเล่มไว้ให้
+     *    joinQueue()         = ต่อคิวรอเล่มที่คนอื่นยืมอยู่ → **ไม่แตะ available เลย**
+     *    สองอันนี้เป็นคนละเรื่องกัน อย่ารวมเป็นเมธอดเดียว
+     *
+     * 📥 Input: @param int $userId, @param int $bookId
+     * 📤 Output: @return array {success, reservation_id, position, message}
+     *
+     * 🧠 กติกาที่ตกลงไว้:
+     *    - คิวรอ **ไม่กินโควตายืม** (ยังไม่ได้ถือหนังสือ)
+     *    - แต่จำกัดจำนวนคิวต่อคน = MAX_BORROW_BOOKS ("ยืมได้ 3 จองรอได้ 3")
+     *    - คิวไม่มีวันหมดอายุ ยกเลิกเองได้
+     *
+     * ✅ Use case: book.php → ปุ่ม "เข้าคิวรอ" (api/reserve_book.php)
+     */
+    public function joinQueue(int $userId, int $bookId): array
+    {
+        // 📝 Step 0: Lazy expire ก่อน — เผื่อมีเล่มว่างอยู่จริงแต่ถูกกันไว้โดยการจองที่หมดอายุ
+        //    ถ้าไม่ทำ สมาชิกจะถูกให้ต่อคิวทั้งที่ควรจองได้เลย
+        $this->reservationRepo->markExpiredReservations();
+
+        return runWithDeadlockRetry($this->pdo, function () use ($userId, $bookId) {
+            $this->pdo->beginTransaction();
+
+            try {
+                // 🔒 ล็อคแถวหนังสือ — กันคนคืนหนังสือพร้อมกับคนกดเข้าคิว
+                $book = $this->bookRepo->findByIdForUpdate($bookId);
+
+                if (!$book) {
+                    throw new Exception('ไม่พบหนังสือ');
+                }
+                if (empty($book['is_visible'])) {
+                    throw new Exception('หนังสือนี้ไม่เปิดให้จองในขณะนี้');
+                }
+                if (!empty($book['is_reference'])) {
+                    throw new Exception('หนังสือเล่มนี้เป็นหนังสืออ้างอิง อ่านได้ที่ห้องสมุดเท่านั้น');
+                }
+
+                // 📚 ไม่มีเล่มให้ยืมเลย = ต่อคิวไปก็ไม่มีวันได้
+                if ((int) $book['quantity'] <= 0) {
+                    throw new Exception('หนังสือเล่มนี้ไม่มีอยู่ในระบบแล้ว ต่อคิวไม่ได้');
+                }
+
+                // 🛡️ มีเล่มว่างอยู่ → ต้องจองตรง ๆ ไม่ใช่ต่อคิว
+                //    เช็คภายใต้ lock เพราะ available อาจเพิ่งเปลี่ยนไปเมื่อเสี้ยววินาทีก่อน
+                if ((int) $book['available'] > 0) {
+                    throw new Exception('หนังสือเล่มนี้มีให้ยืมแล้ว กรุณากดจองตามปกติ');
+                }
+
+                // 🛡️ กันจองซ้ำ — hasPending() นับ waiting ด้วยแล้ว
+                if ($this->reservationRepo->hasPending($userId, $bookId)) {
+                    throw new Exception('คุณจองหรือต่อคิวหนังสือเล่มนี้ไว้แล้ว');
+                }
+
+                // 🛡️ ยืมเล่มนี้อยู่แล้วก็ไม่ต้องต่อคิว
+                if ($this->borrowRepo->isAlreadyBorrowing($userId, $bookId)) {
+                    throw new Exception('คุณกำลังยืมหนังสือเล่มนี้อยู่แล้ว');
+                }
+
+                // 🛡️ จำกัดจำนวนคิวต่อคน
+                //    🧠 **ไม่รวมจำนวนที่ยืมอยู่** — คิวรอไม่กินโควตายืม (ตกลงไว้ใน ROADMAP)
+                //    ถ้ารวม คนที่ยืมครบ 3 เล่มจะต่อคิวไม่ได้เลย ทั้งที่การต่อคิว
+                //    คือสิ่งที่เขาควรทำระหว่างรออ่านเล่มที่ถืออยู่ให้จบ
+                $waiting = $this->reservationRepo->countWaitingByUser($userId);
+                if ($waiting >= MAX_BORROW_BOOKS) {
+                    throw new Exception('คุณต่อคิวครบ ' . MAX_BORROW_BOOKS . ' เล่มแล้ว กรุณายกเลิกคิวเดิมก่อน');
+                }
+
+                // 📝 เข้าคิว — ไม่แตะ available
+                $reservationId = $this->reservationRepo->createWaiting($userId, $bookId);
+
+                $position = $this->reservationRepo->getQueuePosition($reservationId);
+
+                $this->pdo->commit();
+
+                return [
+                    'success'        => true,
+                    'reservation_id' => $reservationId,
+                    'position'       => $position,
+                    'message'        => sprintf(
+                        'เข้าคิวสำเร็จ! คุณอยู่คิวที่ %d ของ "%s" — ระบบจะกันเล่มไว้ให้อัตโนมัติเมื่อมีคนคืน',
+                        $position,
+                        $book['title']
+                    ),
+                ];
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                error_log("[ReservationService::joinQueue] userId={$userId} bookId={$bookId} error: " . $e->getMessage());
+                throw $e;
+            }
+        }, 'ReservationService::joinQueue');
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เลื่อนคิวคนถัดไปเมื่อหนังสือกลับเข้าระบบ
+     * ==========================================================================
+     * State: waiting → pending (+ หัก available กันเล่มไว้ให้)
+     *
+     * 🔴 **ต้องเรียกภายใน transaction ที่เปิดไว้แล้วเท่านั้น**
+     *    เมธอดนี้ไม่เปิด/ปิด transaction เอง โดยตั้งใจ —
+     *    ถ้าเลื่อนคิวนอกทรานแซกชันของการคืนหนังสือ จะเกิดช่วงเวลาที่ available = 1
+     *    แล้วคนที่ไม่ได้อยู่ในคิวชิงยืมไปก่อนคนที่รอมาเป็นเดือน
+     *
+     * 🔄 เรียกจาก 4 ที่ที่หนังสือกลับเข้าระบบ:
+     *    1. BorrowService::returnBook()   — คืนหนังสือ
+     *    2. BorrowService::undoLost()     — ย้อนการแจ้งหาย (เจอหนังสือ)
+     *    3. cancelReservation()           — ยกเลิกการจองที่กันเล่มไว้
+     *    4. markExpiredReservations()     — การจองหมดอายุ (ผ่าน expireAndPromote)
+     *    ทุกที่ที่ available เพิ่มขึ้น ต้องผ่านตรงนี้ ไม่งั้นคิวจะไม่ขยับ
+     *
+     * 📥 Input: @param int $bookId
+     * 📤 Output: @return array|null ข้อมูลคนที่ถูกเลื่อน หรือ null ถ้าไม่มีใครรอ
+     *
+     * ⚠️ คืน null = ไม่มีคิว → ผู้เรียกต้องปล่อยให้ available เพิ่มตามปกติ
+     *    คืน array = เลื่อนแล้ว + หัก available ไปแล้ว → เล่มถูกกันไว้ให้คนในคิว
+     */
+    public function promoteNextInQueue(int $bookId, ?int $expireDays = null): ?array
+    {
+        $expireDays = $expireDays ?? RESERVATION_EXPIRE_DAYS;
+
+        // 🧠 ตรรกะจริงอยู่ที่ Repository ที่เดียว เพราะ markExpiredReservations()
+        //    ซึ่งอยู่ชั้น Repository ก็ต้องใช้ตัวเดียวกัน — ดูเหตุผลเต็มที่เมธอดนั้น
+        $expiresAt = date('Y-m-d H:i:s', strtotime("+{$expireDays} days"));
+
+        return $this->reservationRepo->promoteNextInQueue($bookId, $expiresAt);
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: ยกเลิกการจอง + คืน stock
      * ==========================================================================
      * State: pending → cancelled
@@ -219,27 +353,46 @@ class ReservationService
             $this->pdo->beginTransaction();
 
             try {
-                // 🔒 Step 1: Lock reservation (FOR UPDATE + status='pending')
+                // 🔒 Step 1: Lock reservation — รับทั้ง waiting และ pending
                 //    $userId != null → เพิ่ม WHERE user_id = ? (ตรวจ ownership)
                 //    $userId = null → admin ยกเลิกได้ทุกคน
-                $reservation = $this->reservationRepo->findPendingForUpdate($reservationId, $userId);
+                $reservation = $this->reservationRepo->findActiveForUpdate($reservationId, $userId);
 
                 if (!$reservation) {
                     throw new Exception('ไม่พบรายการจองหรือยกเลิกไปแล้ว');
                 }
 
-                // 📝 Step 2: เปลี่ยนสถานะ pending → cancelled
+                // 🧠 จำสถานะเดิมไว้ก่อนเปลี่ยน — ตัวนี้ตัดสินว่าต้องคืนสต็อกไหม
+                $wasPending = ($reservation['status'] === 'pending');
+
+                // 📝 Step 2: waiting|pending → cancelled
                 $this->reservationRepo->updateStatus($reservationId, 'cancelled');
 
-                // 📝 Step 3: คืน stock กลับ (available +1)
-                //    ⚠️ ต้องคืนเสมอ! stock ถูกหักตอนจอง
-                $this->bookRepo->incrementAvailable($reservation['book_id']);
+                $promoted = null;
+                if ($wasPending) {
+                    // 📝 Step 3: คืน stock กลับ (available +1)
+                    //    ⚠️ ต้องคืนเสมอ! stock ถูกหักตอนจอง
+                    //    🧠 เฉพาะ pending เท่านั้น — คิวรอ (waiting) ไม่เคยหักสต็อกไว้
+                    //       ถ้าคืนให้ด้วย หนังสือจะงอกขึ้นมาจากอากาศ
+                    $this->bookRepo->incrementAvailable($reservation['book_id']);
+
+                    // 🔄 Step 4: เล่มที่เพิ่งว่างต้องไปหาคนที่ต่อคิวรอก่อน ไม่ใช่ขึ้นชั้นให้ใครก็ได้
+                    //    ต้องอยู่ใน transaction เดียวกัน ด้วยเหตุผลเดียวกับตอนคืนหนังสือ
+                    $promoted = $this->promoteNextInQueue((int) $reservation['book_id']);
+                }
 
                 $this->pdo->commit();
 
+                $message = $wasPending ? 'ยกเลิกการจองสำเร็จ' : 'ออกจากคิวรอสำเร็จ';
+                if ($promoted !== null) {
+                    $message .= ' | 🔄 กันเล่มไว้ให้คนที่ต่อคิวรอถัดไปแล้ว';
+                }
+
                 return [
                     'success' => true,
-                    'message' => 'ยกเลิกการจองสำเร็จ',
+                    'was_waiting' => !$wasPending,
+                    'promoted' => $promoted,
+                    'message' => $message,
                     'reservation_id' => $reservationId
                 ];
             } catch (Exception $e) {
@@ -451,5 +604,35 @@ class ReservationService
     {
         // 📝 Pass-through → reservation data ของ user+book (สำหรับปุ่มยกเลิก)
         return $this->reservationRepo->findByUserAndBook($userId, $bookId, 'pending');
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงการจองที่ยังมีชีวิตของสมาชิกกับหนังสือเล่มนี้ (รวมคิวรอ)
+     * ==========================================================================
+     * 📤 Output: @return array|null แถวการจอง + 'queue_position' ถ้าเป็นคิวรอ
+     *
+     * 🧠 ต่างจาก getUserPendingReservation() ที่ได้เฉพาะ pending —
+     *    หน้า book.php ต้องรู้ด้วยว่าคนนี้ต่อคิวอยู่ไหม ไม่งั้นจะโชว์ปุ่ม
+     *    "เข้าคิวรอ" ให้คนที่ต่อคิวไปแล้ว แล้วกดไปโดนปฏิเสธ
+     */
+    public function getUserActiveReservation(int $userId, int $bookId): ?array
+    {
+        $row = $this->reservationRepo->findByUserAndBook($userId, $bookId, 'pending')
+            ?? $this->reservationRepo->findByUserAndBook($userId, $bookId, 'waiting');
+
+        if ($row && $row['status'] === 'waiting') {
+            $row['queue_position'] = $this->reservationRepo->getQueuePosition((int) $row['id']);
+        }
+
+        return $row;
+    }
+
+    /**
+     * 🎯 จำนวนคนที่ต่อคิวรอหนังสือเล่มนี้ (สำหรับแสดงบนหน้ารายละเอียด)
+     */
+    public function countWaitingForBook(int $bookId): int
+    {
+        return $this->reservationRepo->countWaitingByBook($bookId);
     }
 }

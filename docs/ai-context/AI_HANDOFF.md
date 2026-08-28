@@ -73,7 +73,7 @@
 | Dependency manager | **ไม่มี** — ไม่มี Composer ไม่มี npm ไม่มี build step |
 | ขนาด | 111 ไฟล์ PHP · ~31,000 บรรทัด |
 | เอกสาร | 21 ไฟล์ (`docs/` 11 + `docs/ai-context/` 10) |
-| ชุดทดสอบ | 536 เคส ใน 35 ชุด (~20 วินาที) |
+| ชุดทดสอบ | 574 เคส ใน 36 ชุด (~19 วินาที) |
 
 **"ไม่มี build step" คือจุดขายหลัก** — ลูกค้าลง XAMPP อย่างเดียวก็ใช้ได้
 ห้ามเพิ่ม Composer/npm เข้ามาโดยไม่ได้รับอนุญาต มันทำลายข้อได้เปรียบที่ใหญ่ที่สุด
@@ -208,7 +208,7 @@ MariaDB ไม่มี ngram parser แบบ MySQL 8
 |--------|--------|
 | ผู้ใช้พร้อมกัน | ≤50 คน ปลอดภัย (p95 หน้าแรก 87 ms) · 100 คนเริ่มไม่เสถียร |
 | ขนาดห้องสมุด | ≤2,000 เล่มสบาย · 2,000–10,000 คาดว่ายังไหว · >10,000 ต้องวัดใหม่ |
-| ชุดทดสอบ | 536 เคส ผ่าน 100% |
+| ชุดทดสอบ | 574 เคส ผ่าน 100% |
 
 ---
 
@@ -220,14 +220,14 @@ MariaDB ไม่มี ngram parser แบบ MySQL 8
 php tests/run_all_tests.php 123456      # 123456 = รหัสผ่าน admin
 ```
 
-ต้องได้ **536/536** ใน ~20 วินาที · ถ้าไม่ครบแปลว่ามีอะไรพัง
+ต้องได้ **574/574** ใน ~19 วินาที · ถ้าไม่ครบแปลว่ามีอะไรพัง
 
 ⚠️ **ต้องส่งรหัสผ่าน admin เป็น argument** ไม่งั้นชุด HTTP จะ fail ทั้งหมดโดยที่ระบบไม่ได้มีปัญหา
 
 🔴 **เพิ่มคอลัมน์ใหม่ต้องแก้ 3 ที่เสมอ** — `install.php` · `database/schema.sql` ·
 `database/migrations/` ไฟล์ใหม่ · ชุด `Schema Sources Match` จะแดงทันทีถ้าลืมที่ใดที่หนึ่ง
 
-### ชุดที่มี (35 ชุด)
+### ชุดที่มี (36 ชุด)
 
 | กลุ่ม | ชุด |
 |-------|-----|
@@ -237,7 +237,7 @@ php tests/run_all_tests.php 123456      # 123456 = รหัสผ่าน admi
 | ประสิทธิภาพ | Pagination (17) · Search Index (8) · Concurrency Gap (19) |
 | แพ็กเกจ | Offline Assets (6) |
 | HTTP | HTTP Integration (63) |
-| กฎธุรกิจ (ROADMAP 0–4) | Settings Rules (24) · Reference Books (20) · Fine Waiver (22) · Renew Borrow (13) · Lost/Damaged (42) |
+| กฎธุรกิจ (ROADMAP 0–5) | Settings Rules (24) · Reference Books (20) · Fine Waiver (22) · Renew Borrow (13) · Lost/Damaged (42) · Reservation Queue (38) |
 | โครงสร้าง DB | Schema Sources Match (17) — `install.php` / `schema.sql` / migration ต้องตรงกัน |
 | อื่น ๆ | Reservations · Payments · Members · Books · Categories · Settings · Reports · Import · Barcode |
 
@@ -377,7 +377,7 @@ php cron/cleanup_tokens.php          # วันละครั้ง
   แผนละเอียดพร้อมคำตอบ 8 ข้อตาม §21 อยู่ใน **`ROADMAP.md`** — อ่านก่อนแตะโค้ดทุกครั้ง
   ⚠️ ข้อ "จองรอคิว" แตะ invariant สต็อกโดยตรง ให้ทำหลังสุดและแยก commit
   (แก้โค้ด 31 · ตรวจแล้วอัปเดตเอกสาร 3)
-- ชุดทดสอบ **536/536**
+- ชุดทดสอบ **574/574**
 - ยืนยันแล้ว: ติดตั้งจาก clone สด 3 เส้นทาง · backup/restore · ใช้งานออฟไลน์ ·
   อัปเกรดจากเวอร์ชันเก่า · PHP 8.2 และ 8.5 · 50 คนพร้อมกัน
 

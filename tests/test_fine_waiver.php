@@ -163,6 +163,11 @@ $cleanup = function () use ($pdo, $memberId, $bookId): void {
     static $done = false;
     if ($done) return;
     $done = true;
+    // 🔴 rollback ทรานแซกชันที่ค้างก่อน ไม่งั้น DELETE ด้านล่างจะถูก rollback ไปด้วย
+    //    แล้วข้อมูลทดสอบค้างในระบบทั้งชุด (เจอมาแล้วตอนเทสต์ตายกลาง transaction)
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     $pdo->exec("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE user_id = $memberId)");
     $pdo->exec("DELETE FROM borrows WHERE user_id = $memberId OR book_id = $bookId");
     $pdo->exec("DELETE FROM reservations WHERE user_id = $memberId OR book_id = $bookId");

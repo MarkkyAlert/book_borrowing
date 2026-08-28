@@ -113,15 +113,21 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="p-6 bg-white border-t border-gray-100 space-y-4">
                     <!-- Reservation Status -->
                     <?php
-                    $userReserved = false;
-                    $reservation = null;
+                    $userReserved = false;   // จองไว้แล้ว ของพร้อม รอมารับ
+                    $userQueued   = false;   // ต่อคิวรออยู่ ยังไม่ได้ของ
+                    $reservation  = null;
+                    $reservationService = new \App\Services\ReservationService($pdo);
                     if (isLoggedIn()) {
-                        $reservationService = new \App\Services\ReservationService($pdo);
-                        $reservation = $reservationService->getUserPendingReservation($_SESSION['user_id'], $bookId);
+                        // 🧠 ต้องดูทั้ง pending และ waiting — ไม่งั้นคนที่ต่อคิวไว้แล้ว
+                        //    จะเห็นปุ่ม "เข้าคิวรอ" อีกรอบ กดแล้วโดนปฏิเสธ
+                        $reservation = $reservationService->getUserActiveReservation($_SESSION['user_id'], $bookId);
                         if ($reservation) {
-                            $userReserved = true;
+                            $userReserved = ($reservation['status'] === 'pending');
+                            $userQueued   = ($reservation['status'] === 'waiting');
                         }
                     }
+                    // 👥 มีคนต่อคิวรอเล่มนี้กี่คน — แสดงให้เห็นก่อนตัดสินใจกดเข้าคิว
+                    $waitingCount = $reservationService->countWaitingForBook($bookId);
                     ?>
 
                     <?php if (!empty($book['is_reference'])): ?>
@@ -141,6 +147,19 @@ require_once __DIR__ . '/includes/header.php';
                                 กรุณามารับภายในวันที่ <?= formatDate($reservation['expires_at']) ?>
                             </p>
                         </div>
+                    <?php elseif ($userQueued): ?>
+                        <?php // 🔄 อยู่ในคิวแล้ว — บอกลำดับให้ชัด และย้ำว่าไม่มีวันหมดอายุ ?>
+                        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
+                            <i class="bi bi-people-fill text-indigo-500 text-3xl mb-2 block"></i>
+                            <h3 class="text-indigo-800 font-bold mb-1">
+                                คุณอยู่คิวที่ <?= (int) ($reservation['queue_position'] ?? 0) ?>
+                            </h3>
+                            <p class="text-indigo-600 text-sm">
+                                รอมาแล้ว <?= max(0, (int) floor((time() - strtotime($reservation['queued_at'] ?? $reservation['created_at'])) / 86400)) ?> วัน
+                                · ระบบจะกันเล่มไว้ให้อัตโนมัติเมื่อมีคนคืน
+                            </p>
+                            <p class="text-indigo-500 text-xs mt-1">คิวไม่มีวันหมดอายุ ยกเลิกได้จากหน้า "การจองของฉัน"</p>
+                        </div>
                     <?php elseif ($book['available'] > 0): ?>
                         <?php if (isLoggedIn()): ?>
                             <button onclick="reserveBook(<?= $bookId ?>)" class="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5 flex items-center justify-center">
@@ -153,11 +172,35 @@ require_once __DIR__ . '/includes/header.php';
                                 เข้าสู่ระบบเพื่อจอง
                             </a>
                         <?php endif; ?>
+                    <?php elseif ((int) $book['quantity'] > 0): ?>
+                        <?php // 🔄 ถูกยืมหมด — นี่คือกรณีที่การจองมีประโยชน์จริง ให้ต่อคิวได้ ?>
+                        <?php if (isLoggedIn()): ?>
+                            <button onclick="joinQueue(<?= $bookId ?>)" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5 flex items-center justify-center">
+                                <i class="bi bi-hourglass-split mr-2"></i>
+                                เข้าคิวรอ<?= $waitingCount > 0 ? ' (เป็นคนที่ ' . ($waitingCount + 1) . ')' : '' ?>
+                            </button>
+                            <p class="text-center text-xs text-gray-500">
+                                ถูกยืมหมดแล้ว — เข้าคิวไว้ ระบบจะกันเล่มให้อัตโนมัติเมื่อมีคนคืน
+                            </p>
+                        <?php else: ?>
+                            <a href="login.php" class="w-full py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors flex items-center justify-center">
+                                <i class="bi bi-box-arrow-in-right mr-2"></i>
+                                เข้าสู่ระบบเพื่อเข้าคิวรอ
+                            </a>
+                        <?php endif; ?>
                     <?php else: ?>
+                        <?php // 📚 ไม่มีเล่มในระบบแล้ว (หายหมด/ลดจำนวนเป็น 0) — ต่อคิวไปก็ไม่มีวันได้ ?>
                         <button disabled class="w-full py-3 px-4 bg-gray-100 text-gray-400 font-bold rounded-xl cursor-not-allowed flex items-center justify-center">
                             <i class="bi bi-x-circle-fill mr-2"></i>
-                            ถูกยืมหมดแล้ว
+                            ไม่มีเล่มนี้ในระบบแล้ว
                         </button>
+                    <?php endif; ?>
+
+                    <?php if ($waitingCount > 0 && !$userQueued): ?>
+                        <div class="flex items-center justify-center text-indigo-600 bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                            <i class="bi bi-people mr-2"></i>
+                            <span class="font-medium">มีคนต่อคิวรออยู่ <?= $waitingCount ?> คน</span>
+                        </div>
                     <?php endif; ?>
 
                     <?php if (!empty($currentBorrows)): ?>
@@ -221,6 +264,44 @@ require_once __DIR__ . '/includes/header.php';
                                             btn.innerHTML = '<i class="bi bi-bookmark-plus-fill mr-2"></i>จองหนังสือ (รับภายใน <?= RESERVATION_EXPIRE_DAYS ?> วัน)';
                                         }
                                     });
+                                });
+                        });
+                    }
+
+                    // 🔄 เข้าคิวรอ — คนละ endpoint กับการจองปกติ เพราะเป็นคนละเรื่องกัน
+                    //    จอง = กันเล่มที่ว่างอยู่ · เข้าคิว = รอเล่มที่คนอื่นถืออยู่ ไม่แตะสต็อก
+                    function joinQueue(bookId) {
+                        modalConfirm('เข้าคิวรอหนังสือเล่มนี้?\n\nระบบจะกันเล่มไว้ให้อัตโนมัติเมื่อมีคนคืน แล้วคุณจะมีเวลามารับ <?= RESERVATION_EXPIRE_DAYS ?> วัน\nคิวไม่มีวันหมดอายุ ยกเลิกเองได้ตลอด', {
+                            title: 'ยืนยันการเข้าคิว',
+                            confirmText: 'เข้าคิวเลย',
+                            confirmClass: 'primary'
+                        }).then(function(confirmed) {
+                            if (!confirmed) return;
+
+                            const btn = document.querySelector('[onclick*="joinQueue"]');
+                            if (btn) {
+                                btn.disabled = true;
+                                btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>กำลังเข้าคิว...';
+                            }
+
+                            fetch('api/reserve_book.php', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                    },
+                                    body: 'book_id=' + bookId + '&mode=queue&csrf_token=<?= generateCSRFToken() ?>'
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        modalSuccess(data.message).then(() => location.reload());
+                                    } else {
+                                        modalError(data.message || 'เกิดข้อผิดพลาด').then(() => location.reload());
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                    modalError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่').then(() => location.reload());
                                 });
                         });
                     }

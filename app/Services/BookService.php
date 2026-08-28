@@ -257,7 +257,8 @@ class BookService
             }
 
             // Guard #3: มี pending reservation (หัก stock ไปแล้ว ลบจะทำให้ stock ไม่ถูกคืน)
-            if ($this->reservationRepo->countPendingByBook($id) > 0) {
+            // 🧠 ต้องนับคิวรอด้วย — ลบเล่มที่มีคนต่อคิวรออยู่ไม่ได้
+            if ($this->reservationRepo->countActiveByBook($id) > 0) {
                 throw new Exception('ไม่สามารถลบได้ หนังสือเล่มนี้มีการจองที่รอดำเนินการอยู่');
             }
 

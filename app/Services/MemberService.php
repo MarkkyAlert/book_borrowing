@@ -236,7 +236,8 @@ class MemberService
 
             // 🛡️ Guard #2: มี pending reservation หรือไม่
             //    CASCADE DELETE จะลบ reservation แต่ stock ไม่ถูกคืน!
-            if ($this->reservationRepo->countPendingByUser($id) > 0) {
+            // 🧠 ต้องนับคิวรอด้วย — ลบสมาชิกที่ยังต่อคิวค้างอยู่ไม่ได้
+            if ($this->reservationRepo->countActiveByUser($id) > 0) {
                 throw new Exception('ไม่สามารถลบได้ สมาชิกมีรายการจองที่รอดำเนินการ กรุณายกเลิกการจองก่อน');
             }
 

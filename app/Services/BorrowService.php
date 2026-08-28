@@ -42,12 +42,16 @@ require_once __DIR__ . '/../Repositories/BorrowRepository.php';
 require_once __DIR__ . '/../Repositories/UserRepository.php';
 require_once __DIR__ . '/../Repositories/PaymentRepository.php';
 require_once __DIR__ . '/../Repositories/ReservationRepository.php';
+// 🔄 ใช้ตอนเลื่อนคิวหลังคืนหนังสือ — ต้องประกาศไว้ตรงนี้ ไม่พึ่ง autoloader อย่างเดียว
+//    เพราะไฟล์นี้ถูก require ตรง ๆ จากชุดทดสอบและสคริปต์ CLI ที่ไม่ได้โหลด bootstrap.php
+require_once __DIR__ . '/ReservationService.php';
 
 use App\Repositories\BookRepository;
 use App\Repositories\BorrowRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\PaymentRepository;
 use App\Repositories\ReservationRepository;
+use App\Services\ReservationService;
 use PDO;
 use Exception;
 
@@ -62,6 +66,10 @@ class BorrowService
     private PaymentRepository $paymentRepo;
     private ReservationRepository $reservationRepo;
 
+    // 🔄 สร้างตอนใช้จริงเท่านั้น (lazy) — ไม่สร้างใน constructor เพราะ ReservationService
+    //    ก็สร้าง repo ชุดเดียวกันอีกรอบ การยืม/คืนส่วนใหญ่ไม่ต้องแตะคิวเลย
+    private ?ReservationService $reservationService = null;
+
     // 🏗️ Constructor: สร้าง repo ทั้งหมด — ใช้ PDO เดียวกัน
     //    สำคัญ! ถ้า PDO คนละ instance → transaction ข้าม repo ไม่ทำงาน
     public function __construct(PDO $pdo)
@@ -72,6 +80,18 @@ class BorrowService
         $this->userRepo = new UserRepository($pdo);
         $this->paymentRepo = new PaymentRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
+    }
+
+    /**
+     * 🔄 ReservationService แบบสร้างเมื่อใช้ — ใช้ PDO ตัวเดียวกัน
+     *    จึงอยู่ใน transaction เดียวกับการคืนหนังสือได้ (สำคัญมากสำหรับการเลื่อนคิว)
+     */
+    private function reservations(): ReservationService
+    {
+        if ($this->reservationService === null) {
+            $this->reservationService = new ReservationService($this->pdo);
+        }
+        return $this->reservationService;
     }
 
     /**
@@ -243,6 +263,14 @@ class BorrowService
                 //    3b. คืน stock +1
                 $this->bookRepo->incrementAvailable($borrow['book_id']);
 
+                //    3b-2. 🔄 มีคนต่อคิวรอเล่มนี้ไหม — ถ้ามี กันเล่มไว้ให้ทันที
+                //    🔴 ต้องอยู่ใน transaction เดียวกับการคืน ห้ามแยกออกไปทำทีหลัง
+                //       ไม่งั้นจะเกิดช่วงที่ available = 1 แล้วคนที่ไม่ได้อยู่ในคิว
+                //       ชิงยืมไปก่อนคนที่รอมาเป็นเดือน
+                //    promoteNextInQueue() จะหัก available กลับลงไปเองถ้าเลื่อนคิวสำเร็จ
+                //    → สุทธิแล้ว available เท่าเดิม แต่เล่มถูกกันไว้ให้คนในคิวแทน
+                $promoted = $this->reservations()->promoteNextInQueue((int) $borrow['book_id']);
+
                 //    3c. บันทึก payment เฉพาะจ่ายทันที
                 //    🛡️ UNIQUE บน borrow_id ป้องกันจ่ายซ้ำในระดับ DB
                 if ($payNow && $fine['amount'] > 0) {
@@ -252,11 +280,21 @@ class BorrowService
                 $this->pdo->commit();
 
                 // 📤 คืนผล: สำเร็จ + ค่าปรับ + จ่ายแล้วหรือยัง
+                $message = $this->buildReturnMessage($fine, $payNow);
+                if ($promoted !== null) {
+                    // 📣 เจ้าหน้าที่ต้องรู้ทันทีว่าเล่มนี้ไม่ได้กลับขึ้นชั้น แต่ถูกกันไว้ให้คนในคิว
+                    $message .= sprintf(
+                        ' | 🔄 มีคนต่อคิวรอเล่มนี้ — กันเล่มไว้ให้แล้ว ให้มารับภายในวันที่ %s',
+                        date('d/m/Y', strtotime($promoted['expires_at']))
+                    );
+                }
+
                 return [
                     'success' => true,
                     'fine' => $fine,
                     'paid' => $payNow && $fine['amount'] > 0,
-                    'message' => $this->buildReturnMessage($fine, $payNow)
+                    'promoted' => $promoted,
+                    'message' => $message
                 ];
             } catch (Exception $e) {
                 // ❌ rollback → status ยังเป็น borrowing + stock ไม่ถูกคืน
@@ -630,9 +668,19 @@ class BorrowService
                 //    available = quantity − ยืม − จอง → ต้องขึ้นทั้งคู่
                 $this->bookRepo->addQuantity((int) $borrow['book_id'], 1);
 
+                // 🔄 หนังสือกลับเข้าระบบแล้ว — ถ้ามีคนต่อคิวรอ ต้องกันเล่มให้เหมือนตอนคืน
+                //    ถ้าลืมตรงนี้ เล่มที่หาแล้วเจอจะขึ้นชั้นให้คนอื่นยืมแซงคนที่รอคิวอยู่
+                $promotedUndo = $this->reservations()->promoteNextInQueue((int) $borrow['book_id']);
+
                 $this->pdo->commit();
 
                 $msg = 'ย้อนการแจ้งแล้ว | หนังสือกลับเข้าระบบ 1 เล่ม';
+                if ($promotedUndo !== null) {
+                    $msg .= sprintf(
+                        ' | 🔄 กันเล่มไว้ให้คนที่ต่อคิวรอ ให้มารับภายในวันที่ %s',
+                        date('d/m/Y', strtotime($promotedUndo['expires_at']))
+                    );
+                }
                 if ($paidAmount > 0) {
                     $msg .= sprintf(
                         ' | ⚠️ ชำระค่าชดใช้ไปแล้ว %s บาท ระบบไม่คืนเงินให้อัตโนมัติ — ต้องคืนเงินเอง',
@@ -727,7 +775,9 @@ class BorrowService
 
                 // 🔖 Step 4: มีคนจองเล่มนี้รออยู่หรือไม่ (ภายใต้ transaction เดียวกัน)
                 //    ถ้ามี ต้องให้คิวได้หนังสือ ไม่ใช่ให้คนเดิมถือต่อ
-                if ($this->reservationRepo->countPendingByBook((int) $borrow['book_id']) > 0) {
+                // 🧠 นับคิวรอด้วย — คนที่ต่อคิวรออยู่ก็คือคนที่รอเล่มนี้เหมือนกัน
+                //    ถ้าไม่นับ คนยืมจะต่ออายุไปเรื่อย ๆ ส่วนคนที่รอคิวไม่มีวันได้
+                if ($this->reservationRepo->countActiveByBook((int) $borrow['book_id']) > 0) {
                     throw new Exception('มีสมาชิกจองหนังสือเล่มนี้รออยู่ ต่ออายุไม่ได้');
                 }
 

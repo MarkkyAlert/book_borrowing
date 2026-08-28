@@ -104,9 +104,15 @@ require_once __DIR__ . '/header.php';
             รายการจองหนังสือ
         </h5>
         
+        <?php // 🔄 แยก "รอมารับ" กับ "ต่อคิวรอ" ให้ชัด — เป็นคนละงานของเจ้าหน้าที่
+              //    รอมารับ = ของกันไว้แล้ว ต้องคอยดูว่าหมดเขตเมื่อไหร่
+              //    ต่อคิวรอ = ยังไม่มีของ ไม่ต้องทำอะไร ระบบเลื่อนคิวให้เอง ?>
         <div class="flex rounded-md shadow-sm" role="group">
             <a href="reservations.php?status=pending" class="px-4 py-2 text-sm font-medium border border-gray-300 rounded-l-lg <?= $statusFilter === 'pending' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
-                รออนุมัติ
+                รอมารับ
+            </a>
+            <a href="reservations.php?status=waiting" class="px-4 py-2 text-sm font-medium border border-gray-300 border-l-0 <?= $statusFilter === 'waiting' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
+                ต่อคิวรอ
             </a>
             <a href="reservations.php?status=all" class="px-4 py-2 text-sm font-medium border border-gray-300 border-l-0 rounded-r-lg <?= $statusFilter === 'all' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
                 ทั้งหมด
@@ -178,6 +184,16 @@ require_once __DIR__ . '/header.php';
                                             หมดเขต: <?= formatDate($res['expires_at']) ?>
                                             (<?= $daysLeft < 0 ? 'หมดอายุ' : "เหลือ $daysLeft วัน" ?>)
                                         </span>
+                                    </div>
+                                <?php elseif ($res['status'] === 'waiting'): ?>
+                                    <?php // 🔄 คิวรอไม่มี expires_at (เป็น NULL) ห้ามเอาไปคำนวณวัน
+                                          //    strtotime(null) จะได้ 1970 + คำเตือน deprecated บน PHP 8.1+
+                                          $queuedAt = $res['queued_at'] ?? $res['created_at'];
+                                          $waitDays = max(0, (int) floor((time() - strtotime($queuedAt)) / 86400));
+                                    ?>
+                                    <div class="flex flex-col space-y-1">
+                                        <?= getReservationStatusLabel('waiting') ?>
+                                        <span class="text-xs text-gray-500">รอมาแล้ว <?= $waitDays ?> วัน · ไม่มีวันหมดอายุ</span>
                                     </div>
                                 <?php else: ?>
                                     <?= getReservationStatusLabel($res['status']) ?>
