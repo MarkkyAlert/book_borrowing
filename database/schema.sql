@@ -104,6 +104,8 @@ CREATE TABLE IF NOT EXISTS `borrows` (
     INDEX `idx_user` (`user_id`),
     INDEX `idx_book` (`book_id`),
     INDEX `idx_due_date` (`due_date`),
+    -- 📇 หน้ารายการค้างชำระกรอง fine_waived_at IS NULL ทุกครั้ง
+    INDEX `idx_fine_waived` (`fine_waived_at`),
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
     -- 🧠 ตั้งชื่อ constraint เองเพราะ migration อ้างชื่อนี้ตอนเช็คว่าเคยเพิ่มไปแล้วหรือยัง

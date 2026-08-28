@@ -39,6 +39,10 @@ return function (PDO $pdo): string {
     }
 
     // ── queued_at ──────────────────────────────────────────────────────
+    // 🧠 เช็คคอลัมน์กับ index **แยกกัน** ไม่รวมไว้ในเงื่อนไขเดียว
+    //    ถ้ารวม แล้วเจอสภาพที่มีอย่างหนึ่งไม่มีอีกอย่าง (เช่น รันครึ่งทางแล้วพัง
+    //    หรือมีคนเติมคอลัมน์เองด้วยมือ) migration จะพังด้วย Duplicate key name
+    //    แล้วรันต่อไม่ได้เลย — ผิดกติกา "ต้องเขียนให้รันซ้ำได้"
     if ($pdo->query("SHOW COLUMNS FROM `reservations` LIKE 'queued_at'")->fetch()) {
         $done[] = 'มีคอลัมน์ queued_at อยู่แล้ว — ข้าม';
     } else {
@@ -46,10 +50,16 @@ return function (PDO $pdo): string {
             ALTER TABLE `reservations`
             ADD COLUMN `queued_at` DATETIME NULL DEFAULT NULL
                 COMMENT 'เวลาเข้าคิว — ใช้เรียงลำดับ (แถวเก่าเป็น NULL ให้ COALESCE กับ created_at)'
-                AFTER `status`,
-            ADD INDEX `idx_queue` (`book_id`, `status`, `queued_at`)
+                AFTER `status`
         ");
-        $done[] = 'เพิ่มคอลัมน์ queued_at + index idx_queue แล้ว';
+        $done[] = 'เพิ่มคอลัมน์ queued_at แล้ว';
+    }
+
+    if ($pdo->query("SHOW INDEX FROM `reservations` WHERE Key_name = 'idx_queue'")->fetch()) {
+        $done[] = 'มี index idx_queue อยู่แล้ว — ข้าม';
+    } else {
+        $pdo->exec("ALTER TABLE `reservations` ADD INDEX `idx_queue` (`book_id`, `status`, `queued_at`)");
+        $done[] = 'เพิ่ม index idx_queue แล้ว';
     }
 
     // ── expires_at ต้องเป็น NULL ได้ ────────────────────────────────────
@@ -72,7 +82,7 @@ return function (PDO $pdo): string {
     //    จึงใช้คอลัมน์ generated ที่เป็น NULL เมื่อการจองปิดไปแล้ว (fulfilled/expired/cancelled)
     //    → กันซ้ำเฉพาะการจองที่ยัง "มีชีวิต" (waiting/pending) ตามที่ต้องการพอดี
     if ($pdo->query("SHOW COLUMNS FROM `reservations` LIKE 'active_slot'")->fetch()) {
-        $done[] = 'มี unique guard กันจองซ้ำอยู่แล้ว — ข้าม';
+        $done[] = 'มีคอลัมน์ active_slot อยู่แล้ว — ข้าม';
     } else {
         // 🧹 เคลียร์ของซ้ำที่ค้างอยู่ก่อน ไม่งั้นสร้าง index ไม่ผ่าน
         //    เก็บแถวที่ใหม่ที่สุดไว้ ที่เหลือตั้งเป็น cancelled
@@ -100,7 +110,17 @@ return function (PDO $pdo): string {
             ALTER TABLE `reservations`
             ADD COLUMN `active_slot` TINYINT(1)
                 GENERATED ALWAYS AS (CASE WHEN `status` IN ('waiting','pending') THEN 1 ELSE NULL END) VIRTUAL
-                COMMENT 'ตัวช่วยกันจองซ้ำ — NULL เมื่อการจองปิดแล้ว ทำให้ unique ไม่ชน',
+                COMMENT 'ตัวช่วยกันจองซ้ำ — NULL เมื่อการจองปิดแล้ว ทำให้ unique ไม่ชน'
+        ");
+        $done[] = 'เพิ่มคอลัมน์ active_slot แล้ว';
+    }
+
+    // 🧠 เช็ค unique แยกจากคอลัมน์ ด้วยเหตุผลเดียวกับ idx_queue ด้านบน
+    if ($pdo->query("SHOW INDEX FROM `reservations` WHERE Key_name = 'uq_reservation_active'")->fetch()) {
+        $done[] = 'มี UNIQUE กันจองซ้ำอยู่แล้ว — ข้าม';
+    } else {
+        $pdo->exec("
+            ALTER TABLE `reservations`
             ADD UNIQUE KEY `uq_reservation_active` (`user_id`, `book_id`, `active_slot`)
         ");
         $done[] = 'เพิ่ม UNIQUE กันจองซ้ำเล่มเดิม (user_id, book_id) เฉพาะที่ยัง waiting/pending';

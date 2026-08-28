@@ -201,6 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INDEX `idx_user` (`user_id`),
                 INDEX `idx_book` (`book_id`),
                 INDEX `idx_due_date` (`due_date`),
+                -- 📇 หน้ารายการค้างชำระกรอง fine_waived_at IS NULL ทุกครั้ง
+                INDEX `idx_fine_waived` (`fine_waived_at`),
                 FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
                 CONSTRAINT `fk_borrows_waived_by` FOREIGN KEY (`fine_waived_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
