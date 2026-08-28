@@ -109,8 +109,13 @@ else echo "  ❌ FAIL: Overdue Borrows +$diffOverdue (Expected 1)\n";
 // 3. Verify Lists/Rankings
 echo "\n── VERIFY LISTS & REPORTS ──\n";
 
-// Low Stock: Should include Book2 (available=1, quantity=2, default Low=2)
-$lowStock = $dashboardService->getLowStockBooks(2, 10);
+// Low Stock: Book2 มี available=1, quantity=2 → ต้องเข้าเกณฑ์ "ใกล้หมด (<=2)"
+// 🧠 เดิมขอมาแค่ 10 รายการแล้วคาดว่าจะเจอเล่มที่เพิ่งสร้าง — ใช้ได้เฉพาะบนฐานข้อมูลว่าง
+//    พอมีข้อมูลจริงหลายร้อยเล่ม เล่มใหม่ย่อมไม่ติด 10 อันดับแรก → fail ตลอดทั้งที่ฟังก์ชันถูก
+//    (อาการเดียวกับ Top Borrowers ด้านล่างที่เคยแก้ไปแล้ว)
+//    เปลี่ยนเป็นตรวจ 2 อย่างที่ไม่ขึ้นกับปริมาณข้อมูลอื่น:
+//    (1) ขอมาให้ครบแล้วต้องเจอเล่มนี้  (2) ทุกแถวที่คืนมาต้องเข้าเกณฑ์จริง
+$lowStock = $dashboardService->getLowStockBooks(2, 100000);
 $foundLow = false;
 foreach ($lowStock as $b) {
     if ($b['id'] == $bid2) $foundLow = true;
@@ -118,14 +123,28 @@ foreach ($lowStock as $b) {
 if ($foundLow) echo "  ✅ PASS: Low Stock List includes Book2\n";
 else echo "  ❌ FAIL: Low Stock List missing Book2\n";
 
-// Overdue List: Should include Book2
-$overdueList = $dashboardService->getOverdueList(10);
+$lowStockClean = true;
+foreach ($lowStock as $b) {
+    if ((int) $b['available'] > 2) { $lowStockClean = false; break; }
+}
+if ($lowStockClean) echo "  ✅ PASS: Low Stock List มีแต่เล่มที่เหลือ <= 2 จริง (" . count($lowStock) . " เล่ม)\n";
+else echo "  ❌ FAIL: Low Stock List มีเล่มที่เหลือเกินเกณฑ์ปนมา\n";
+
+// Overdue List: เหตุผลเดียวกัน — ขอมาให้ครบแล้วตรวจว่าทุกแถวเกินกำหนดจริง
+$overdueList = $dashboardService->getOverdueList(100000);
 $foundOverdue = false;
 foreach ($overdueList as $o) {
     if ($o['book_id'] == $bid2) $foundOverdue = true;
 }
 if ($foundOverdue) echo "  ✅ PASS: Overdue List includes Book2\n";
 else echo "  ❌ FAIL: Overdue List missing Book2\n";
+
+$overdueClean = true;
+foreach ($overdueList as $o) {
+    if ($o['due_date'] >= date('Y-m-d')) { $overdueClean = false; break; }
+}
+if ($overdueClean) echo "  ✅ PASS: Overdue List มีแต่รายการที่เลยกำหนดจริง (" . count($overdueList) . " รายการ)\n";
+else echo "  ❌ FAIL: Overdue List มีรายการที่ยังไม่เกินกำหนดปนมา\n";
 
 // Top Borrowers: User1 has 2 borrows (1 active, 1 returned). User2 has 1.
 // 🧠 เดิมขอมาแค่ 5 อันดับแล้วคาดว่าจะเจอ user ที่เพิ่งสร้าง — ใช้ได้เฉพาะบนฐานข้อมูลว่าง

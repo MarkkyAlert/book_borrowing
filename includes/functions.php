@@ -1075,6 +1075,11 @@ function buildSearchBooleanQuery(string $term): ?string
     return implode(' ', array_map(fn($token) => '+' . $token, $parts));
 }
 
+// ⚖️ กฎการยืม-คืน (ค่าปรับ / วันยืม / โควตา / วันหมดอายุการจอง)
+//    ต้องโหลดที่นี่ ไม่ใช่ใน config.php เพราะจุดนี้เป็นจุดแรกที่ getDB() พร้อมใช้
+//    → อ่านค่าที่ลูกค้าตั้งไว้จากตาราง settings ได้ (ดูเหตุผลเต็มใน includes/rules.php)
+require_once __DIR__ . '/rules.php';
+
 // 📝 Auto-start session — เรียกอัตโนมัติเมื่อ require functions.php
 //    ไม่ต้องเรียก startSession() เอง
 

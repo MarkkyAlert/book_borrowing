@@ -98,9 +98,19 @@ function createTestUser(string $suffix = ''): int
 function createTestBook(string $suffix = '', int $qty = 5): int
 {
     global $pdo;
-    $stmt = $pdo->prepare("INSERT INTO books (title, author, isbn, quantity, available, category_id) VALUES (?, 'Test Author', ?, ?, ?, 1)");
+    // 🧠 เดิมฝัง category_id = 1 ไว้ตายตัว → พังทันทีถ้าหมวดนั้นถูกลบ/เปลี่ยนเลข
+    //    (เจอจริงตอนจัดระเบียบหมวดหมู่: FK constraint fails แล้วเทสต์ตายกลางคัน
+    //     ทำให้ CLEANUP ท้ายไฟล์ไม่ทำงาน เหลือบัญชี ci_test_* ค้างในระบบทุกครั้ง)
+    //    → หาหมวดที่มีอยู่จริง ถ้าไม่มีเลยก็ใส่ NULL (คอลัมน์นี้ยอมรับ NULL)
+    static $categoryId = false;
+    if ($categoryId === false) {
+        $categoryId = $pdo->query("SELECT id FROM categories ORDER BY id LIMIT 1")->fetchColumn();
+        if ($categoryId === false) $categoryId = null;
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO books (title, author, isbn, quantity, available, category_id) VALUES (?, 'Test Author', ?, ?, ?, ?)");
     $isbn = 'CI' . time() . $suffix;
-    $stmt->execute(["CI Book $suffix", $isbn, $qty, $qty]);
+    $stmt->execute(["CI Book $suffix", $isbn, $qty, $qty, $categoryId]);
     return (int) $pdo->lastInsertId();
 }
 

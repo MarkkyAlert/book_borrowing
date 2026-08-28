@@ -86,7 +86,7 @@ class ReservationService
      * 📥 Input:
      * @param int $userId     ID member
      * @param int $bookId     ID หนังสือ
-     * @param int $expireDays วันหมดอายุ (default: 2)
+     * @param int|null $expireDays วันหมดอายุ (null = RESERVATION_EXPIRE_DAYS จากหน้าตั้งค่าระบบ)
      *
      * 📤 Output: @return array {success, message, expires_at}
      * @throws Exception ถ้าหนังสือหมด/จองซ้ำ
@@ -95,8 +95,12 @@ class ReservationService
      * ⚠️ stock ถูกหักทันที — ยกเลิก/หมดอายุต้องคืน stock
      * ✅ Use case: api/reserve_book.php POST
      */
-    public function createReservation(int $userId, int $bookId, int $expireDays = 2): array
+    public function createReservation(int $userId, int $bookId, ?int $expireDays = null): array
     {
+        // ⚙️ แก้จำนวนวันหมดอายุ → หน้า "ตั้งค่าระบบ" (เดิมฝังเลข 2 ไว้ตรงนี้ แก้ไม่ได้เลย)
+        //    ลำดับค่า: ตาราง settings → .env → default ใน includes/rules.php
+        $expireDays = $expireDays ?? RESERVATION_EXPIRE_DAYS;
+
         // 📝 Step 0: Lazy expire — คืน stock จาก reservation ที่หมดอายุก่อน
         //    ป้องกันหนังสือดูเหมือน "หมด" ทั้งที่ความจริงว่างแล้ว
         $this->reservationRepo->markExpiredReservations();

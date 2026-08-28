@@ -136,7 +136,7 @@ require_once __DIR__ . '/includes/header.php';
                         <?php if (isLoggedIn()): ?>
                             <button onclick="reserveBook(<?= $bookId ?>)" class="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-500/30 transition-all transform hover:-translate-y-0.5 flex items-center justify-center">
                                 <i class="bi bi-bookmark-plus-fill mr-2"></i>
-                                จองหนังสือ (รับภายใน 2 วัน)
+                                จองหนังสือ (รับภายใน <?= RESERVATION_EXPIRE_DAYS ?> วัน)
                             </button>
                         <?php else: ?>
                             <a href="login.php" class="w-full py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors flex items-center justify-center">
@@ -166,7 +166,7 @@ require_once __DIR__ . '/includes/header.php';
 
                 <script>
                     function reserveBook(bookId) {
-                        modalConfirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน 2 วัน)', {
+                        modalConfirm('ยืนยันการจองหนังสือเล่มนี้?\n(คุณต้องมารับภายใน <?= RESERVATION_EXPIRE_DAYS ?> วัน)', {
                             title: 'ยืนยันการจอง',
                             confirmText: 'จองเลย',
                             confirmClass: 'primary'

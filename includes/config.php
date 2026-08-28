@@ -70,10 +70,15 @@ define('APP_NAME', env('APP_NAME', 'ระบบยืมคืนหนัง�
 define('APP_URL', env('APP_URL', 'http://localhost/book_borrowing'));  // 📝 ไม่ต้องลงท้ายด้วย /
 define('ADMIN_EMAIL', env('ADMIN_EMAIL', 'admin@library.com'));
 
-// ⭐ Borrow Settings — ลูกค้ามักต้องการแก้ (แก้ใน .env)
-define('DEFAULT_BORROW_DAYS', (int) env('DEFAULT_BORROW_DAYS', 7));   // 📝 จำนวนวันยืมเริ่มต้น
-define('MAX_BORROW_BOOKS', (int) env('MAX_BORROW_BOOKS', 3));         // 📝 ยืมได้สูงสุดกี่เล่มต่อคน
-define('FINE_PER_DAY', (int) env('FINE_PER_DAY', 10));                // 📝 ค่าปรับต่อวัน (บาท)
+// ⭐ Borrow Settings — ย้ายไป includes/rules.php แล้ว
+//    DEFAULT_BORROW_DAYS · MAX_BORROW_BOOKS · FINE_PER_DAY · RESERVATION_EXPIRE_DAYS
+//
+// 🧠 ทำไมไม่อยู่ที่นี่: ค่าพวกนี้ให้ลูกค้าแก้เองได้จากหน้า "ตั้งค่าระบบ" (ตาราง settings)
+//    แต่ไฟล์นี้ทำงาน **ก่อน** ต่อฐานข้อมูล (bootstrap: config → db → functions)
+//    จึงอ่านตาราง settings ตอนนี้ไม่ได้ → ย้ายไปนิยามท้าย functions.php แทน
+//
+// 📌 ค่าใน .env ยังใช้ได้เหมือนเดิม — เป็น "ชั้นสำรอง" เมื่อตาราง settings ไม่มีค่า
+//    ลำดับ: ตาราง settings → .env → ค่า default ใน rules.php
 
 // 🛡️ Security Settings — แก้ได้แต่ต้องเข้าใจผลกระทบ
 //    ⚠️ ลด rate limit เกินไป อาจโดน brute force ได้

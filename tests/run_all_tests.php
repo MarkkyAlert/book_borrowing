@@ -93,6 +93,17 @@ function runSuite(string $name, string $file, string $extraArgs = ''): array {
         $total  = $passed + $failed;
     }
     
+    // 🔴 [สำคัญ] ชุดที่จบด้วย exit code ไม่ใช่ 0 แต่ parser หา "failed" ไม่เจอ
+    //    = ตายกลางคัน (fatal error / uncaught exception) ก่อนพิมพ์บรรทัดสรุป
+    //    ถ้าไม่ดักตรงนี้ เคสที่ผ่านไปแล้วก่อนตายจะถูกนับเข้ายอดรวม
+    //    แล้วหัวตารางจะขึ้น "100%" ทั้งที่มีชุดหนึ่งพังยับ — เคยเกิดจริง:
+    //    Concurrency Gap Analysis ตายที่ FK constraint แต่รายงานว่า 387/387 (100%)
+    //    📌 ไอคอนข้างชื่อชุดขึ้น ❌ ถูกอยู่แล้ว แต่ "ตัวเลขรวม" ต่างหากที่โกหก
+    if ($exitCode !== 0 && $failed === 0) {
+        $failed = max(1, $total - $passed);
+        $total  = $passed + $failed;
+    }
+
     return [
         'name' => $name,
         'passed' => $passed,
