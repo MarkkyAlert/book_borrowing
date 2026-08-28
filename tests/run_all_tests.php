@@ -181,6 +181,7 @@ $gapSuites = [
     'Category Management'        => 'test_category_management.php',   // CRUD หมวดหมู่ + ON DELETE SET NULL
     'Settings (Service)'         => 'test_settings.php',              // อ่าน/เขียนค่าตั้งค่า + อักขระพิเศษ
     'Settings (HTTP)'            => 'test_settings_http.php',         // validation สี/ชื่อ + สิทธิ์ staff
+    'Settings (กฎการยืม)'        => 'test_settings_rules.php',        // กฎที่ลูกค้าแก้เองได้: settings → .env → default
     'Reservation Logic'          => 'test_reservation_logic.php',     // รวม IDOR — ไม่มีที่อื่นทดสอบ
     'Borrow/Return Gap'          => 'test_borrow_return_gap_analysis.php', // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
