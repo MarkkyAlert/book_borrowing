@@ -240,6 +240,9 @@ php tests/run_all_tests.php 123456      # 123456 = รหัสผ่าน admi
 ```bash
 php tests/load_test.php                       # วัดผู้ใช้พร้อมกัน
 php tests/fixtures/seed_test_data.php         # ข้อมูลทดสอบครบทุกเคส (L1)
+php tests/fixtures/seed_school_library.php    # ห้องสมุดโรงเรียนขนาดจริง 405 เล่ม/204 คน (L2)
+php tests/fixtures/seed_school_library.php --verify
+php tests/fixtures/seed_school_library.php --expired-only   # คืนสภาพ "จองหมดอายุค้าง" ก่อนทดสอบ
 php tests/fixtures/seed_bulk_data.php --books=2000 --members=600
 php tests/fixtures/seed_bulk_data.php --reset
 php database/rebuild_search_index.php --check # ตรวจ index ค้นหาครบไหม

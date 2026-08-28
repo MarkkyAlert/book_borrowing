@@ -27,3 +27,6 @@ Desktop.ini
 
 # Temp
 tmp/
+
+# manifest ของ L2 seeder (เฉพาะเครื่อง)
+tests/fixtures/.school_seed.json
