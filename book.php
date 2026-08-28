@@ -165,6 +165,13 @@ require_once __DIR__ . '/includes/header.php';
                             <i class="bi bi-people-fill mr-2"></i>
                             <span class="font-medium">ถูกยืมอยู่ <?= count($currentBorrows) ?> เล่ม</span>
                         </div>
+                    <?php elseif (!empty($book['is_reference'])): ?>
+                        <!-- 📚 หนังสืออ้างอิงที่อยู่บนชั้นครบ — ห้ามขึ้นว่า "พร้อมให้ยืม/จอง"
+                             เพราะจะขัดกับกล่องด้านบนที่บอกว่ายืมออกไม่ได้ -->
+                        <div class="text-center text-green-600 bg-green-50 p-3 rounded-xl border border-green-100">
+                            <i class="bi bi-check-circle-fill mr-2"></i>
+                            <span class="font-medium">มีอยู่บนชั้น พร้อมให้อ่าน</span>
+                        </div>
                     <?php elseif ($book['available'] > 0): ?>
                         <div class="text-center text-green-600 bg-green-50 p-3 rounded-xl border border-green-100">
                             <i class="bi bi-check-circle-fill mr-2"></i>
