@@ -502,7 +502,7 @@ require_once __DIR__ . '/header.php';
             <i class="bi bi-people mr-2"></i>ดูสมาชิก
         </a>
         <button onclick="exportDashboardPDF()" class="inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-rose-500/20">
-            <i class="bi bi-file-pdf mr-2"></i>Export PDF
+            <i class="bi bi-printer mr-2"></i>พิมพ์สรุป
         </button>
     </div>
 </div>
@@ -649,7 +649,7 @@ function exportDashboardPDF() {
     // Show loading
     const btn = event.target.closest('button');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-hourglass-split mr-2"></i>กำลังสร้าง...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split mr-2"></i>กำลังเตรียม...';   // 📝 ไม่ใช้คำว่า 'สร้าง' เพราะไม่ได้สร้างไฟล์อะไร
     btn.disabled = true;
     
     // Use browser print with PDF styling

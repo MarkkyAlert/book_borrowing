@@ -120,10 +120,15 @@ require_once __DIR__ . '/header.php';
                 <i class="bi bi-file-earmark-spreadsheet mr-2"></i>
                 CSV
             </a>
-            <a href="export_pdf.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
-                <i class="bi bi-file-earmark-pdf mr-2"></i>
-                PDF
-            </a>
+                <?php // 🧠 เขียนว่า "พิมพ์รายงาน" ไม่ใช่ "PDF" เพราะระบบไม่ได้สร้างไฟล์ PDF ให้
+                //    แต่เปิดหน้าที่จัดรูปแบบมาให้พิมพ์ แล้วผู้ใช้เลือก "บันทึกเป็น PDF" ในกล่องพิมพ์เอง
+                //    ผลลัพธ์ปลายทางคือไฟล์ PDF เหมือนกัน แต่ต้องไม่เรียกว่า "Export PDF"
+                //    ไม่งั้นลูกค้าคาดหวังไฟล์ดาวน์โหลดทันทีแล้วผิดหวัง (ดู F-07)
+                ?>
+                <a href="export_pdf.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+                    <i class="bi bi-printer mr-2"></i>
+                    พิมพ์รายงาน
+                </a>
         </div>
     </div>
 </div>

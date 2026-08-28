@@ -88,7 +88,7 @@
 | นำเข้าสมาชิก | `admin/import_members.php` |
 | พิมพ์ label หนังสือ | `admin/book_labels.php` |
 | พิมพ์บัตรสมาชิก | `admin/member_card.php` |
-| Export PDF | `admin/export_pdf.php` |
+| หน้าพิมพ์รายงาน (บันทึกเป็น PDF) | `admin/export_pdf.php` |
 
 ### 2.4 เปลี่ยน Header / Footer / เมนู
 
@@ -252,7 +252,7 @@
 | หน้ารายงาน (UI) | `admin/reports.php` |
 | Logic รายงาน | `app/Services/ReportService.php` |
 | SQL รายงาน (สถิติ, join) | `app/Repositories/ReportRepository.php` |
-| Export PDF | `admin/export_pdf.php` + `includes/report_helper.php` |
+| หน้าพิมพ์รายงาน (บันทึกเป็น PDF) | `admin/export_pdf.php` + `includes/report_helper.php` |
 
 ### 4.7 หน้าแรก (Public)
 

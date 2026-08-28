@@ -429,8 +429,8 @@
 - [x] Admin → `/admin/reports.php` → เห็นรายงานสรุป
 - [x] สถิติสอดคล้องกับข้อมูลจริง
 
-### Export PDF
-- [x] Admin → `/admin/export_pdf.php` → export PDF ได้
+### พิมพ์รายงาน (บันทึกเป็น PDF ผ่านกล่องพิมพ์)
+- [x] Admin → `/admin/export_pdf.php` → เปิดหน้าพิมพ์ได้ · หัวตารางซ้ำทุกหน้าตอนพิมพ์
 - [x] Print หน้า payments → แสดงผลถูกต้อง (print CSS)
 
 ### Member Card / Labels
