@@ -397,6 +397,12 @@ class BorrowService
                     throw new Exception('รายการนี้ไม่มีค่าปรับ');
                 }
 
+                // 💸 Step 2.5: ยกเว้นไปแล้วต้องรับชำระไม่ได้ (ภายใต้ lock)
+                //    ไม่งั้นจะเก็บเงินจากรายการที่ประกาศยกเว้นไปแล้ว
+                if (!empty($borrow['fine_waived_at'])) {
+                    throw new Exception('รายการนี้ถูกยกเว้นค่าปรับไปแล้ว');
+                }
+
                 // 📝 Step 3: ตรวจว่าชำระแล้วหรือยัง (ภายใต้ lock)
                 //    🛡️ UNIQUE constraint บน borrow_id เป็นด่านสุดท้าย
                 $existingPayment = $this->paymentRepo->findByBorrowId($borrowId);
@@ -422,6 +428,103 @@ class BorrowService
                 throw $e;
             }
         }, 'BorrowService::payFine');
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยกเว้นค่าปรับ (ไม่เก็บเงิน แต่ไม่นับเป็นค้างชำระอีก)
+     * ==========================================================================
+     * State: fine ค้างชำระ → ยกเว้นแล้ว
+     *
+     * 🔄 Flow:
+     * 1. BEGIN TX → lock borrow (FOR UPDATE ทุก status)
+     * 2. ตรวจ: มีค่าปรับจริง · ยังไม่ถูกยกเว้น · ยังไม่ถูกชำระ
+     * 3. ตรวจสิทธิ์ตามยอด — staff ยกเว้นได้ไม่เกิน FINE_WAIVE_STAFF_LIMIT
+     * 4. UPDATE fine_waived_* → COMMIT
+     *
+     * 📥 Input:
+     * @param int    $borrowId  รายการยืม
+     * @param string $note      เหตุผล (บังคับ — เว้นว่างไม่ได้)
+     * @param int    $waivedBy  users.id ของผู้กด
+     * @param string $waiverRole 'admin' | 'staff' — ใช้ตัดสินเพดาน
+     *
+     * 📤 Output: @return array {success, amount, message}
+     * @throws Exception ถ้าไม่มีค่าปรับ / ยกเว้นซ้ำ / ชำระแล้ว / เกินสิทธิ์ / ไม่ได้กรอกเหตุผล
+     *
+     * 🧠 ทำไมไม่ตั้ง fine_amount = 0:
+     *    ต้องเก็บไว้ว่าเดิมเท่าไรแล้วยกเว้นให้ ไม่งั้นตรวจย้อนหลังไม่ได้ว่ายกเว้นไปเท่าไร
+     *
+     * 🛡️ เป็นเรื่องเงิน — บังคับบันทึกว่าใคร เมื่อไหร่ เพราะอะไร ทุกครั้ง
+     *    เพราะระบบยังไม่มี audit trail กลาง (ดู KNOWN_LIMITATIONS §4)
+     *
+     * ✅ Use case: admin/payments.php → ปุ่ม "ยกเว้นค่าปรับ"
+     */
+    public function waiveFine(int $borrowId, string $note, int $waivedBy, string $waiverRole = 'staff'): array
+    {
+        // 📝 ตรวจเหตุผลก่อนเปิด transaction — ไม่ต้องไปล็อคแถวถ้ายังไงก็ไม่ผ่าน
+        $note = trim($note);
+        if ($note === '') {
+            throw new Exception('กรุณากรอกเหตุผลที่ยกเว้นค่าปรับ');
+        }
+        if (mb_strlen($note) > 255) {
+            throw new Exception('เหตุผลต้องไม่เกิน 255 ตัวอักษร');
+        }
+
+        return runWithDeadlockRetry($this->pdo, function () use ($borrowId, $note, $waivedBy, $waiverRole) {
+            $this->pdo->beginTransaction();
+
+            try {
+                // 🔒 Step 1: ล็อคแถว borrow (ทุก status เหมือน payFine)
+                $borrow = $this->borrowRepo->findByIdForUpdateAnyStatus($borrowId);
+
+                if (!$borrow) {
+                    throw new Exception('ไม่พบรายการยืม');
+                }
+
+                if ($borrow['fine_amount'] <= 0) {
+                    throw new Exception('รายการนี้ไม่มีค่าปรับ');
+                }
+
+                if (!empty($borrow['fine_waived_at'])) {
+                    throw new Exception('รายการนี้ถูกยกเว้นค่าปรับไปแล้ว');
+                }
+
+                // 💰 ชำระไปแล้วต้องยกเว้นไม่ได้ — เงินเข้าไปแล้วจะมายกเว้นทีหลังไม่ได้
+                if ($this->paymentRepo->findByBorrowId($borrowId)) {
+                    throw new Exception('รายการนี้ชำระค่าปรับแล้ว ยกเว้นไม่ได้');
+                }
+
+                // 🔒 Step 2: ตรวจสิทธิ์ตามยอด
+                //    เจ้าหน้าที่ยกเว้นเองได้ในวงเงินที่ตั้งไว้ เกินกว่านั้นต้องให้ผู้ดูแล
+                //    (ตั้งค่าได้ที่หน้า "ตั้งค่าระบบ" → เจ้าหน้าที่ยกเว้นค่าปรับได้ไม่เกิน)
+                $amount = (float) $borrow['fine_amount'];
+                if ($waiverRole !== 'admin' && $amount > FINE_WAIVE_STAFF_LIMIT) {
+                    throw new Exception(sprintf(
+                        'ค่าปรับ %s บาท เกินวงเงินที่เจ้าหน้าที่ยกเว้นได้ (%s บาท) — ต้องให้ผู้ดูแลระบบเป็นผู้ยกเว้น',
+                        number_format($amount),
+                        number_format(FINE_WAIVE_STAFF_LIMIT)
+                    ));
+                }
+
+                // 📝 Step 3: บันทึกการยกเว้น
+                //    WHERE fine_waived_at IS NULL ในตัว query เป็นด่านสุดท้ายกันยกเว้นซ้ำ
+                if (!$this->borrowRepo->waiveFine($borrowId, $waivedBy, $note)) {
+                    throw new Exception('รายการนี้ถูกยกเว้นค่าปรับไปแล้ว');
+                }
+
+                $this->pdo->commit();
+
+                return [
+                    'success' => true,
+                    'amount' => $amount,
+                    'message' => 'ยกเว้นค่าปรับ ' . number_format($amount) . ' บาท เรียบร้อยแล้ว'
+                ];
+            } catch (Exception $e) {
+                $this->pdo->rollBack();
+                error_log("[BorrowService::waiveFine] borrowId={$borrowId} by={$waivedBy} error: " . $e->getMessage());
+                throw $e;
+            }
+        }, 'BorrowService::waiveFine');
     }
 
     // ==================== Private Methods ====================

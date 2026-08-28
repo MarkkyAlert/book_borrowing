@@ -193,6 +193,7 @@ class ReportRepository
                 FROM borrows b
                 LEFT JOIN payments p ON b.id = p.borrow_id
                 WHERE b.fine_amount > 0 AND p.id IS NULL
+                  AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
             ")->fetchColumn(),
 
             // 💰 this_month: ค่าปรับเดือนนี้ (นับจาก return_date ไม่ใช่ borrow_date)
@@ -769,6 +770,7 @@ class ReportRepository
             WHERE b.status = 'returned' 
               AND b.fine_amount > 0
               AND b.id NOT IN (SELECT borrow_id FROM payments)
+              AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
               {$dateFilter}
             ORDER BY b.fine_amount DESC
         ");

@@ -63,6 +63,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect('payments.php');
     }
+
+    // 💸 ยกเว้นค่าปรับ — ไม่เก็บเงิน แต่ไม่นับเป็นค้างชำระอีก
+    if ($action === 'waive_fine') {
+        $borrowId = (int) ($_POST['borrow_id'] ?? 0);
+        $note     = trim($_POST['waive_note'] ?? '');
+
+        // [IDEMPOTENCY] ป้องกัน double-submit แบบเดียวกับการรับชำระ
+        $idempotencyKey = 'waive_fine_' . $borrowId;
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
+            setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
+            redirect('payments.php');
+        }
+
+        try {
+            // [WRITE] Service จัดการ: lock row, ตรวจสิทธิ์ตามยอด, บังคับเหตุผล, กันยกเว้นซ้ำ
+            //    🛡️ ส่ง role จาก session — ห้ามให้หน้าเว็บส่งมาเอง ไม่งั้นปลอมเป็น admin ได้
+            $result = $borrowService->waiveFine(
+                $borrowId,
+                $note,
+                (int) $_SESSION['user_id'],
+                $_SESSION['role'] ?? 'staff'
+            );
+
+            $_SESSION['processed_actions'][$idempotencyKey] = time();
+            setFlash('success', $result['message']);
+        } catch (Exception $e) {
+            setFlash('error', $e->getMessage());
+        }
+        redirect('payments.php');
+    }
 }
 
 // ── GET: ดึงข้อมูลสำหรับแสดงผล ──
@@ -71,8 +101,13 @@ $totalRevenue = $paymentRepo->getTotalCollected();     // ยอดชำระ�
 $unpaidTotal = $borrowRepo->getTotalUnpaidFines();     // ยอดค้างชำระรวม
 $thisMonthRevenue = $paymentRepo->getThisMonthTotal(); // ยอดเดือนนี้
 
+$waivedTotal = $borrowRepo->sumWaivedFines();           // ยอดที่ยกเว้นไปทั้งหมด
+
 // 💰 รายการค้างชำระ (จำกัด 50 รายการ)
 $unpaidList = $borrowRepo->getUnpaidFinesList(50);
+
+// 💸 ประวัติการยกเว้น — ให้ผู้ดูแลตรวจย้อนหลังได้ว่าใครยกเว้นอะไรไปบ้าง
+$waivedList = $borrowRepo->findWaivedFines(50);
 
 // 👥 จัดกลุ่มค้างชำระตาม user — แสดงยอดรวมแต่ละคน
 $unpaidByUser = [];
@@ -181,7 +216,7 @@ require_once __DIR__ . '/header.php';
 </div>
 
 <!-- Stats Cards (Screen only) -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 screen-only">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6 screen-only">
     <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg shadow-green-500/20">
         <div class="flex justify-between items-start">
             <div>
@@ -217,7 +252,66 @@ require_once __DIR__ . '/header.php';
             </div>
         </div>
     </div>
+
+    <?php // 💸 ยกเว้นไปแล้ว — แยกจาก "รายได้" เพราะไม่ใช่เงินที่เก็บได้ ?>
+    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl p-5 text-white shadow-lg shadow-amber-500/20">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-amber-100 text-xs font-medium mb-1">ยกเว้นไปแล้ว</p>
+                <h3 class="text-2xl font-bold"><?= number_format($waivedTotal) ?> ฿</h3>
+            </div>
+            <div class="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <i class="bi bi-x-circle text-xl"></i>
+            </div>
+        </div>
+    </div>
 </div>
+
+<?php // 💸 ประวัติการยกเว้น — ผู้ดูแลต้องตรวจย้อนหลังได้ว่าใครยกเว้นอะไรเพราะอะไร
+      //    ระบบไม่มี audit trail กลาง (KNOWN_LIMITATIONS §4) ตารางนี้จึงทำหน้าที่แทน ?>
+<?php if (!empty($waivedList)): ?>
+<div class="bg-amber-50/60 rounded-2xl shadow-sm border border-amber-200 p-6 mb-6 screen-only">
+    <div class="flex justify-between items-center mb-4">
+        <h5 class="font-bold text-amber-800 flex items-center">
+            <i class="bi bi-x-circle text-amber-500 mr-2"></i>
+            ประวัติการยกเว้นค่าปรับ
+            <span class="ml-2 px-2 py-0.5 bg-amber-500 text-white text-xs rounded-full"><?= count($waivedList) ?> รายการ</span>
+        </h5>
+        <span class="text-xs text-amber-700">รวม <?= number_format($waivedTotal) ?> ฿</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="text-amber-900 bg-amber-100/70">
+                <tr>
+                    <th class="px-4 py-2 text-left font-medium">สมาชิก</th>
+                    <th class="px-4 py-2 text-left font-medium">หนังสือ</th>
+                    <th class="px-4 py-2 text-left font-medium">ยอดที่ยกเว้น</th>
+                    <th class="px-4 py-2 text-left font-medium">เหตุผล</th>
+                    <th class="px-4 py-2 text-left font-medium">ผู้ยกเว้น</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-amber-100">
+                <?php foreach ($waivedList as $w): ?>
+                    <tr class="hover:bg-amber-50 transition-colors">
+                        <td class="px-4 py-3 font-medium text-gray-900"><?= e($w['user_name']) ?></td>
+                        <td class="px-4 py-3 text-gray-600"><?= e($w['book_title']) ?></td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                <?= number_format($w['fine_amount']) ?> ฿
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600"><?= e($w['fine_waived_note'] ?? '-') ?></td>
+                        <td class="px-4 py-3 text-gray-500">
+                            <div><?= e($w['waived_by_name'] ?? 'ไม่ทราบ') ?></div>
+                            <div class="text-xs"><?= formatDate($w['fine_waived_at']) ?></div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Unpaid Fines Section (Grouped by User) -->
 <?php if (!empty($unpaidByUser)): ?>
@@ -313,6 +407,11 @@ require_once __DIR__ . '/header.php';
                                 <button type="button" onclick="closeUserFinesModal(<?= $userId ?>); setTimeout(() => openPayModal(<?= $item['id'] ?>, '<?= e($item['user_name']) ?>', '<?= e($item['book_title']) ?>', <?= $item['fine_amount'] ?>), 350);" 
                                         class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors">
                                     <i class="bi bi-cash mr-1"></i>รับชำระ
+                                </button>
+                                <?php // 💸 ยกเว้นค่าปรับ — ไม่เก็บเงิน แต่ไม่นับเป็นค้างชำระอีก ?>
+                                <button type="button" onclick="closeUserFinesModal(<?= $userId ?>); setTimeout(() => openWaiveModal(<?= $item['id'] ?>, '<?= e($item['user_name']) ?>', '<?= e($item['book_title']) ?>', <?= $item['fine_amount'] ?>), 350);" 
+                                        class="inline-flex items-center px-3 py-1.5 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-medium rounded-lg transition-colors">
+                                    <i class="bi bi-x-circle mr-1"></i>ยกเว้น
                                 </button>
                             </div>
                         </div>
@@ -498,7 +597,105 @@ require_once __DIR__ . '/header.php';
     </div>
 </div>
 
+<?php // 💸 Modal ยืนยันยกเว้นค่าปรับ — บังคับกรอกเหตุผล ?>
+<div id="waiveModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="waiveModalBackdrop"></div>
+
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div id="waiveModalPanel" class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-md opacity-0 translate-y-4">
+            <form method="POST" id="waiveFineForm">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <input type="hidden" name="action" value="waive_fine">
+                <input type="hidden" name="borrow_id" id="waiveBorrowId" value="">
+
+                <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-white flex items-center">
+                            <i class="bi bi-x-circle mr-2"></i>ยกเว้นค่าปรับ
+                        </h3>
+                        <button type="button" class="text-white/80 hover:text-white" onclick="closeWaiveModal()">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6">
+                    <div class="text-center mb-4">
+                        <p class="text-gray-600 text-sm">ยกเว้นค่าปรับให้</p>
+                        <p class="font-bold text-gray-900 text-lg mt-1" id="waiveUserName"></p>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-xl p-4 space-y-2 mb-4">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-500">หนังสือ:</span>
+                            <span class="font-medium text-gray-900 text-right max-w-[200px] line-clamp-1" id="waiveBookTitle"></span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-500">ยอดที่จะยกเว้น:</span>
+                            <span class="font-bold text-amber-600 text-lg" id="waiveAmount"></span>
+                        </div>
+                    </div>
+
+                    <label for="waiveNote" class="block text-sm font-medium text-gray-700 mb-1">
+                        เหตุผล <span class="text-red-500">*</span>
+                    </label>
+                    <textarea id="waiveNote" name="waive_note" rows="2" required maxlength="255"
+                              class="w-full rounded-xl border-gray-300 focus:border-amber-500 focus:ring-amber-500 shadow-sm text-sm"
+                              placeholder="เช่น ห้องสมุดปิดกะทันหัน / สมาชิกเจ็บป่วย / ระบบบันทึกผิด"></textarea>
+                    <p class="mt-1 text-xs text-gray-500">
+                        บันทึกไว้ตรวจย้อนหลังได้ว่าใครยกเว้นเมื่อไหร่เพราะอะไร
+                        <?php if (($_SESSION['role'] ?? '') !== 'admin'): ?>
+                            · เจ้าหน้าที่ยกเว้นได้ไม่เกิน <?= number_format(FINE_WAIVE_STAFF_LIMIT) ?> บาท
+                        <?php endif; ?>
+                    </p>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <button type="button" onclick="closeWaiveModal()" class="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors shadow-lg shadow-amber-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>ยืนยันยกเว้น
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+// 💸 เปิด/ปิด modal ยกเว้น — ใช้จังหวะเดียวกับ modal รับชำระ
+function openWaiveModal(borrowId, userName, bookTitle, amount) {
+    document.getElementById('waiveBorrowId').value = borrowId;
+    document.getElementById('waiveUserName').textContent = userName;
+    document.getElementById('waiveBookTitle').textContent = bookTitle;
+    document.getElementById('waiveAmount').textContent = amount.toLocaleString() + ' ฿';
+    document.getElementById('waiveNote').value = '';
+
+    const modal = document.getElementById('waiveModal');
+    const backdrop = document.getElementById('waiveModalBackdrop');
+    const panel = document.getElementById('waiveModalPanel');
+
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        panel.classList.remove('opacity-0', 'translate-y-4');
+        panel.classList.add('opacity-100', 'translate-y-0');
+        document.getElementById('waiveNote').focus();
+    }, 10);
+}
+
+function closeWaiveModal() {
+    const modal = document.getElementById('waiveModal');
+    const backdrop = document.getElementById('waiveModalBackdrop');
+    const panel = document.getElementById('waiveModalPanel');
+
+    backdrop.classList.add('opacity-0');
+    panel.classList.add('opacity-0', 'translate-y-4');
+    panel.classList.remove('opacity-100', 'translate-y-0');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+}
+
 function openPayModal(borrowId, userName, bookTitle, amount) {
     document.getElementById('payBorrowId').value = borrowId;
     document.getElementById('payUserName').textContent = userName;

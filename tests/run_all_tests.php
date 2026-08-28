@@ -170,6 +170,7 @@ $gapSuites = [
     'Concurrency Gap Analysis'   => 'test_concurrency_gap_analysis.php',
     'Reservation Admin Gap'      => 'test_reservation_admin_gap_analysis.php',
     'Payment Gap Analysis'       => 'test_payment_gap_analysis.php',
+    'ยกเว้นค่าปรับ'              => 'test_fine_waiver.php',           // ทุกที่ที่นิยาม "ค้างชำระ" ต้องตรงกัน
     'Authentication Gap'         => 'test_authentication_gap_analysis.php',
     'Book Management'            => 'test_book_management.php',
     'หนังสืออ้างอิง'             => 'test_reference_books.php',       // ยืม/จองไม่ได้ แต่ยังค้นเจอ

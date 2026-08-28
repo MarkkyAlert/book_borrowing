@@ -180,6 +180,7 @@ class PaymentRepository
             FROM borrows b
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.fine_amount > 0 AND p.id IS NULL
+              AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
         ")->fetchColumn();
     }
 

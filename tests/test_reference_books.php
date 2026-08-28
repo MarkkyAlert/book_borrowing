@@ -117,6 +117,28 @@ $stmt->execute(["[$TAG] สมาชิกทดสอบ", strtolower($TAG) . '
 $memberId = (int) $pdo->lastInsertId();
 $memberEmail = strtolower($TAG) . '@test.local';
 
+
+/**
+ * 🧹 เก็บกวาดแบบรับประกัน — ทำงานแม้เทสต์ตายกลางคัน
+ *
+ * 🧠 ทำไมต้อง register_shutdown_function ไม่ใช่เขียนไว้ท้ายไฟล์เฉย ๆ:
+ *    ถ้าเคสใดเคสหนึ่งโยน exception ที่ไม่ถูกจับ หรือเกิด fatal error
+ *    โค้ดท้ายไฟล์จะไม่ถูกรันเลย → เหลือหนังสือ/สมาชิกทดสอบค้างในระบบทุกครั้ง
+ *    (อาการเดียวกับ F-52 และเคสที่ tests/test_concurrency_gap_analysis.php เคยเป็น)
+ *    shutdown function ทำงานทุกทางออก จึงเก็บกวาดได้เสมอ
+ */
+$cleanup = function () use ($pdo, $memberId, $refBookId, $normalBookId): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    $pdo->exec("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE user_id = $memberId)");
+    $pdo->exec("DELETE FROM borrows WHERE user_id = $memberId OR book_id IN ($refBookId, $normalBookId)");
+    $pdo->exec("DELETE FROM reservations WHERE user_id = $memberId OR book_id IN ($refBookId, $normalBookId)");
+    $pdo->exec("DELETE FROM books WHERE id IN ($refBookId, $normalBookId)");
+    $pdo->exec("DELETE FROM users WHERE id = $memberId");
+};
+register_shutdown_function($cleanup);
+
 echo "\n── A. ด่านที่ชั้น Service ──\n";
 
 // A1: ยืมเล่มอ้างอิงไม่ได้
@@ -287,11 +309,7 @@ check('REF-D1', $refRatio < 0.20,
 // CLEANUP
 // ============================================================
 echo "\n── CLEANUP ──\n";
-$pdo->exec("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE user_id = $memberId)");
-$pdo->exec("DELETE FROM borrows WHERE user_id = $memberId OR book_id IN ($refBookId, $normalBookId)");
-$pdo->exec("DELETE FROM reservations WHERE user_id = $memberId OR book_id IN ($refBookId, $normalBookId)");
-$pdo->exec("DELETE FROM books WHERE id IN ($refBookId, $normalBookId)");
-$pdo->exec("DELETE FROM users WHERE id = $memberId");
+$cleanup();
 @unlink($COOKIE);
 @unlink($stuJar);
 echo "  ลบหนังสือทดสอบ 2 เล่ม สมาชิกทดสอบ 1 คน และรายการที่เกี่ยวข้องทั้งหมด\n";

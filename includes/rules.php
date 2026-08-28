@@ -70,6 +70,16 @@ function ruleDefinitions(): array
             'unit'    => 'บาท',
             'help'    => 'คิดตอนคืนหนังสือ นับทุกวันตามปฏิทิน (ยังไม่มีตารางวันหยุดทำการ)',
         ],
+        'FINE_WAIVE_STAFF_LIMIT' => [
+            'setting' => 'rule_waive_staff_limit',
+            'env'     => 'FINE_WAIVE_STAFF_LIMIT',
+            'default' => 200,
+            'min'     => 0,          // 📝 0 = เจ้าหน้าที่ยกเว้นไม่ได้เลย ต้องให้ผู้ดูแลทำ
+            'max'     => 100000,
+            'label'   => 'เจ้าหน้าที่ยกเว้นค่าปรับได้ไม่เกิน',
+            'unit'    => 'บาท',
+            'help'    => 'เกินจำนวนนี้ต้องให้ผู้ดูแลระบบเป็นคนยกเว้น · ตั้ง 0 = เจ้าหน้าที่ยกเว้นไม่ได้เลย',
+        ],
         'RESERVATION_EXPIRE_DAYS' => [
             'setting' => 'rule_reservation_days',
             'env'     => 'RESERVATION_EXPIRE_DAYS',

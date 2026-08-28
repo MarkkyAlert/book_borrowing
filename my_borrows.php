@@ -230,10 +230,19 @@ function getDaysRemaining($dueDate): int {
                                                 คืนเมื่อ: <?= date('d/m/Y', strtotime($borrow['return_date'])) ?>
                                             </span>
                                             <?php if ($borrow['fine_amount'] > 0): ?>
-                                                <span class="text-red-600 font-medium">
-                                                    <i class="bi bi-cash-coin mr-1"></i>
-                                                    ค่าปรับ: <?= number_format($borrow['fine_amount'], 2) ?> บาท
-                                                </span>
+                                                <?php if (!empty($borrow['fine_waived_at'])): ?>
+                                                    <?php // 💸 ยกเว้นแล้ว — ห้ามขึ้นสีแดงเหมือนยอดที่ยังต้องจ่าย
+                                                          //    สมาชิกต้องรู้ทันทีว่าไม่ต้องจ่ายแล้ว ?>
+                                                    <span class="text-gray-500 font-medium" title="ห้องสมุดยกเว้นค่าปรับให้แล้ว">
+                                                        <i class="bi bi-check-circle mr-1"></i>
+                                                        ค่าปรับ <?= number_format($borrow['fine_amount'], 2) ?> บาท — <span class="text-green-600">ยกเว้นแล้ว</span>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="text-red-600 font-medium">
+                                                        <i class="bi bi-cash-coin mr-1"></i>
+                                                        ค่าปรับ: <?= number_format($borrow['fine_amount'], 2) ?> บาท
+                                                    </span>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                         <?php endif; ?>
                                     </div>

@@ -372,6 +372,85 @@ class BorrowRepository
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: บันทึกการยกเว้นค่าปรับ (ไม่แตะ fine_amount เดิม)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $borrowId  รายการยืมที่จะยกเว้น
+     * @param int    $waivedBy  ผู้ยกเว้น (users.id)
+     * @param string $note      เหตุผล (บังคับกรอกที่ชั้น Service)
+     *
+     * 📤 Output: @return bool true = อัปเดตสำเร็จ
+     *
+     * 🧠 ทำไมไม่ตั้ง fine_amount = 0:
+     *    ต้องเก็บไว้ว่า "เดิมค่าปรับเท่าไร แล้วยกเว้นให้" ไม่งั้นตรวจย้อนหลังไม่ได้
+     *    ว่ายกเว้นไปเท่าไรรวมกัน — รายการที่ยกเว้นแล้วถูกกรองออกด้วย fine_waived_at
+     *
+     * 🛡️ WHERE fine_waived_at IS NULL → กันยกเว้นซ้ำแม้จะยิงพร้อมกัน 2 ครั้ง
+     *    (คู่กับ FOR UPDATE lock ที่ Service)
+     *
+     * ✅ Use case: BorrowService::waiveFine()
+     */
+    public function waiveFine(int $borrowId, int $waivedBy, string $note): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE borrows
+            SET fine_waived_at = NOW(), fine_waived_by = ?, fine_waived_note = ?
+            WHERE id = ? AND fine_waived_at IS NULL
+        ");
+        $stmt->execute([$waivedBy, $note, $borrowId]);
+
+        // 📌 rowCount() = 0 แปลว่ามีคนยกเว้นไปแล้วก่อนหน้า → ไม่ถือว่าสำเร็จ
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงประวัติการยกเว้นค่าปรับ (ให้ผู้ดูแลตรวจย้อนหลัง)
+     * ==========================================================================
+     *
+     * 🧠 ทำไมต้องมี: ระบบนี้ไม่มี audit trail กลาง (KNOWN_LIMITATIONS §4)
+     *    การให้เจ้าหน้าที่ยกเว้นเงินได้เองต้องแลกกับการที่ผู้ดูแลตรวจย้อนหลังได้
+     *
+     * 📤 @return array[] [{id, fine_amount, fine_waived_at, fine_waived_note,
+     *                      user_name, book_title, waived_by_name}, ...]
+     * ✅ Use case: admin/payments.php ส่วน "ประวัติการยกเว้นค่าปรับ"
+     */
+    public function findWaivedFines(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.id, b.fine_amount, b.fine_waived_at, b.fine_waived_note,
+                   b.return_date,
+                   u.name AS user_name,
+                   bk.title AS book_title,
+                   w.name AS waived_by_name
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN users w ON b.fine_waived_by = w.id
+            WHERE b.fine_waived_at IS NOT NULL
+            ORDER BY b.fine_waived_at DESC, b.id DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดรวมค่าปรับที่ยกเว้นไปทั้งหมด
+     * ==========================================================================
+     * ✅ Use case: admin/payments.php การ์ดสรุป
+     */
+    public function sumWaivedFines(): float
+    {
+        return (float) $this->pdo->query("
+            SELECT COALESCE(SUM(fine_amount), 0) FROM borrows WHERE fine_waived_at IS NOT NULL
+        ")->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: สร้างรายการยืม (status='borrowing' อัตโนมัติ)
      * ==========================================================================
      *
@@ -916,6 +995,7 @@ class BorrowRepository
             JOIN books bk ON b.book_id = bk.id
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.fine_amount > 0 AND p.id IS NULL
+              AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
             ORDER BY b.return_date DESC
             LIMIT ?
         ");
@@ -947,6 +1027,7 @@ class BorrowRepository
             FROM borrows b
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.fine_amount > 0 AND p.id IS NULL
+              AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
         ")->fetchColumn();
     }
 
@@ -979,6 +1060,7 @@ class BorrowRepository
             JOIN books bk ON b.book_id = bk.id
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.user_id = ? AND b.fine_amount > 0 AND p.id IS NULL
+              AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
             ORDER BY b.return_date DESC
         ");
         $stmt->execute([$userId]);
