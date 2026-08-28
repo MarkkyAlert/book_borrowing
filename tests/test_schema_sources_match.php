@@ -268,14 +268,91 @@ foreach ($enumCols as $i => [$table, $col]) {
 }
 
 // ============================================================
-// E. install.php ต้อง baseline migration ครบทุกไฟล์
+// E2. Foreign key + index ต้องตรงกันด้วย
 // ============================================================
-echo "\n── E. ตัว baseline ของ install.php ──\n";
+echo "\n── E. Foreign key และ index ──\n";
+
+// 🧠 เทียบแค่คอลัมน์ไม่พอ — เคยเจอว่า schema.sql ขาด FK ที่ migration เพิ่มให้
+//    ผลคือคนที่ import schema.sql ตรง ๆ ได้ DB ที่ลบ user แล้วข้อมูลไม่ถูกล้าง/ตั้ง NULL
+// 🧠 เทียบเฉพาะตารางของแอป — ไม่รวม schema_migrations ซึ่งเป็นตารางบันทึกเวอร์ชัน
+//    ที่ install.php กับ migrate.php สร้างตอนรันจริง ไม่ใช่โครงสร้างข้อมูลของระบบ
+$tableList = "'" . implode("','", $TABLES) . "'";
+
+$constraintsOf = function (PDO $pdo, string $db) use ($tableList): array {
+    $stmt = $pdo->prepare("
+        SELECT tc.table_name, tc.constraint_name, tc.constraint_type,
+               COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position), '') AS cols
+        FROM information_schema.table_constraints tc
+        LEFT JOIN information_schema.key_column_usage kcu
+               ON kcu.constraint_schema = tc.table_schema
+              AND kcu.constraint_name   = tc.constraint_name
+              AND kcu.table_name        = tc.table_name
+        WHERE tc.table_schema = ? AND tc.table_name IN ({$tableList})
+        GROUP BY tc.table_name, tc.constraint_name, tc.constraint_type
+    ");
+    $stmt->execute([$db]);
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        // 🧠 ข้ามชื่อที่ MySQL ตั้งให้เอง (borrows_ibfk_1 ฯลฯ) — เทียบด้วย ตาราง+ชนิด+คอลัมน์แทน
+        //    ไม่งั้นลำดับการประกาศต่างกันนิดเดียวก็เลขไม่ตรงแล้ว
+        $key = $r['table_name'] . '|' . $r['constraint_type'] . '|' . $r['cols'];
+        $out[$key] = true;
+    }
+    return $out;
+};
+
+$ca = $constraintsOf($pdoA, $DB_A);
+$cb = $constraintsOf($pdoB, $DB_B);
+$missA = array_diff_key($cb, $ca);
+$missB = array_diff_key($ca, $cb);
+
+if (!$missA && !$missB) {
+    pass('SCHEMA-E1', 'FK / UNIQUE / CHECK ตรงกันทั้ง ' . count($ca) . ' รายการ');
+} else {
+    $msg = 'constraint ไม่ตรงกัน:';
+    if ($missA) $msg .= "\n       🔴 install.php ขาด: " . implode(', ', array_keys($missA));
+    if ($missB) $msg .= "\n       🔴 schema.sql ขาด: " . implode(', ', array_keys($missB));
+    fail('SCHEMA-E1', $msg);
+}
+
+$indexesOf = function (PDO $pdo, string $db) use ($tableList): array {
+    $stmt = $pdo->prepare("
+        SELECT table_name, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols, non_unique
+        FROM information_schema.statistics
+        WHERE table_schema = ? AND table_name IN ({$tableList})
+        GROUP BY table_name, index_name, non_unique
+    ");
+    $stmt->execute([$db]);
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $out[$r['table_name'] . '|' . $r['cols'] . '|' . $r['non_unique']] = true;
+    }
+    return $out;
+};
+
+$ia = $indexesOf($pdoA, $DB_A);
+$ib = $indexesOf($pdoB, $DB_B);
+$missIA = array_diff_key($ib, $ia);
+$missIB = array_diff_key($ia, $ib);
+
+if (!$missIA && !$missIB) {
+    pass('SCHEMA-E2', 'index ตรงกันทั้ง ' . count($ia) . ' รายการ');
+} else {
+    $msg = 'index ไม่ตรงกัน:';
+    if ($missIA) $msg .= "\n       ⚠️  install.php ขาด: " . implode(', ', array_keys($missIA));
+    if ($missIB) $msg .= "\n       ⚠️  schema.sql ขาด: " . implode(', ', array_keys($missIB));
+    fail('SCHEMA-E2', $msg);
+}
+
+// ============================================================
+// F. install.php ต้อง baseline migration ครบทุกไฟล์
+// ============================================================
+echo "\n── F. ตัว baseline ของ install.php ──\n";
 
 // 🧠 install.php ทำเครื่องหมายว่า migration ทุกไฟล์รันแล้วโดยไม่รันจริง
 //    ซึ่งถูกต้อง **ก็ต่อเมื่อ** ตารางที่มันสร้างเป็นโครงสร้างล่าสุดจริง
 //    เทสต์ C/D ด้านบนคือตัวที่ค้ำเงื่อนไขนั้นไว้
-check('SCHEMA-E1',
+check('SCHEMA-F1',
     str_contains($installSrc, 'schema_migrations') && str_contains($installSrc, 'INSERT IGNORE INTO schema_migrations'),
     'install.php ยัง baseline migration ให้อัตโนมัติ',
     'install.php ไม่ baseline แล้ว — ระบบที่ติดตั้งใหม่จะพยายามรัน migration เก่าซ้ำ');

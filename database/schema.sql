@@ -105,7 +105,11 @@ CREATE TABLE IF NOT EXISTS `borrows` (
     INDEX `idx_book` (`book_id`),
     INDEX `idx_due_date` (`due_date`),
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+    -- 🧠 ตั้งชื่อ constraint เองเพราะ migration อ้างชื่อนี้ตอนเช็คว่าเคยเพิ่มไปแล้วหรือยัง
+    --    ON DELETE SET NULL = ลบบัญชีเจ้าหน้าที่แล้วประวัติยังอยู่ แค่ไม่รู้ว่าใครทำ
+    CONSTRAINT `fk_borrows_waived_by` FOREIGN KEY (`fine_waived_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT `fk_borrows_lost_reported_by` FOREIGN KEY (`lost_reported_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
