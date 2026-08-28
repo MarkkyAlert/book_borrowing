@@ -24,13 +24,32 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 use App\Services\HomeService;
 
 // 🛡️ [SECURITY] Rate limiting ป้องกัน API abuse
-//    60 requests ต่อ 5 นาที — ป้องกัน bot/script ยิง request ถี่
 //    คืน HTML error (ไม่ใช่ JSON) เพราะ response ถูกแทรกลง DOM โดยตรง
-if (!checkRateLimit('search_books', 60, 5)) {
+//
+// 🔴 เดิมเรียกแค่ checkRateLimit() โดยไม่เรียก incrementRateLimit() ตามหลัง
+//    ตัวนับจึงเป็น 0 ตลอดกาล → **rate limit ไม่เคยทำงานเลย**
+//    (ยิงทดสอบ 200 ครั้งติด ถูกบล็อก 0 ครั้ง · แถวใน rate_limits = 0)
+//    endpoint อื่นทุกตัวเรียกครบคู่ มีแค่ที่นี่ที่เรียกครึ่งเดียว
+//
+// 🧠 ทำไมโควตา 300 ไม่ใช่ 60:
+//    endpoint นี้ถูกเรียกทุกครั้งที่ผู้ใช้กดค้นหาบนหน้าแรก และห้องสมุดส่วนใหญ่
+//    ออกอินเทอร์เน็ตผ่าน IP เดียว (NAT) → **ทั้งห้องสมุดแชร์โควตาก้อนเดียวกัน**
+//    ถ้าตั้ง 60 ผู้ใช้ 30 คนค้นคนละ 2 ครั้งก็ชนเพดานแล้ว = ลูกค้าใช้งานไม่ได้
+//    300 ครั้ง/5 นาที ≈ 30 คนค้นคนละ 10 ครั้ง ซึ่งเกินพฤติกรรมปกติมาก
+//    แต่ยังกัน bot ที่ยิงเป็นพัน ๆ ครั้งได้อยู่
+//    📌 ปรับได้ที่ SEARCH_RATE_LIMIT / SEARCH_RATE_WINDOW ใน .env
+$searchLimit  = defined('SEARCH_RATE_LIMIT') ? SEARCH_RATE_LIMIT : 300;
+$searchWindow = defined('SEARCH_RATE_WINDOW') ? SEARCH_RATE_WINDOW : 5;
+
+if (!checkRateLimit('search_books', $searchLimit, $searchWindow)) {
     http_response_code(429);
-    echo '<div class="text-center text-red-500 py-4">Too many requests. Please wait.</div>';
+    echo '<div class="text-center text-red-500 py-4">ค้นหาถี่เกินไป กรุณารอสักครู่แล้วลองใหม่</div>';
     exit;
 }
+
+// 📝 ต้องบันทึกหลังตรวจผ่านเท่านั้น — ถ้าบันทึกก่อนตรวจ คนที่ถูกบล็อกอยู่แล้ว
+//    จะยิ่งถูกบล็อกยาวออกไปเรื่อย ๆ ทุกครั้งที่กด
+incrementRateLimit('search_books');
 
 // 📝 รับ & Validate Input — กรองเฉพาะค่าที่ไม่ว่างออก
 $search = trim($_GET['search'] ?? '');

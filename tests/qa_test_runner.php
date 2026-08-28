@@ -486,8 +486,35 @@ test('EC-10', 'POST', '/forgot_password.php', [
         ? true : 'User enumeration — reveals email existence';
 });
 
-// EC-11 Search rate limit header
+// EC-11 ค้นหาปกติต้องผ่าน
 test('EC-11', 'GET', '/api/search_books.php', ['search'=>'test'], $userSession, 200);
+
+// EC-11b 🔴 rate limit ของการค้นหาต้อง "นับจริง" ไม่ใช่แค่ตรวจ
+// 🧠 เดิม api/search_books.php เรียก checkRateLimit() แต่ลืมเรียก incrementRateLimit()
+//    ตัวนับจึงเป็น 0 ตลอดกาล → rate limit ไม่เคยทำงานเลย (ยิง 200 ครั้งไม่ถูกบล็อกสักครั้ง)
+//    EC-11 เดิมเช็คแค่ว่าได้ 200 จึงผ่านทั้งที่การป้องกันไม่มีอยู่จริง
+//    เทสต์นี้ตรวจว่ามีการ "บันทึก" เกิดขึ้นจริง ซึ่งเป็นสิ่งที่หายไป
+//    (ไม่ยิงจนเกินโควตา 300 เพราะช้าเกินไปสำหรับชุดทดสอบปกติ)
+try {
+    $rlPdo = getDB();
+    $before = (int) $rlPdo->query("SELECT COUNT(*) FROM rate_limits WHERE key_name LIKE 'search_books%'")->fetchColumn();
+    http('GET', "$BASE_URL/api/search_books.php", ['search' => 'ratelimit_probe']);
+    $after = (int) $rlPdo->query("SELECT COUNT(*) FROM rate_limits WHERE key_name LIKE 'search_books%'")->fetchColumn();
+
+    $results['total']++;
+    if ($after > $before) {
+        $results['passed']++;
+        echo "  \033[32m✅ EC-11b\033[0m: rate limit ของการค้นหานับจริง ($before → $after)\n";
+    } else {
+        $results['failed']++;
+        $results['details'][] = 'EC-11b';
+        echo "  \033[31m❌ EC-11b\033[0m: ค้นหาแล้วตัวนับไม่ขยับ — rate limit ไม่ทำงาน (ลืมเรียก incrementRateLimit)\n";
+    }
+} catch (\Exception $e) {
+    $results['total']++;
+    $results['failed']++;
+    echo "  \033[31m❌ EC-11b\033[0m: " . $e->getMessage() . "\n";
+}
 
 // EC-12 Homepage without auth
 test('EC-12', 'GET', '/index.php', [], null, 200);

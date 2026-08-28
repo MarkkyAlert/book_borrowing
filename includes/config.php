@@ -80,6 +80,11 @@ define('FINE_PER_DAY', (int) env('FINE_PER_DAY', 10));                // 📝 �
 define('MIN_PASSWORD_LENGTH', (int) env('MIN_PASSWORD_LENGTH', 6));
 define('RATE_LIMIT_MAX_ATTEMPTS', (int) env('RATE_LIMIT_MAX_ATTEMPTS', 5));     // 📝 จำนวนครั้งสูงสุดต่อ window
 define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15)); // 📝 ช่วงเวลา rate limit (นาที)
+// 🔎 rate limit ของ API ค้นหา แยกจากตัวอื่นเพราะพฤติกรรมต่างกันมาก
+//    ผู้ใช้กดค้นหาบ่อยเป็นเรื่องปกติ และห้องสมุดมักออกเน็ตผ่าน IP เดียว (NAT)
+//    → ทั้งห้องสมุดแชร์โควตาก้อนเดียว ถ้าตั้งต่ำเกินไปลูกค้าจะใช้งานไม่ได้
+define('SEARCH_RATE_LIMIT', (int) env('SEARCH_RATE_LIMIT', 300));   // 📝 จำนวนครั้งสูงสุด
+define('SEARCH_RATE_WINDOW', (int) env('SEARCH_RATE_WINDOW', 5));   // 📝 ช่วงเวลา (นาที)
 
 // ⏰ Session Settings
 define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 3600));  // 📝 อายุ session วินาที (ป้องกัน session ค้างบน shared PC)
