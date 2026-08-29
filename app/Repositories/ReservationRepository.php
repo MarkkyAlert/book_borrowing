@@ -330,7 +330,7 @@ class ReservationRepository
         // 🛡️ [I-10 FIX] เรียงจากใหม่สุด + LIMIT 1 ป้องกันคืนผิด record
         //    กรณี user มีหลาย reservations สำหรับ book เดียวกัน
         //    (เช่น cancelled → จองใหม่) → ต้องคืน record ล่าสุด
-        $sql .= " ORDER BY created_at DESC LIMIT 1";
+        $sql .= " ORDER BY created_at DESC, id DESC LIMIT 1";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -610,7 +610,7 @@ class ReservationRepository
         }
 
         // เรียงจากใหม่สุดก่อน
-        $sql .= " ORDER BY r.created_at DESC";
+        $sql .= " ORDER BY r.created_at DESC, r.id DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -639,7 +639,7 @@ class ReservationRepository
             JOIN users u ON r.user_id = u.id
             JOIN books b ON r.book_id = b.id
             WHERE r.status = 'pending'
-            ORDER BY r.created_at ASC
+            ORDER BY r.created_at ASC, r.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);

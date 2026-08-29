@@ -103,38 +103,58 @@ $thisMonthRevenue = $paymentRepo->getThisMonthTotal(); // ยอดเดือ�
 
 $waivedTotal = $borrowRepo->sumWaivedFines();           // ยอดที่ยกเว้นไปทั้งหมด
 
-// 💰 รายการค้างชำระ (จำกัด 50 รายการ)
-$unpaidList = $borrowRepo->getUnpaidFinesList(50);
-
 // 💸 ประวัติการยกเว้น — ให้ผู้ดูแลตรวจย้อนหลังได้ว่าใครยกเว้นอะไรไปบ้าง
 $waivedList = $borrowRepo->findWaivedFines(50);
 
-// 👥 จัดกลุ่มค้างชำระตาม user — แสดงยอดรวมแต่ละคน
-$unpaidByUser = [];
-foreach ($unpaidList as $item) {
-    $userId = $item['user_id'];
-    if (!isset($unpaidByUser[$userId])) {
-        $unpaidByUser[$userId] = [
-            'user_id' => $userId,
-            'user_name' => $item['user_name'],
-            'user_phone' => $item['user_phone'] ?? '-',
-            'total_fine' => 0,
-            'items' => []
-        ];
-    }
-    $unpaidByUser[$userId]['total_fine'] += $item['fine_amount'];
-    $unpaidByUser[$userId]['items'][] = $item;
-}
-
-// 🔍 ค้นหาประวัติการชำระ
+// 🔍 ค้นหา — ใช้ร่วมกันทั้ง 2 ตารางบนหน้านี้
 $search = trim($_GET['search'] ?? '');
-$page = (int) ($_GET['page'] ?? 1);
+$page = (int) ($_GET['page'] ?? 1);          // ตารางล่าง: ประวัติการรับชำระ
+$unpaidPage = (int) ($_GET['upage'] ?? 1);   // ตารางบน: รายการค้างชำระ
 
 // 🖨️ โหมดพิมพ์ — ต้องได้ครบทุกแถว ไม่ใช่แค่หน้าที่เปิดอยู่
 // 🧠 ปุ่ม "พิมพ์รายงาน" เดิมพิมพ์ทั้งตารางเพราะหน้านี้ไม่เคยแบ่งหน้า
 //    พอแบ่งหน้าแล้วถ้าไม่ทำอะไร ปุ่มเดิมจะพิมพ์ได้แค่ 20 แถว = ลดความสามารถแบบเงียบ ๆ
 //    จึงให้ปุ่มพาไป ?print=1 ซึ่ง render ครบแล้วสั่งพิมพ์เอง
+// ⚠️ ต้องนิยามก่อนดึงข้อมูลค้างชำระด้านล่าง เพราะใช้ตัดสินว่าจะ LIMIT ไหม
 $printMode = isset($_GET['print']);
+
+// ═══════════════════════════════════════════════════════════════════
+// 💰 รายการค้างชำระ — แบ่งหน้าเป็น "คน" ไม่ใช่ "รายการ"
+// ═══════════════════════════════════════════════════════════════════
+// 🔴 เดิมดึงมาแค่ 50 แถวตายตัวแล้วเอา count() ของ 50 แถวนั้นมาขึ้นป้ายว่ามีกี่คน
+//    ผลคือหน้าบอก "46 คน" ทั้งที่จริง 169 คน และคนที่ค้างมากที่สุดไม่โผล่เลย
+//    ส่วนยอดเงินมาจากอีก query ที่ไม่มี LIMIT จึงถูก — ป้ายกับยอดเงินขัดกันเอง (F-35)
+//
+// 🧠 ทำไมแบ่งหน้าเป็น "คน": คนหนึ่งค้างได้ 7–8 ใบ ถ้าแบ่งตามแถวยืม
+//    หนี้ของคนเดียวกันจะถูกหั่นข้ามหน้า บรรณารักษ์เห็นยอดไม่ครบของคนที่ยืนอยู่ตรงหน้า
+$unpaidStats = $borrowRepo->countUnpaidDebtors($search);
+
+$unpaidPagination = paginate($unpaidStats['people'], $unpaidPage, ITEMS_PER_PAGE);
+$debtors = $borrowRepo->getUnpaidDebtors(
+    $printMode ? max(1, $unpaidStats['people']) : $unpaidPagination['per_page'],
+    $printMode ? 0 : $unpaidPagination['offset'],
+    $search
+);
+
+// 📄 ดึงใบค้างชำระของคนในหน้านี้ครั้งเดียว แล้วค่อยจัดกลุ่ม (ไม่วน query ทีละคน)
+$unpaidItems  = $borrowRepo->getUnpaidItemsByUsers(array_column($debtors, 'user_id'));
+$unpaidByUser = [];
+foreach ($debtors as $d) {
+    $unpaidByUser[(int) $d['user_id']] = [
+        'user_id'    => (int) $d['user_id'],
+        'user_name'  => $d['user_name'],
+        'user_phone' => $d['user_phone'] ?: '-',
+        'total_fine' => (float) $d['total_fine'],
+        'item_count' => (int) $d['item_count'],
+        'items'      => [],
+    ];
+}
+foreach ($unpaidItems as $item) {
+    $uid = (int) $item['user_id'];
+    if (isset($unpaidByUser[$uid])) {
+        $unpaidByUser[$uid]['items'][] = $item;
+    }
+}
 
 $filters = [];
 if (!empty($search)) {
@@ -142,11 +162,13 @@ if (!empty($search)) {
 }
 
 // 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
-$pagination = paginate($paymentRepo->countAll($filters), $page, ITEMS_PER_PAGE);
+// 🧠 ตั้งชื่อให้ชัดว่าเป็นของตารางไหน — หน้านี้มี 2 ตารางที่แบ่งหน้าแยกกัน
+//    ถ้าใช้ $pagination ตัวเดียวร่วมกัน ตัวที่ require ทีหลังจะได้ค่าของตัวแรกไป
+$paymentsPagination = paginate($paymentRepo->countAll($filters), $page, ITEMS_PER_PAGE);
 
 if (!$printMode) {
-    $filters['limit']  = $pagination['per_page'];
-    $filters['offset'] = $pagination['offset'];
+    $filters['limit']  = $paymentsPagination['per_page'];
+    $filters['offset'] = $paymentsPagination['offset'];
 }
 
 // 📜 ดึงประวัติการชำระ (พร้อม JOIN ชื่อสมาชิก, หนังสือ, ผู้บันทึก)
@@ -314,16 +336,46 @@ require_once __DIR__ . '/header.php';
 <?php endif; ?>
 
 <!-- Unpaid Fines Section (Grouped by User) -->
-<?php if (!empty($unpaidByUser)): ?>
+<?php if ($unpaidStats['people'] > 0 || $search !== ''): ?>
 <div class="unpaid-section bg-gradient-to-r from-red-50 to-rose-50 rounded-2xl shadow-sm border border-red-200 p-6 mb-6">
-    <div class="flex justify-between items-center mb-4">
-        <h5 class="font-bold text-red-800 flex items-center">
-            <i class="bi bi-exclamation-triangle text-red-500 mr-2"></i>
-            รายการค้างชำระ
-            <span class="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full"><?= count($unpaidByUser) ?> คน</span>
-            <span class="ml-2 px-2 py-0.5 bg-red-700 text-white text-xs rounded-full"><?= count($unpaidList) ?> รายการ</span>
+    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-4">
+        <h5 class="font-bold text-red-800 flex items-center flex-wrap gap-2">
+            <span class="flex items-center">
+                <i class="bi bi-exclamation-triangle text-red-500 mr-2"></i>
+                รายการค้างชำระ
+            </span>
+            <?php // 🔴 ตัวเลขทั้ง 3 ตัวมาจาก query ที่ **ไม่มี LIMIT** ห้ามนับจากแถวที่แสดง
+                  //    ไม่งั้นจะกลับไปเป็นบั๊ก F-35 ที่ป้ายบอก 46 คน ทั้งที่จริง 169 คน ?>
+            <span class="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full"><?= number_format($unpaidStats['people']) ?> คน</span>
+            <span class="px-2 py-0.5 bg-red-700 text-white text-xs rounded-full"><?= number_format($unpaidStats['rows']) ?> รายการ</span>
+            <span class="px-2 py-0.5 bg-red-900 text-white text-xs rounded-full"><?= number_format($unpaidStats['total'], 2) ?> ฿</span>
         </h5>
+
+        <?php // 🔍 ช่องค้นหาของ "ส่วนค้างชำระ" โดยเฉพาะ
+              //    เดิมหน้านี้มีช่องค้นหาช่องเดียวซึ่งผูกกับตารางประวัติการรับชำระข้างล่าง
+              //    พิมพ์ชื่อคนค้างหนี้แล้วส่วนนี้ไม่ขยับสักแถว ?>
+        <form method="GET" class="flex gap-2 hide-on-print">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="bi bi-search text-red-300"></i>
+                </div>
+                <input type="text" name="search" value="<?= e($search) ?>"
+                       class="block w-full sm:w-72 pl-10 h-10 border-red-200 rounded-lg focus:ring-red-500 focus:border-red-500 text-sm"
+                       placeholder="ค้นชื่อ, เบอร์โทร, อีเมล หรือชื่อหนังสือ...">
+            </div>
+            <button type="submit" class="px-4 h-10 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">ค้นหา</button>
+            <?php if ($search !== ''): ?>
+                <a href="payments.php" class="px-4 h-10 inline-flex items-center bg-white border border-red-200 text-red-700 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors">ล้าง</a>
+            <?php endif; ?>
+        </form>
     </div>
+
+    <?php if (empty($unpaidByUser)): ?>
+        <div class="text-center py-10">
+            <i class="bi bi-search text-3xl text-red-200 block mb-2"></i>
+            <p class="text-red-700">ไม่พบคนค้างชำระที่ตรงกับ "<?= e($search) ?>"</p>
+        </div>
+    <?php else: ?>
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead class="text-xs text-red-700 uppercase bg-red-100/50">
@@ -362,6 +414,19 @@ require_once __DIR__ . '/header.php';
             </tbody>
         </table>
     </div>
+
+    <?php // 📄 แถบแบ่งหน้าของ "ส่วนค้างชำระ" — ใช้ ?upage= คนละตัวกับตารางล่างที่ใช้ ?page=
+          //    ถ้าใช้ชื่อเดียวกัน กดหน้า 2 ตรงนี้ ตารางประวัติการรับชำระจะเลื่อนตามไปด้วย ?>
+    <?php if (!$printMode): ?>
+        <?php
+        $pagination       = $unpaidPagination;
+        $paginationParams = ['search' => $search, 'page' => $page];
+        $paginationKey    = 'upage';
+        $paginationUnit   = 'คน';
+        require __DIR__ . '/../includes/pagination.php';
+        ?>
+    <?php endif; ?>
+    <?php endif; ?>
 </div>
 
 <!-- User Fines Detail Modals -->
@@ -444,7 +509,7 @@ require_once __DIR__ . '/header.php';
         ?>
         <a href="?<?= http_build_query(array_filter(['search' => $search, 'print' => 1])) ?>"
            class="text-sm text-gray-500 hover:text-gray-700 transition-colors hide-on-print">
-            <i class="bi bi-printer mr-1"></i>พิมพ์รายงาน<?= $pagination['total'] > $pagination['per_page'] ? ' (ทุกหน้า)' : '' ?>
+            <i class="bi bi-printer mr-1"></i>พิมพ์รายงาน<?= ($paymentsPagination['total'] > $paymentsPagination['per_page'] || $unpaidPagination['total'] > $unpaidPagination['per_page']) ? ' (ทุกหน้า)' : '' ?>
         </a>
     </div>
 
@@ -526,7 +591,13 @@ require_once __DIR__ . '/header.php';
     <?php // 📄 แถบเลือกหน้า — ซ่อนตอนพิมพ์ (โหมดพิมพ์ render ครบทุกแถวอยู่แล้ว) ?>
     <?php if (!$printMode): ?>
         <div class="px-6 pb-6 hide-on-print">
-            <?php $paginationUnit = 'รายการ'; require __DIR__ . '/../includes/pagination.php'; ?>
+            <?php
+            // 📌 ตั้งให้ถูกตัวก่อน require เสมอ — ส่วนค้างชำระด้านบนก็ require ไฟล์นี้เหมือนกัน
+            $pagination       = $paymentsPagination;
+            $paginationParams = ['search' => $search, 'upage' => $unpaidPage];
+            $paginationUnit   = 'รายการ';
+            require __DIR__ . '/../includes/pagination.php';
+            ?>
         </div>
     <?php endif; ?>
 </div>

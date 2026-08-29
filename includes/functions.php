@@ -982,9 +982,12 @@ function paginationPageNumbers(int $current, int $totalPages, int $around = 1): 
  * 🧠 ทำไมต้องมี: ถ้าลิงก์ "หน้า 2" ทิ้ง ?search= ไป ผู้ใช้จะเด้งกลับไปเห็นข้อมูลทั้งหมด
  * 🛡️ [SECURITY] ค่าถูก urlencode ผ่าน http_build_query — แต่ต้อง e() อีกชั้นตอนใส่ href
  */
-function paginationUrl(array $params, int $page): string
+function paginationUrl(array $params, int $page, string $pageKey = 'page'): string
 {
-    $params['page'] = $page;
+    // 🧠 $pageKey เปิดให้หน้าที่มี **2 ตารางแบ่งหน้าแยกกัน** ใช้ชื่อพารามิเตอร์คนละตัวได้
+    //    (admin/payments.php มีทั้ง "รายการค้างชำระ" และ "ประวัติการรับชำระ")
+    //    ถ้าใช้ชื่อเดียวกัน กดหน้า 2 ของตารางบน ตารางล่างจะเลื่อนตามไปด้วย
+    $params[$pageKey] = $page;
     // 📝 ตัดค่าว่างทิ้ง ให้ URL สั้นและอ่านง่าย
     $params = array_filter($params, fn($v) => $v !== '' && $v !== null);
     return '?' . http_build_query($params);

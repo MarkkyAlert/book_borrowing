@@ -67,7 +67,7 @@ class CategoryRepository
         // 🧠 ใช้ query() เพราะไม่มี user input (ปลอดภัย)
         // ⚠️ ถ้าเพิ่ม parameter ในอนาคต ต้องเปลี่ยนเป็น prepare()
         return $this->pdo->query("
-            SELECT * FROM categories ORDER BY name
+            SELECT * FROM categories ORDER BY name, id
         ")->fetchAll();
     }
 
@@ -100,7 +100,7 @@ class CategoryRepository
             FROM categories c
             LEFT JOIN books b ON c.id = b.category_id
             GROUP BY c.id, c.name
-            ORDER BY c.name
+            ORDER BY c.name, c.id ASC
         ")->fetchAll();
     }
 
@@ -363,7 +363,7 @@ class CategoryRepository
             LEFT JOIN books b ON c.id = b.category_id
             LEFT JOIN borrows br ON b.id = br.book_id
             GROUP BY c.id, c.name
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, c.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);

@@ -104,7 +104,7 @@ class UserRepository
             SELECT id, name, email, phone, role, created_at 
             FROM users 
             {$whereSQL}
-            ORDER BY name
+            ORDER BY name, id
         ");
         $stmt->execute($params);
         // 📤 คืน array users (ไม่มี password)
@@ -127,7 +127,7 @@ class UserRepository
             SELECT id, name, email, phone, role, created_at
             FROM users
             WHERE role IN ('member', 'staff')
-            ORDER BY name
+            ORDER BY name, id
         ");
         return $stmt->fetchAll();
     }

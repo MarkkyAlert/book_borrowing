@@ -774,7 +774,7 @@ class BorrowRepository
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
             WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-            ORDER BY b.due_date ASC
+            ORDER BY b.due_date ASC, b.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -801,7 +801,7 @@ class BorrowRepository
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
-            ORDER BY b.created_at DESC
+            ORDER BY b.created_at DESC, b.id DESC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -830,7 +830,7 @@ class BorrowRepository
             FROM borrows b
             JOIN books bk ON b.book_id = bk.id
             WHERE b.user_id = ?
-            ORDER BY b.created_at DESC
+            ORDER BY b.created_at DESC, b.id DESC
             LIMIT ?
         ");
         $stmt->execute([$userId, $limit]);
@@ -889,7 +889,7 @@ class BorrowRepository
             FROM borrows b
             JOIN books bk ON b.book_id = bk.id
             WHERE $where
-            ORDER BY b.created_at DESC
+            ORDER BY b.created_at DESC, b.id DESC
             LIMIT ? OFFSET ?
         ");
         $stmt->execute($params);
@@ -926,7 +926,7 @@ class BorrowRepository
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             WHERE b.book_id = ? AND b.status = 'borrowing'
-            ORDER BY b.created_at DESC
+            ORDER BY b.created_at DESC, b.id DESC
         ");
         $stmt->execute([$bookId]);
         return $stmt->fetchAll();
@@ -953,7 +953,7 @@ class BorrowRepository
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             WHERE b.book_id = ?
-            ORDER BY b.created_at DESC
+            ORDER BY b.created_at DESC, b.id DESC
             LIMIT ?
         ");
         $stmt->execute([$bookId, $limit]);
@@ -1099,6 +1099,156 @@ class BorrowRepository
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: นับ "จำนวนคน" ที่ค้างชำระ (สำหรับแบ่งหน้า + ป้ายสรุป)
+     * ==========================================================================
+     *
+     * 📥 Input: @param string $search คำค้น (ชื่อ/อีเมล/เบอร์/ชื่อหนังสือ) — ว่าง = ทั้งหมด
+     * 📤 Output: @return array {people: int, rows: int, total: float}
+     *
+     * 🔴 **ห้ามนับจากรายการที่ดึงมาแสดง** — ต้องเป็น query แยกที่ไม่มี LIMIT
+     *    บั๊ก F-35 เกิดจากการเอา count() ของรายการที่ตัด 50 แถวแล้วมาขึ้นป้ายว่า
+     *    "46 คน" ทั้งที่จริง 169 คน · ยอดเงินถูกเพราะมาจากอีก query ที่ไม่มี LIMIT
+     *    ป้ายกับยอดเงินจึงขัดกันเองบนหน้าจอเดียว
+     *
+     * 🧠 นิยาม "ค้างชำระ" ต้องตรงกับอีก 5 แหล่งเป๊ะ:
+     *    fine_amount > 0 AND ยังไม่มี payment AND ยังไม่ถูกยกเว้น
+     *
+     * ✅ Use case: admin/payments.php — ป้ายสรุป + คำนวณจำนวนหน้า
+     */
+    public function countUnpaidDebtors(string $search = ''): array
+    {
+        [$where, $params] = $this->buildUnpaidSearch($search);
+
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(DISTINCT b.user_id) AS people,
+                   COUNT(*)                  AS rows_count,
+                   COALESCE(SUM(b.fine_amount), 0) AS total
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.fine_amount > 0 AND p.id IS NULL AND b.fine_waived_at IS NULL
+            {$where}
+        ");
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return [
+            'people' => (int) ($row['people'] ?? 0),
+            'rows'   => (int) ($row['rows_count'] ?? 0),
+            'total'  => (float) ($row['total'] ?? 0),
+        ];
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงรายชื่อคนค้างชำระแบบแบ่งหน้า — **แบ่งเป็น "คน" ไม่ใช่ "รายการ"**
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param int    $limit  จำนวน**คน**ต่อหน้า
+     * @param int    $offset ข้ามกี่**คน**
+     * @param string $search คำค้น
+     *
+     * 📤 Output: @return array [{user_id, user_name, user_phone, user_email, item_count, total_fine}, ...]
+     *            เรียงจากคนที่ค้างมากสุดก่อน
+     *
+     * 🔴 **ทำไมต้องแบ่งหน้าที่ระดับคน ไม่ใช่ระดับแถว**
+     *    หน้านี้จัดกลุ่มหนี้ตามสมาชิก (คนหนึ่งค้างได้ 7–8 ใบ)
+     *    ถ้าแบ่งหน้าตามแถวยืม หนี้ของคนเดียวกันจะถูกหั่นข้ามหน้า
+     *    บรรณารักษ์เห็นยอดไม่ครบของคนที่กำลังยืนอยู่ตรงหน้า — แย่กว่าการตัด 50 แถวเสียอีก
+     *
+     * 🛡️ ORDER BY มีตัวตัดสินลำดับครบ (total_fine → user_id)
+     *    ไม่งั้นคนที่ค้างเท่ากันจะสลับที่ทุกครั้งที่โหลดหน้า (F-39)
+     *
+     * ✅ Use case: admin/payments.php ส่วน "รายการค้างชำระ"
+     */
+    public function getUnpaidDebtors(int $limit, int $offset = 0, string $search = ''): array
+    {
+        [$where, $params] = $this->buildUnpaidSearch($search);
+
+        $sql = "
+            SELECT u.id AS user_id, u.name AS user_name, u.email AS user_email, u.phone AS user_phone,
+                   COUNT(*) AS item_count,
+                   SUM(b.fine_amount) AS total_fine
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.fine_amount > 0 AND p.id IS NULL AND b.fine_waived_at IS NULL
+            {$where}
+            GROUP BY u.id, u.name, u.email, u.phone
+            ORDER BY total_fine DESC, u.id ASC
+            LIMIT " . (int) $limit . " OFFSET " . (int) $offset;
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ดึงใบค้างชำระของสมาชิกกลุ่มที่กำลังแสดงอยู่ (query เดียว)
+     * ==========================================================================
+     *
+     * 📥 Input: @param int[] $userIds รหัสสมาชิกในหน้านี้
+     * 📤 Output: @return array แถวค้างชำระทั้งหมดของคนเหล่านั้น (จัดกลุ่มที่ชั้น Page)
+     *
+     * 🧠 ดึงทีเดียวแทนที่จะวนถามทีละคน — 20 คนต่อหน้า = 20 query ถ้าทำแบบวน
+     *
+     * 🛡️ ORDER BY ใช้ COALESCE(return_date, lost_reported_at)
+     *    เพราะหนังสือที่แจ้งหาย/ชำรุดไม่มี return_date (เป็น NULL ทุกแถว)
+     *    ถ้าเรียงด้วย return_date เฉย ๆ ค่าชดใช้จะกองรวมกันแล้วสลับที่มั่ว (F-39)
+     */
+    public function getUnpaidItemsByUsers(array $userIds): array
+    {
+        if (!$userIds) {
+            return [];
+        }
+        // 🛡️ cast เป็น int ทุกตัวก่อนต่อเป็น IN (...) — ค่ามาจาก query ก่อนหน้า ไม่ใช่ user input
+        //    แต่ cast ไว้เป็นด่านสุดท้ายอยู่ดี
+        $in = implode(',', array_map('intval', $userIds));
+
+        $stmt = $this->pdo->prepare("
+            SELECT b.id, b.fine_amount, b.borrow_date, b.due_date, b.return_date, b.status,
+                   b.lost_reported_at,
+                   u.id AS user_id, u.name AS user_name, u.email AS user_email, u.phone AS user_phone,
+                   bk.id AS book_id, bk.title AS book_title
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            LEFT JOIN payments p ON b.id = p.borrow_id
+            WHERE b.fine_amount > 0 AND p.id IS NULL AND b.fine_waived_at IS NULL
+              AND b.user_id IN ({$in})
+            ORDER BY COALESCE(b.return_date, b.lost_reported_at) DESC, b.id DESC
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * 🔍 สร้างเงื่อนไขค้นหาของหน้าค้างชำระ — ที่เดียว ใช้ร่วมกันทั้งตัวนับและตัวดึง
+     *    🔴 ต้องใช้ร่วมกัน ไม่งั้นตัวนับกับรายการที่แสดงจะไม่ตรงกัน ซึ่งคือหัวใจของบั๊ก F-35
+     *
+     * @return array{0: string, 1: array} [SQL ต่อท้าย WHERE, params]
+     */
+    private function buildUnpaidSearch(string $search): array
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return ['', []];
+        }
+
+        // 🛡️ bind ผ่าน ? ทุกตัว — ห้ามต่อสตริง
+        $like = '%' . $search . '%';
+        return [
+            ' AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR bk.title LIKE ?)',
+            [$like, $like, $like, $like],
+        ];
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: ดึงรายการค่าปรับค้างชำระ (สำหรับ admin/payments.php)
      * ==========================================================================
      * ดึง borrows ที่มี fine > 0 แต่ยังไม่มี payment record
@@ -1131,7 +1281,7 @@ class BorrowRepository
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.fine_amount > 0 AND p.id IS NULL
               AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
-            ORDER BY b.return_date DESC
+            ORDER BY COALESCE(b.return_date, b.lost_reported_at) DESC, b.id DESC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -1196,7 +1346,7 @@ class BorrowRepository
             LEFT JOIN payments p ON b.id = p.borrow_id
             WHERE b.user_id = ? AND b.fine_amount > 0 AND p.id IS NULL
               AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
-            ORDER BY b.return_date DESC
+            ORDER BY COALESCE(b.return_date, b.lost_reported_at) DESC, b.id DESC
         ");
         $stmt->execute([$userId]);
         return $stmt->fetchAll();

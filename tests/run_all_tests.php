@@ -189,6 +189,7 @@ $gapSuites = [
     'ต่ออายุการยืม'              => 'test_renew_borrow.php',          // เลื่อนกำหนดคืน + กันช่องลบค่าปรับ
     'หนังสือหาย/ชำรุด'           => 'test_lost_damaged.php',          // ลดสต็อก + ค่าชดใช้ + ย้อนได้
     'จองรอคิว'                   => 'test_reservation_queue.php',    // 🔴 แตะ invariant สต็อกโดยตรง
+    'รายการค้างชำระ'             => 'test_unpaid_list.php',          // F-35 ตัวเลขจริง + F-39 ลำดับคงที่
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว

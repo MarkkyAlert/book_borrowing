@@ -292,7 +292,7 @@ class BookRepository
         // 🧠 ใช้ query() แทน prepare() เพราะไม่มี user input (ปลอดภัย)
         // ⚠️ ถ้าเพิ่ม parameter ในอนาคต ต้องเปลี่ยนเป็น prepare()
         return $this->pdo->query("
-            SELECT * FROM books WHERE available > 0 AND is_reference = 0 ORDER BY title
+            SELECT * FROM books WHERE available > 0 AND is_reference = 0 ORDER BY title, id
         ")->fetchAll();
     }
     /**
@@ -844,7 +844,7 @@ class BookRepository
             FROM books b
             LEFT JOIN categories c ON b.category_id = c.id
             WHERE b.available <= ? AND b.quantity > 0
-            ORDER BY b.available ASC, b.title ASC
+            ORDER BY b.available ASC, b.title ASC, b.id ASC
             LIMIT ?
         ");
         // 🚀 bind: [$threshold, $limit] → เงื่อนไข + จำกัดจำนวน

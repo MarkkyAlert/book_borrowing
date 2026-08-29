@@ -286,7 +286,7 @@ class ReportRepository
             LEFT JOIN books bk ON c.id = bk.category_id
             LEFT JOIN borrows b ON bk.id = b.book_id
             GROUP BY c.id, c.name
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, c.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -327,7 +327,7 @@ class ReportRepository
             LEFT JOIN books bk ON c.id = bk.category_id
             LEFT JOIN borrows b ON bk.id = b.book_id
             GROUP BY c.id, c.name
-            ORDER BY c.name ASC
+            ORDER BY c.name ASC, c.id ASC
         ")->fetchAll();
     }
 
@@ -358,7 +358,7 @@ class ReportRepository
             FROM books bk
             LEFT JOIN borrows b ON bk.id = b.book_id
             GROUP BY bk.id, bk.title, bk.author
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, bk.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -397,7 +397,7 @@ class ReportRepository
             LEFT JOIN borrows b ON u.id = b.user_id
             WHERE u.role = 'member'
             GROUP BY u.id, u.name, u.email
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, u.id ASC
             LIMIT ?
         ");
         $stmt->execute([$limit]);
@@ -500,7 +500,7 @@ class ReportRepository
             LEFT JOIN categories c ON b.category_id = c.id
             LEFT JOIN borrows br ON b.id = br.book_id
             GROUP BY b.id
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, b.id ASC
             LIMIT ?
         ");
         $stmt->execute([$startDate, $endDate, $limit]);
@@ -565,7 +565,7 @@ class ReportRepository
             WHERE u.role != 'admin'
             GROUP BY u.id
             HAVING borrow_count > 0
-            ORDER BY borrow_count DESC
+            ORDER BY borrow_count DESC, u.id ASC
             LIMIT ?
         ");
         $stmt->execute([$startDate, $endDate, $limit]);
@@ -604,7 +604,7 @@ class ReportRepository
             FROM payments
             WHERE DATE(created_at) BETWEEN ? AND ?
             GROUP BY DATE(created_at)
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
         ");
         $stmt->execute([$startDate, $endDate]);
         return $stmt->fetchAll();
@@ -656,7 +656,7 @@ class ReportRepository
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
             WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
-            ORDER BY b.due_date ASC
+            ORDER BY b.due_date ASC, b.id ASC
         ")->fetchAll();
     }
 
@@ -703,7 +703,7 @@ class ReportRepository
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
             WHERE b.borrow_date BETWEEN ? AND ?
-            ORDER BY b.borrow_date DESC
+            ORDER BY b.borrow_date DESC, b.id DESC
         ");
         $stmt->execute([$dateFrom, $dateTo]);
         return $stmt->fetchAll();
@@ -779,7 +779,7 @@ class ReportRepository
               AND b.id NOT IN (SELECT borrow_id FROM payments)
               AND b.fine_waived_at IS NULL   -- 💸 ยกเว้นแล้วไม่นับเป็นค้างชำระอีก (ROADMAP ข้อ 2)
               {$dateFilter}
-            ORDER BY b.fine_amount DESC
+            ORDER BY b.fine_amount DESC, b.id DESC
         ");
         $stmt->execute($params);
         return $stmt->fetchAll();
