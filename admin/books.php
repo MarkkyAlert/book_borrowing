@@ -249,7 +249,11 @@ require_once __DIR__ . '/header.php';
                                 $deleteBlockedReason = $bookService->getDeleteBlockReason($book);
                                 ?>
                                 <?php if ($deleteBlockedReason === null): ?>
-                                    <form method="POST" class="d-inline inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบหนังสือเล่มนี้?', {title: 'ลบหนังสือ', confirmText: 'ลบ', confirmClass: 'danger'})">
+                                    <?php // 🔴 [F-47] บอกว่ากำลังลบเล่มไหน — ชื่อ + ผู้แต่ง
+                                          //    ผู้แต่งช่วยแยกกรณีหนังสือชื่อคล้ายกันคนละเล่ม
+                                          //    📝 ไม่ใส่จำนวนเล่ม: ปุ่มลบขึ้นเฉพาะเล่มที่ไม่มีประวัติการยืม
+                                          //       ซึ่งมักเป็นเล่มที่ quantity = 0 อยู่แล้ว ใส่ไปได้ "0 เล่ม" ที่อ่านแล้วงง ?>
+                                    <form method="POST" class="d-inline inline-block" onsubmit="return confirmSubmit(this, <?= jsString("ลบ \"{$book['title']}\"\nผู้แต่ง {$book['author']}") ?>, {title: 'ลบหนังสือ', confirmText: 'ลบ', confirmClass: 'danger'})">
                                         <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= $book['id'] ?>">

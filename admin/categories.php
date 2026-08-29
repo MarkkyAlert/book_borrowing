@@ -220,7 +220,9 @@ require_once __DIR__ . '/header.php';
                                             <i class="bi bi-pencil-square"></i>
                                         </a>
                                         <?php if ($cat['book_count'] == 0): ?>
-                                            <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบหมวดหมู่นี้?', {title: 'ลบหมวดหมู่', confirmText: 'ลบ', confirmClass: 'danger'})">
+                                            <?php // 🔴 [F-47] บอกชื่อหมวดที่กำลังจะลบ — ตารางทุกแถวหน้าตาเหมือนกัน
+                                                  //    ปุ่มลบขึ้นเฉพาะหมวดที่ไม่มีหนังสือ (book_count == 0) จึงไม่ต้องเตือนเรื่องหนังสือ ?>
+                                            <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, <?= jsString("ลบหมวดหมู่ \"{$cat['name']}\"") ?>, {title: 'ลบหมวดหมู่', confirmText: 'ลบ', confirmClass: 'danger'})">
                                                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="id" value="<?= $cat['id'] ?>">

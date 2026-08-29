@@ -267,7 +267,9 @@ require_once __DIR__ . '/header.php';
                                     $deleteBlockedReason = $memberService->getDeleteBlockReason($member);
                                     ?>
                                     <?php if ($deleteBlockedReason === null): ?>
-                                        <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, 'ยืนยันการลบสมาชิกคนนี้?', {title: 'ลบสมาชิก', confirmText: 'ลบ', confirmClass: 'danger'})">
+                                        <?php // 🔴 [F-47] บอกชื่อ + รหัสสมาชิก — ชื่อซ้ำกันเป๊ะมีจริง (ดู F-51)
+                                              //    รหัสใช้สูตรเดียวกับบัตรสมาชิกและดรอปดาวน์ผู้ยืม ให้ตรงกันทั้งระบบ ?>
+                                        <form method="POST" class="inline-block" onsubmit="return confirmSubmit(this, <?= jsString("ลบสมาชิก {$member['name']}\nรหัส " . str_pad((string) $member['id'], 6, '0', STR_PAD_LEFT)) ?>, {title: 'ลบสมาชิก', confirmText: 'ลบ', confirmClass: 'danger'})">
                                             <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= $member['id'] ?>">

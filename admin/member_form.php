@@ -152,7 +152,7 @@ require_once __DIR__ . '/header.php';
                 </div>
             <?php endif; ?>
             
-            <form method="POST" class="space-y-6">
+            <form method="POST" class="space-y-6" id="memberForm" onsubmit="return confirmRoleChange(this);">
                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <?php // 📄 พาหน้า/ตัวกรองของรายการกลับไปด้วยหลังบันทึก (F-37)
                       //    ถ้าไม่ส่งต่อตรงนี้ ต่อให้ redirect ถูกก็กู้สถานะไม่ได้
@@ -212,7 +212,11 @@ require_once __DIR__ . '/header.php';
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <i class="bi bi-shield-lock text-gray-400"></i>
                             </div>
+                            <?php // 🔴 [F-47] เก็บ role เดิมไว้ให้ JS เทียบ — ยืนยันเฉพาะตอน "เปลี่ยนจริง"
+                                  //    ถ้าเด้งกล่องทุกครั้งที่กดบันทึก เจ้าหน้าที่จะกดตกลงอัตโนมัติจนกล่องไร้ความหมาย ?>
                             <select id="role" name="role"
+                                    data-original="<?= e($member['role'] ?? 'member') ?>"
+                                    data-member-name="<?= e($member['name'] ?? '') ?>"
                                     class="pl-10 block w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11">
                                 <option value="member" <?= ($member['role'] ?? 'member') === 'member' ? 'selected' : '' ?>>สมาชิก (Member)</option>
                                 <option value="staff" <?= ($member['role'] ?? 'member') === 'staff' ? 'selected' : '' ?>>เจ้าหน้าที่ (Staff)</option>
@@ -260,5 +264,41 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 </div>
+
+<script>
+/**
+ * 🔴 [F-47] เดิมเปลี่ยนสิทธิ์เป็น "เจ้าหน้าที่" ได้ด้วยการกดบันทึกครั้งเดียว ไม่มีการยืนยันเลย
+ *    ทั้งที่ผลคือคนนั้นเข้าระบบจัดการหลังบ้านได้ทันที — เห็นข้อมูลสมาชิกทุกคน
+ *    แก้/ลบหนังสือได้ รับชำระค่าปรับได้ ร้ายแรงกว่าการลบหนังสือหนึ่งเล่มมาก
+ *
+ * 🧠 ยืนยันเฉพาะตอน role เปลี่ยนจริง (เทียบกับ data-original)
+ *    กดบันทึกเพื่อแก้เบอร์โทรเฉย ๆ ต้องไม่มีกล่องเด้ง ไม่งั้นคนจะกดตกลงโดยไม่อ่าน
+ */
+function confirmRoleChange(form) {
+    var sel = form.querySelector('#role');
+
+    // ไม่มีดรอปดาวน์ (ไม่ใช่ admin หรือเป็นการเพิ่มสมาชิกใหม่) → ไม่ต้องยืนยัน
+    if (!sel) return true;
+
+    var original = sel.getAttribute('data-original');
+    if (sel.value === original) return true;
+
+    var name = sel.getAttribute('data-member-name') || 'สมาชิกคนนี้';
+    var msg, opts;
+
+    if (sel.value === 'staff') {
+        msg = 'ให้สิทธิ์เจ้าหน้าที่กับ ' + name + '\n\n'
+            + 'คนนี้จะเข้าระบบจัดการหลังบ้านได้ทันที — เห็นข้อมูลสมาชิกทุกคน '
+            + 'แก้ไข/ลบหนังสือ และรับชำระค่าปรับได้';
+        opts = { title: 'ให้สิทธิ์เจ้าหน้าที่', confirmText: 'ให้สิทธิ์', confirmClass: 'danger', type: 'danger' };
+    } else {
+        msg = 'ถอดสิทธิ์เจ้าหน้าที่ของ ' + name + '\n\n'
+            + 'คนนี้จะเข้าระบบจัดการหลังบ้านไม่ได้อีก และจะกลายเป็นสมาชิกทั่วไป';
+        opts = { title: 'ถอดสิทธิ์เจ้าหน้าที่', confirmText: 'ถอดสิทธิ์', confirmClass: 'danger', type: 'danger' };
+    }
+
+    return confirmSubmit(form, msg, opts);
+}
+</script>
 
 <?php require_once __DIR__ . '/footer.php'; ?>

@@ -225,8 +225,16 @@ require_once __DIR__ . '/header.php';
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <?php if ($res['status'] === 'pending'): ?>
+                                    <?php
+                                    // 🔴 [F-47] กล่องยืนยันต้องบอกว่า "ทำอะไร กับใคร"
+                                    //    หน้านี้เป็นตารางที่ทุกแถวหน้าตาเหมือนกัน กดผิดแถวแล้วไม่มีทางรู้ตัว
+                                    //    ⚠️ ต้องผ่าน jsString() — ชื่อหนังสือที่มี ' หรือ " จะทำให้ปุ่มพังเงียบ ๆ
+                                    $resWho  = $res['user_name'] . ' (รหัส ' . str_pad((string) $res['user_id'], 6, '0', STR_PAD_LEFT) . ')';
+                                    $msgOk   = "ให้ยืม \"{$res['book_title']}\"\nผู้จอง: {$resWho}";
+                                    $msgNo   = "ยกเลิกการจอง \"{$res['book_title']}\" ของ {$resWho}\nสต็อกจะคืนกลับ 1 เล่ม";
+                                    ?>
                                     <div class="flex justify-end space-x-2">
-                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, 'ยืนยันอนุมัติการยืม?', {title: 'อนุมัติการจอง', confirmText: 'อนุมัติ', confirmClass: 'success'});">
+                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, <?= jsString($msgOk) ?>, {title: 'อนุมัติการจอง', confirmText: 'อนุมัติ', confirmClass: 'success'});">
                                             <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                             <input type="hidden" name="id" value="<?= $res['id'] ?>">
                                             <input type="hidden" name="action" value="approve">
@@ -234,7 +242,7 @@ require_once __DIR__ . '/header.php';
                                                 <i class="bi bi-check-lg mr-1"></i> อนุมัติ
                                             </button>
                                         </form>
-                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, 'ยืนยันยกเลิกการจอง?\n(สต็อกจะคืนกลับ)', {title: 'ยกเลิกการจอง', confirmText: 'ยกเลิกการจอง', confirmClass: 'danger'});">
+                                        <form method="POST" class="inline" onsubmit="return confirmSubmit(this, <?= jsString($msgNo) ?>, {title: 'ยกเลิกการจอง', confirmText: 'ยกเลิกการจอง', confirmClass: 'danger'});">
                                             <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                                             <input type="hidden" name="id" value="<?= $res['id'] ?>">
                                             <input type="hidden" name="action" value="cancel">
