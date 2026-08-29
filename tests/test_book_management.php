@@ -205,10 +205,13 @@ try {
     $bookService->deleteBook($bookResId);
     assertTest("BK-09: Delete (Pending Res) → Fail", false, "Should throw exception");
 } catch (Exception $e) {
+    // ✅ ยึดความหมาย ไม่ยึดตัวอักษร — ข้อความบอกเหตุผลว่า "เพราะมีคนจอง"
+    //    และต้องไม่ใช่ด่านอื่นที่ยิงผิดตัว (ประวัติการยืม)
+    $msg = $e->getMessage();
     assertTest(
         "BK-09: Delete (Pending Res) → Fail",
-        strpos($e->getMessage(), 'มีการจอง') !== false,
-        "error=" . $e->getMessage()
+        str_contains($msg, 'จอง') && !str_contains($msg, 'ประวัติการยืม'),
+        "error=" . $msg
     );
 }
 

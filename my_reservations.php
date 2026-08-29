@@ -55,7 +55,7 @@ require_once __DIR__ . '/includes/header.php';
             $tabs = [
                 '' => 'ทั้งหมด',
                 'waiting' => 'ต่อคิวรอ',
-                'pending' => 'รอดำเนินการ',
+                'pending' => 'รอมารับ',
                 'fulfilled' => 'ยืมแล้ว',
                 'cancelled' => 'ยกเลิก',
                 'expired' => 'หมดอายุ',
@@ -97,7 +97,7 @@ require_once __DIR__ . '/includes/header.php';
                 ];
                 $statusLabels = [
                     'waiting' => 'ต่อคิวรอ',
-                    'pending' => 'รอดำเนินการ',
+                    'pending' => 'รอมารับ',
                     'fulfilled' => 'ยืมแล้ว',
                     'cancelled' => 'ยกเลิก',
                     'expired' => 'หมดอายุ'

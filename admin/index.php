@@ -91,7 +91,7 @@ $chartFines = array_column($monthlyBorrows, 'total_fines');     // ค่าป�
 $categoryLabels = array_column($categoryStats, 'name');        // ชื่อหมวดหมู่
 $categoryData = array_column($categoryStats, 'borrow_count');  // จำนวนยืมแต่ละหมวดหมู่
 
-$pageTitle = 'Dashboard';
+$pageTitle = 'ภาพรวม';
 require_once __DIR__ . '/header.php';
 ?>
 
@@ -147,7 +147,7 @@ require_once __DIR__ . '/header.php';
     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
         <div class="flex justify-between items-start">
             <div>
-                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">รอรับของ</p>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">รอมารับ</p>
                 <h3 class="text-2xl font-bold text-indigo-600"><?= number_format($pendingReservations) ?></h3>
             </div>
             <div class="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
@@ -458,7 +458,7 @@ require_once __DIR__ . '/header.php';
     <div class="flex justify-between items-center mb-4">
         <h5 class="font-bold text-amber-800 flex items-center">
             <i class="bi bi-exclamation-triangle text-amber-500 mr-2"></i>
-            หนังสือใกล้หมด Stock
+            หนังสือที่ถูกยืมหมด
             <span class="ml-2 px-2 py-0.5 bg-amber-500 text-white text-xs rounded-full"><?= count($lowStockBooks) ?></span>
         </h5>
         <a href="books.php?filter=low_stock" class="text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-3 py-1 rounded-full transition-colors">
@@ -656,7 +656,7 @@ function exportDashboardPDF() {
     const printContents = `
         <html>
         <head>
-            <title>Dashboard Report - <?= date('Y-m-d') ?></title>
+            <title>รายงานภาพรวม - <?= date('Y-m-d') ?></title>
             <style>
                 body { font-family: 'Sarabun', sans-serif; padding: 20px; }
                 h1 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
@@ -673,7 +673,7 @@ function exportDashboardPDF() {
             </style>
         </head>
         <body>
-            <h1>📊 รายงาน Dashboard - <?= e(APP_NAME) ?></h1>
+            <h1>📊 รายงานภาพรวม - <?= e(APP_NAME) ?></h1>
             <p style="color:#6b7280;">วันที่พิมพ์: ${new Date().toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}</p>
             
             <div class="stats">
@@ -751,7 +751,7 @@ function exportDashboardPDF() {
             
             <?php if (!empty($lowStockBooks)): ?>
             <div class="section">
-                <div class="section-title" style="color:#f97316;">📦 หนังสือใกล้หมด Stock</div>
+                <div class="section-title" style="color:#f97316;">📦 หนังสือที่ถูกยืมหมด</div>
                 <table>
                     <tr><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>หมวดหมู่</th><th>คงเหลือ</th></tr>
                     <?php foreach ($lowStockBooks as $book): ?>

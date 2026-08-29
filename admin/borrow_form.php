@@ -198,7 +198,7 @@ require_once __DIR__ . '/header.php';
             </h5>
             <div class="flex items-center space-x-2 text-sm text-gray-500">
                 <span class="inline-flex items-center px-2 py-1 rounded-md bg-white border border-gray-200">
-                    <i class="bi bi-qr-code-scan mr-1.5"></i>Quick Scan Enabled
+                    <i class="bi bi-qr-code-scan mr-1.5"></i>เปิดโหมดสแกน
                 </span>
             </div>
         </div>
@@ -285,13 +285,27 @@ require_once __DIR__ . '/header.php';
                             </button>
                         </div>
                         <select id="user_id" name="user_id" class="w-full" required>
-                            <option value="">พิมพ์เพื่อค้นหาสมาชิก...</option>
+                            <option value="">พิมพ์ชื่อ หรือรหัสสมาชิก...</option>
                             <?php foreach ($members as $member): ?>
+                                <?php
+                                // 🆔 [F-51] แสดง "รหัสสมาชิก" ด้วย ไม่ใช่แยกคนด้วยอีเมลอย่างเดียว
+                                //    ระบบมีรหัสสมาชิกอยู่แล้วและพิมพ์ลงบัตรพร้อมบาร์โค้ด
+                                //    ช่องสแกนบนหน้าเดียวกันก็เขียนว่า "สแกนบัตรสมาชิก (User ID)"
+                                //    แปลว่ารหัสคือตัวระบุตัวตนที่ระบบตั้งใจให้ใช้ — แต่ดรอปดาวน์กลับไม่แสดง
+                                //    เจ้าหน้าที่จึงต้องถามอีเมล ซึ่งสมาชิกจำไม่ได้และไม่ได้พกมา
+                                //
+                                // 🧠 รูปแบบเดียวกับที่พิมพ์บนบัตร (pad 6 หลัก) จะได้เทียบกันได้ทันที
+                                // 🧠 select2 ค้นจากข้อความใน option — ใส่รหัสลงไปตรงนี้
+                                //    ทำให้พิมพ์รหัสค้นเจอเลย ไม่ต้องเขียน matcher เอง
+                                // 🧠 คงอีเมลไว้ด้วย ไม่ตัดทิ้ง — บางที่ยังใช้แยกคนได้จริง แค่ให้รหัสมาก่อน
+                                $memberCode = str_pad((string) $member['id'], 6, '0', STR_PAD_LEFT);
+                                ?>
                                 <option value="<?= $member['id'] ?>"
                                     <?= (int) $member['id'] === $prefillUserId ? 'selected' : '' ?>
                                     data-email="<?= e($member['email']) ?>"
+                                    data-code="<?= e($memberCode) ?>"
                                     data-phone="<?= e($member['phone'] ?? '-') ?>">
-                                    <?= e($member['name']) ?> (<?= e($member['email']) ?>)
+                                    <?= e($member['name']) ?> — รหัส <?= e($memberCode) ?> (<?= e($member['email']) ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -425,7 +439,17 @@ require_once __DIR__ . '/header.php';
     $(document).ready(function() {
         // Initialize Select2 with simple theme
         $('#user_id').select2({
-            width: '100%'
+            width: '100%',
+            // 🔍 [F-51] บอกให้ชัดว่าค้นด้วยรหัสสมาชิกได้ ไม่ใช่แค่ชื่อ
+            placeholder: 'พิมพ์ชื่อ หรือรหัสสมาชิก (เช่น 005176)',
+            language: {
+                noResults: function() {
+                    return 'ไม่พบสมาชิก — ลองพิมพ์รหัสสมาชิกจากบัตร';
+                },
+                searching: function() {
+                    return 'กำลังค้นหา...';
+                }
+            }
         });
 
         $('#book_ids').select2({

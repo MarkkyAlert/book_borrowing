@@ -123,8 +123,11 @@ require_once __DIR__ . '/header.php';
         </div>
         <div class="flex gap-2">
             <a href="reports.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+                <?php // 🔤 [F-46] "CSV" ไม่บอกว่ากดแล้วได้อะไร — บรรณารักษ์ที่ไม่คุ้นศัพท์คอมพิวเตอร์
+                      //    ไม่รู้ว่าเป็นไฟล์ที่เปิดใน Excel ได้ · ใช้แนวเดียวกับปุ่ม "พิมพ์รายงาน" ข้างล่าง
+                      //    ที่ตั้งชื่อตามสิ่งที่ผู้ใช้ได้ ไม่ใช่ชื่อเทคนิค ?>
                 <i class="bi bi-file-earmark-spreadsheet mr-2"></i>
-                CSV
+                บันทึกเป็นไฟล์ Excel
             </a>
                 <?php // 🧠 เขียนว่า "พิมพ์รายงาน" ไม่ใช่ "PDF" เพราะระบบไม่ได้สร้างไฟล์ PDF ให้
                 //    แต่เปิดหน้าที่จัดรูปแบบมาให้พิมพ์ แล้วผู้ใช้เลือก "บันทึกเป็น PDF" ในกล่องพิมพ์เอง

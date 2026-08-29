@@ -95,7 +95,7 @@ $reservations = $reservationRepo->findAll($filters);
 $expiredCount = $reservationRepo->countAll(['status' => 'expired']);
 $expiredThisMonth = $reservationRepo->countExpiredThisMonth();
 
-// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วเด้งกลับไปดู "รออนุมัติ"
+// 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วเด้งกลับไปดูแท็บแรก
 $paginationParams = ['status' => $statusFilter];
 
 $pageTitle = 'จัดการการจอง';
@@ -202,7 +202,7 @@ require_once __DIR__ . '/header.php';
                                     ?>
                                     <div class="flex flex-col space-y-1">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 w-fit">
-                                            <i class="bi bi-hourglass-split mr-1"></i> รอรับของ
+                                            <i class="bi bi-hourglass-split mr-1"></i> รอมารับ
                                         </span>
                                         <span class="text-xs <?= $textColor ?> font-medium">
                                             หมดเขต: <?= formatDate($res['expires_at']) ?>

@@ -278,7 +278,7 @@ require_once __DIR__ . '/includes/header.php';
                 <a href="<?= APP_URL ?>/my_reservations.php" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm text-gray-500">รายการจองรอดำเนินการ</p>
+                            <p class="text-sm text-gray-500">รายการจองที่รอมารับ</p>
                             <p class="text-2xl font-bold text-primary-600"><?= count($pendingReservations) ?> <span class="text-sm font-normal text-gray-500">รายการ</span></p>
                         </div>
                         <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
