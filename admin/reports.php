@@ -92,10 +92,16 @@ if ($isExport) {
     
     fputcsv($output, $headers);  // เขียนหัวคอลัมน์
     foreach ($data as $row) {
-        // 🛡️ [SECURITY] กัน CSV Formula Injection ก่อนเขียนทุกเซลล์
+        // 📝 จัดรูปแบบตาม **ชื่อคอลัมน์** ก่อน — เบอร์โทรต้องไม่ถูก Excel กิน 0 นำหน้า
+        //    และเงิน/จำนวนนับต้องไม่มีคอมมา ไม่งั้น Excel SUM ไม่ได้ (ดู csvReportValue)
+        // 🛡️ [SECURITY] แล้วค่อยกัน CSV Formula Injection อีกชั้น
         //    ค่าที่ขึ้นต้นด้วย = + - @ จะถูกเติม ' นำหน้า ไม่งั้น Excel รันเป็นสูตร
         //    ⚠️ quote ของ fputcsv() ไม่ได้ป้องกันเรื่องนี้ (ดู csvSafeValue)
-        fputcsv($output, array_map('csvSafeValue', $row));
+        $line = [];
+        foreach ($row as $key => $value) {
+            $line[] = csvSafeValue(csvReportValue((string) $key, $value));
+        }
+        fputcsv($output, $line);
     }
     
     fclose($output);

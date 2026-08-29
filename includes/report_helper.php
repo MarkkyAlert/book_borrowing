@@ -99,7 +99,11 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             // 📝 สมาชิกค้างชำระ
             return [
                 'data' => $repo->getUnpaidFinesReport($start, $end),
-                'headers' => ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ค่าปรับ (บาท)'],
+                // 🔴 ต้องมี 6 คอลัมน์ให้ตรงกับที่ query คืนมา (ชื่อ · โทร · หนังสือ · วันที่ · status · เงิน)
+                //    ROADMAP ข้อ 4 เติม b.status เข้าไปใน query แต่ลืมเติมหัวตาราง
+                //    ผลคือ CSV 217 แถวมีคอลัมน์เกินหัว 1 ช่อง ทุกคอลัมน์ตั้งแต่ "ค่าปรับ" เลื่อนผิดตำแหน่ง
+                //    และค่า enum ภาษาอังกฤษ (returned/lost/damaged) โผล่ในไฟล์ที่ลูกค้าเอาไปใช้
+                'headers' => ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ประเภท', 'ค่าปรับ (บาท)'],
                 'filename' => "unpaid_fines_" . date('Y-m-d'),
                 'title' => 'รายงานสมาชิกค้างชำระ (' . $dateRangeText . ')',
             ];
@@ -144,6 +148,19 @@ const REPORT_MONEY_COLUMNS = ['total_amount', 'fine', 'fine_amount'];
  */
 function formatReportValue(string $key, mixed $value): string
 {
+    // 🧠 ค่า enum จาก DB เป็นภาษาอังกฤษ ห้ามปล่อยดิบ ๆ ลงรายงานที่ลูกค้าเอาไปใช้
+    //    ในรายงานค้างชำระ status บอกว่าเงินก้อนนี้มาจากอะไร — คืนช้า หรือทำหาย
+    //    ซึ่งเป็นข้อมูลที่คนตามหนี้ต้องรู้ (คุยกันคนละแบบ)
+    if ($key === 'status') {
+        return match ((string) $value) {
+            'returned'  => 'ค่าปรับคืนช้า',
+            'lost'      => 'ค่าชดใช้ (หาย)',
+            'damaged'   => 'ค่าชดใช้ (ชำรุด)',
+            'borrowing' => 'กำลังยืม',
+            default     => (string) $value,
+        };
+    }
+
     if (in_array($key, REPORT_MONEY_COLUMNS, true)) {
         return number_format((float) $value, 2);
     }
@@ -151,6 +168,59 @@ function formatReportValue(string $key, mixed $value): string
         return number_format((int) $value);
     }
     // 📝 ที่เหลือถือเป็นข้อความล้วน — เบอร์โทร/ISBN/ชื่อ/วันที่ ต้องไม่ถูกแปลงเป็นตัวเลข
+    return (string) $value;
+}
+
+/**
+ * 🎯 คอลัมน์ที่ Excel จะ "กินเลข 0 นำหน้า" ถ้าปล่อยเป็นตัวเลขเปล่า — F-44
+ *
+ * 🔴 [สำคัญ] ห้ามเดาจาก is_numeric() — เบอร์โทร "0891234567" ก็ผ่าน is_numeric()
+ *    ต้องระบุตามชื่อคอลัมน์เท่านั้น (เหตุผลเดียวกับ REPORT_COUNT_COLUMNS)
+ * ⚙️ เพิ่มรายงานใหม่ที่มีเบอร์โทร/รหัส/ISBN → เพิ่มชื่อคอลัมน์ในลิสต์นี้
+ */
+const REPORT_TEXT_CODE_COLUMNS = ['phone', 'user_phone', 'isbn', 'member_code', 'barcode'];
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: จัดรูปแบบค่าสำหรับ **ไฟล์ CSV** โดยเฉพาะ — F-44
+ * ==========================================================================
+ *
+ * 🧠 **ทำไมไม่ใช้ formatReportValue() ตัวเดียวกับหน้าจอ**
+ *    หน้าจอกับ CSV ต้องการคนละอย่างในคอลัมน์ตัวเลข:
+ *      หน้าจอ → "1,250.00" อ่านง่าย
+ *      CSV    → "1250.00" ไม่มีคอมมา **ไม่งั้น Excel มองเป็นข้อความแล้ว SUM ไม่ได้**
+ *    ลูกค้าเอาไฟล์ไปรวมยอดต่อ ถ้าใส่คอมมาให้ = ทำพังใหม่แทนที่จะแก้
+ *
+ * 📥 Input: @param string $key ชื่อคอลัมน์, @param mixed $value ค่าจาก DB
+ * 📤 Output: @return string ค่าที่พร้อมเขียนลง CSV
+ *
+ * 🛡️ ยังต้องส่งต่อให้ csvSafeValue() อีกชั้นเพื่อกัน formula injection
+ */
+function csvReportValue(string $key, mixed $value): string
+{
+    // 📞 เบอร์โทร / ISBN / รหัส — เติม ' นำหน้าให้ Excel มองเป็นข้อความ
+    //    🧠 ครอบด้วย " เฉย ๆ **ไม่พอ** — Excel ยังตีความเป็นตัวเลขแล้วตัด 0 นำหน้าทิ้งอยู่ดี
+    //       (0891809067 → 891809067) เจ้าหน้าที่เอาไปโทรตามคนไม่ได้
+    //       เครื่องหมาย ' จะไม่แสดงบนหน้าจอ Excel — เป็นวิธีเดียวกับที่ csvSafeValue() ใช้
+    if (in_array($key, REPORT_TEXT_CODE_COLUMNS, true)) {
+        $value = (string) $value;
+        return $value === '' ? '' : "'" . $value;
+    }
+
+    // 🔤 ค่า enum จาก DB — แปลเป็นภาษาไทยเหมือนที่หน้าจอเห็น
+    //    ห้ามปล่อย returned/lost/damaged ดิบ ๆ ลงไฟล์ที่ลูกค้าเอาไปใช้
+    if ($key === 'status') {
+        return formatReportValue($key, $value);
+    }
+
+    // 💰 เงินและจำนวนนับ — **ไม่ใส่คอมมา** เพื่อให้ Excel SUM ได้
+    if (in_array($key, REPORT_MONEY_COLUMNS, true)) {
+        return number_format((float) $value, 2, '.', '');
+    }
+    if (in_array($key, REPORT_COUNT_COLUMNS, true)) {
+        return (string) (int) $value;
+    }
+
     return (string) $value;
 }
 
@@ -174,9 +244,21 @@ function csvSafeValue(mixed $value): string
 {
     $value = (string) $value;
 
+    if ($value === '') {
+        return $value;
+    }
+
+    // 🔢 ตัวเลขล้วน (รวมค่าติดลบและทศนิยม) เป็นสูตรไม่ได้ → ปล่อยผ่าน
+    //    🔴 ถ้าไม่ยกเว้นตรงนี้ ค่าเงินติดลบอย่าง -50.00 จะกลายเป็น '-50.00
+    //       แล้ว Excel มองเป็นข้อความ → ลูกค้า SUM คอลัมน์นั้นไม่ได้
+    //    ตอนนี้รายงานยังไม่มีค่าติดลบ แต่วันที่มีระบบคืนเงิน/ปรับยอด จะพังทันทีถ้าไม่กันไว้
+    //    "-1+cmd|..." ไม่ผ่านเงื่อนไขนี้ จึงยังถูกเติม ' ตามเดิม
+    if (preg_match('/^-?\d+(\.\d+)?$/', $value)) {
+        return $value;
+    }
+
     // 📝 ตัวอักษรตัวแรกที่ Excel ใช้ตัดสินว่าเป็นสูตร
-    //    (คอลัมน์ตัวเลขในรายงานนี้ไม่มีค่าติดลบ จึงไม่กระทบการแสดงผลจำนวนเงิน/จำนวนนับ)
-    if ($value !== '' && str_contains("=+-@\t\r", $value[0])) {
+    if (str_contains("=+-@\t\r", $value[0])) {
         return "'" . $value;
     }
 

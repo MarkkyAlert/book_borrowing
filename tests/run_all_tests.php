@@ -194,6 +194,7 @@ $gapSuites = [
     'กันหนังสือซ้ำ'              => 'test_duplicate_book.php',       // F-36 idempotency + เตือนชื่อซ้ำ
     'หน้าลืมรหัสผ่าน'            => 'test_forgot_password.php',      // F-40 กัน account enumeration
     'ภาพโควตา + ไม่มารับ'        => 'test_quota_visibility.php',     // F-41 โควตารวมจอง + F-42 แท็บไม่มารับ
+    'ไฟล์ CSV ที่ส่งออก'         => 'test_csv_export.php',           // F-44 เบอร์โทร/คอลัมน์/Excel SUM
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว
