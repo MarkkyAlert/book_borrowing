@@ -197,11 +197,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newFilename = 'cover_' . time() . '_' . uniqid() . '.' . $ext;
             $targetPath = $uploadDir . $newFilename;
 
-            if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+            // 📁 [F-54] เช็คสิทธิ์เขียน **ก่อน** ลองย้ายไฟล์ เพื่อบอกสาเหตุจริงได้
+            //    🧠 เดิมล้มเหลวแล้วแจ้งแค่ "ไม่สามารถอัปโหลดรูปภาพได้"
+            //       บรรณารักษ์จะเข้าใจว่า "รูปนี้มีปัญหา" แล้วลองรูปอื่นอีก 4-5 รูป
+            //       ทุกรูปล้มเหลวเหมือนกัน เพราะสาเหตุจริงคือโฟลเดอร์เขียนไม่ได้
+            //       ทั้งที่ระบบรู้อยู่แล้ว — เช็คครั้งเดียวก็บอกได้
+            //    ใช้ isDirActuallyWritable() ตัวเดียวกับตัวติดตั้ง จะได้ตัดสินตรงกันเสมอ
+            if (!isDirActuallyWritable($uploadDir)) {
+                $errors[] = 'โฟลเดอร์เก็บรูปปก (uploads/covers/) เขียนไม่ได้ '
+                    . 'ไม่ใช่ปัญหาที่ไฟล์รูป — กรุณาแจ้งผู้ดูแลระบบให้ตั้งสิทธิ์โฟลเดอร์';
+            } elseif (move_uploaded_file($file['tmp_name'], $targetPath)) {
                 $oldCoverImage = $book['cover_image'] ?? null;
                 $coverImage = $newFilename;
             } else {
-                $errors[] = 'ไม่สามารถอัปโหลดรูปภาพได้';
+                $errors[] = 'ไม่สามารถอัปโหลดรูปภาพได้ (ย้ายไฟล์ไม่สำเร็จ)';
             }
         }
     }

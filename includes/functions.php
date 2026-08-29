@@ -78,6 +78,74 @@ function e(?string $string): string
  *
  * ✅ Use case: <form onsubmit="return confirmSubmit(this, <?= jsString($msg) ?>, {...})">
  */
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ตรวจว่า "โฟลเดอร์นี้ web server เขียนได้จริงหรือเปล่า" — F-54
+ * ==========================================================================
+ * 📥 Input: @param string $dir path เต็มของโฟลเดอร์
+ * 📤 Output: @return bool
+ *
+ * 🔴 **ทำไมไม่ใช้ is_writable() เฉย ๆ**
+ *    บน macOS ที่ให้สิทธิ์ด้วย ACL (`chmod +a "daemon allow ..."`) `is_writable()`
+ *    ดูจาก permission bits เป็นหลัก จึงรายงานผลไม่ตรงกับความจริงได้ทั้งสองทาง
+ *    — ซึ่งเป็นสภาพแวดล้อมของคู่มือติดตั้งบน macOS พอดี (ดู INSTALL.md:261)
+ *    วิธีที่เชื่อได้คือ **ลองเขียนไฟล์จริงแล้วลบทิ้ง**
+ *
+ * 🧹 ไฟล์ทดสอบถูกลบเสมอ แม้เขียนสำเร็จ — ใช้ชื่อที่ชนกับของลูกค้าไม่ได้
+ *
+ * ✅ Use case: install.php (เตือนตอนติดตั้ง) · admin/book_form.php (บอกสาเหตุจริง)
+ *    🧠 ทั้งสองที่ใช้ตัวเดียวกัน เพื่อไม่ให้ตัดสินคนละแบบ
+ */
+function isDirActuallyWritable(string $dir): bool
+{
+    if (!is_dir($dir)) return false;
+
+    $dir = rtrim($dir, '/');
+
+    // 🧹 เก็บกวาดไฟล์ทดสอบที่อาจค้างจากรอบก่อน
+    //    ถ้า process ตายระหว่างเขียนกับลบ (timeout / fatal) ไฟล์จะค้างในโฟลเดอร์ลูกค้า
+    //    ไฟล์เล็กและซ่อนอยู่ก็จริง แต่ไม่ควรทิ้งขยะไว้ในโฟลเดอร์ของคนอื่น
+    foreach (glob($dir . '/.write_probe_*') ?: [] as $stale) {
+        @unlink($stale);
+    }
+
+    $probe = $dir . '/.write_probe_' . bin2hex(random_bytes(6));
+    $ok = @file_put_contents($probe, 'x') !== false;
+    if ($ok) {
+        @unlink($probe);
+    }
+    return $ok;
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: คำสั่งที่ต้องรันเมื่อโฟลเดอร์เขียนไม่ได้ — F-54
+ * ==========================================================================
+ * 🧠 คัดจาก `docs/INSTALL.md` มาไว้ที่เดียว เพื่อให้ข้อความบนหน้าจอ
+ *    กับคู่มือไม่พูดคนละอย่างเมื่อมีใครแก้ที่ใดที่หนึ่ง
+ * 📤 Output: @return string คำสั่งสำหรับ OS ที่กำลังรันอยู่
+ */
+function writablePermissionHint(string $relativeDir): string
+{
+    // 🔴 ต้องเป็น user ที่ **web server รันอยู่** ไม่ใช่เจ้าของไฟล์
+    //    get_current_user() คืนเจ้าของสคริปต์ ซึ่งมักเป็นคนละคนกับ web server
+    //    (บนเครื่องนี้: ไฟล์เป็นของ pruettipong แต่ Apache รันเป็น daemon)
+    //    ใส่ชื่อผิด = ลูกค้าคัดคำสั่งไปรันแล้วยังเขียนไม่ได้เหมือนเดิม แต่คิดว่าทำแล้ว
+    $webUser = function_exists('posix_geteuid') && function_exists('posix_getpwuid')
+        ? (posix_getpwuid(posix_geteuid())['name'] ?? '')
+        : '';
+
+    if (PHP_OS_FAMILY === 'Darwin') {
+        // ถ้าหาชื่อ user ไม่ได้ ให้ใส่ตัวยึดที่เห็นชัดว่าต้องแทนที่ ไม่ใช่ปล่อยว่าง
+        $user = $webUser !== '' ? $webUser : '<user-ของ-web-server>';
+        return 'chmod +a "' . $user . ' allow add_file,delete,add_subdirectory,'
+            . 'delete_child,file_inherit,directory_inherit" ' . $relativeDir;
+    }
+
+    $user = $webUser !== '' ? $webUser : 'www-data';
+    return 'sudo chown -R ' . $user . ' ' . $relativeDir . ' && chmod 755 ' . $relativeDir;
+}
+
 function jsString(?string $text): string
 {
     return e(json_encode($text ?? '', JSON_UNESCAPED_UNICODE));

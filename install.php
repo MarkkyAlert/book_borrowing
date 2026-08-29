@@ -395,6 +395,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messages[] = "   ระบบล็อคด้วยข้อมูลใน database แทนแล้ว — แต่ควรลบ install.php ทิ้งเพื่อความปลอดภัย";
         }
 
+        // 📁 [F-54] ตรวจว่า web server เขียนโฟลเดอร์รูปปกได้จริงไหม
+        //    🔴 **ต้องไม่ทำให้การติดตั้งล้มเหลว** — ฐานข้อมูลกับบัญชี admin เสร็จแล้ว
+        //       ระบบใช้งานได้เกือบทุกอย่าง ติดแค่อัปโหลดรูปปก
+        //       ล้มการติดตั้งเพราะเรื่องนี้จะแย่กว่าปล่อยผ่านมาก — เตือนแบบเดียวกับ .installed
+        //
+        //    🧠 ไม่ตรวจ logs/ เพราะ web server ไม่ได้เขียน — มีแต่ cron/*.php ที่เขียน
+        //       ซึ่งรันเป็น user คนละคน (ดู docs/INSTALL.md:269)
+        //       ตรวจไปก็เป็นการเตือนเท็จ ทำให้ลูกค้าไปตั้งสิทธิ์ที่ไม่จำเป็น
+        $coversDir = __DIR__ . '/uploads/covers';
+        if (!is_dir($coversDir)) {
+            @mkdir($coversDir, 0755, true);
+        }
+        if (!isDirActuallyWritable($coversDir)) {
+            $messages[] = "";
+            $messages[] = "⚠️ โฟลเดอร์ `uploads/covers/` เขียนไม่ได้ — อัปโหลดรูปปกหนังสือจะไม่สำเร็จ";
+            $messages[] = "   ส่วนอื่นของระบบใช้งานได้ตามปกติ แก้ได้ทีหลังด้วยคำสั่งนี้:";
+            $messages[] = "   " . writablePermissionHint('uploads/covers');
+        }
+
         $success = true;
         $messages[] = "";
         $messages[] = "🎉 ติดตั้งระบบเรียบร้อยแล้ว!";
