@@ -259,22 +259,49 @@ class AuthService
         // 📝 Lazy require — โหลดเฉพาะเมื่อใช้งาน (ไม่โหลดทุก request)
         require_once __DIR__ . '/../Repositories/PasswordResetRepository.php';
         $resetRepo = new \App\Repositories\PasswordResetRepository($this->pdo);
+
+        // 🧹 Lazy cleanup — ลบ token ที่หมดอายุแล้วทุกครั้งที่มีคนขอ
+        //    ระบบนี้ไม่มี cron จริง (cron/cleanup_tokens.php มีไว้ให้ลูกค้าตั้งเองถ้าต้องการ)
+        //    ถ้าไม่ล้างตรงนี้ ตารางจะโตไปเรื่อย ๆ และ countRecentByEmail() จะช้าลง
+        //    ใช้รูปแบบเดียวกับ markExpiredReservations() ที่ระบบทำอยู่แล้วกับการจอง
+        $resetRepo->deleteExpired();
         
         // 📝 Step 1: ตรวจว่า email มีอยู่หรือไม่
         $user = $this->userRepo->findByEmail($email);
-        if (!$user) {
-            // 🛡️ [SECURITY] ไม่บอกว่า email ไม่อยู่ในระบบ — ป้องกัน enumeration
-            //    คืน success=true แต่ token=null → Controller แสดง "ส่งลิงก์แล้ว" เหมือนกัน
-            return ['success' => true, 'token' => null];
-        }
-        
+
         // 🛡️ Step 2: Rate limiting — max 3 requests ต่อชั่วโมงต่อ email
         //    ป้องกัน brute force + spam token
+        //
+        // 🔴 [SECURITY] ต้องนับ **ก่อน** แยกทางว่า email มีจริงหรือไม่ (F-40)
+        //    เดิมโค้ด return ทันทีเมื่อไม่พบ email แล้วค่อยเช็ค rate limit
+        //    ผลคือตัวจำกัดอัตราทำงานเฉพาะกับอีเมลที่มีจริง กลายเป็น oracle:
+        //        อีเมลจริง  ยิงครั้งที่ 4 → "ขอรีเซ็ตบ่อยเกินไป"
+        //        อีเมลปลอม  ยิงกี่ครั้งก็ success
+        //    ยิง 4 ครั้งแล้วดูว่าต่างไหม = รู้ทันทีว่าอีเมลนั้นมีบัญชีหรือเปล่า
+        //    ความพยายามกัน enumeration ทั้งหมดถูกเปิดโปงที่จุดนี้จุดเดียว
+        //
+        //    ตอนนี้จึงนับจาก password_resets ก่อนเสมอ และเมื่อเกินโควตา
+        //    **คืนผลลัพธ์หน้าตาเดียวกับกรณีปกติ** ไม่ใช่ error คนละแบบ
         $recentRequests = $resetRepo->countRecentByEmail($email, 1);
-        if ($recentRequests >= 3) {
-            return ['success' => false, 'error' => 'คุณขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 ชั่วโมง'];
+        $overLimit = $recentRequests >= 3;
+
+        if (!$user || $overLimit) {
+            // 🛡️ [SECURITY] ไม่บอกว่า email ไม่อยู่ในระบบ หรือขอถี่เกินไป — ป้องกัน enumeration
+            //    คืนผลเดียวกันทั้ง 2 กรณี → ผู้เรียกแยกไม่ออกว่าเกิดอะไรขึ้น
+            //    🔴 ห้ามเปลี่ยนเป็น error คนละแบบเด็ดขาด (ดูเหตุผลด้านบน)
+            //
+            // ⚠️ **ไม่สร้างแถวหลอกให้อีเมลที่ไม่มีจริง**
+            //    เคยลองสร้างเพื่อถ่วงเวลาให้เท่ากันทั้ง 2 ฝั่ง แต่ผลคือ
+            //    ตาราง password_resets โตขึ้นตามอีเมลมั่ว ๆ ที่คนนอกยิงเข้ามา
+            //    และระบบนี้**ไม่มี cron จริง** (cron/cleanup_tokens.php มีไว้ให้ลูกค้าตั้งเอง)
+            //    แถวขยะจึงไม่มีวันหาย — แลกไม่คุ้มกับช่องทางเวลาที่วัดได้ยากมากผ่าน HTTP
+            //
+            //    สิ่งที่กัน enumeration ได้จริงคือ "คำตอบเหมือนกัน" ซึ่งทำครบแล้ว
+            //    ส่วนเวลาตอบสนองยังต่างกันเล็กน้อย (ฝั่งที่ได้ token จริงมี INSERT เพิ่ม 1 ครั้ง)
+            //    — บันทึกไว้ใน KNOWN_LIMITATIONS แล้ว ไม่ได้แกล้งทำเป็นไม่มี
+            return ['success' => true, 'token' => null];
         }
-        
+
         // 📝 Step 3: สร้าง token (64 hex chars = 32 bytes)
         //    ใช้ random_bytes() — cryptographically secure
         $token = bin2hex(random_bytes(32));

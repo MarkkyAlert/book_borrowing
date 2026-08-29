@@ -211,17 +211,37 @@ $tokens[] = $r2['token'];
 $r3 = $authService->requestPasswordReset($userRate['email']);
 $tokens[] = $r3['token'];
 
-// Request 4 (Should fail)
+// Request 4 — โควตาต้องทำงาน แต่ **คำตอบต้องหน้าตาเหมือนเดิม**
+//
+// 🔴 [F-40] เดิมเคสนี้ยืนยันว่าครั้งที่ 4 ต้อง success=false
+//    ซึ่งเป็นพฤติกรรมที่กลายเป็นช่องไล่หาว่าใครเป็นสมาชิก (account enumeration):
+//        อีเมลจริง  ครั้งที่ 4 → error "ขอรีเซ็ตบ่อยเกินไป"
+//        อีเมลปลอม  ครั้งที่ 4 → success
+//    ยิง 4 ครั้งแล้วดูว่าต่างไหม = รู้ทันทีว่าอีเมลนั้นมีบัญชีหรือไม่
+//
+// ✅ สิ่งที่ต้องเป็นตอนนี้: โควตายัง**ทำงาน** (ไม่มี token ใบที่ 4)
+//    แต่ผู้เรียก**แยกไม่ออก** ว่าถูกจำกัดหรือไม่ (success=true เหมือนเดิม)
 $r4 = $authService->requestPasswordReset($userRate['email']);
-if (!$r4['success']) {
-    $limitReached = true;
-    $limitMsg = $r4['error'] ?? '';
-}
+$tokenCount = 0;
+foreach ($tokens as $t) { if (!empty($t)) $tokenCount++; }
+
+$limitReached = empty($r4['token']) && $tokenCount === 3;
+$limitMsg = 'token 3 ใบแรกออกให้ · ใบที่ 4 ไม่ออก · success=' . var_export($r4['success'], true);
 
 assertTest(
-    "AU-12: Request 4th time -> Fail (Rate Limit)",
+    "AU-12: Request 4th time -> โควตาทำงาน แต่แยกไม่ออกจากปกติ",
     $limitReached,
-    "error=" . $limitMsg
+    $limitMsg
+);
+
+// AU-12b: 🔴 คำตอบครั้งที่ 4 ต้องเหมือนอีเมลที่ไม่มีในระบบทุกประการ
+$fakeShape = $authService->requestPasswordReset('zzz_notexist_au12@nowhere.invalid');
+assertTest(
+    "AU-12b: ครั้งที่เกินโควตา ให้คำตอบเหมือนอีเมลที่ไม่มีในระบบ",
+    ($r4['success'] ?? null) === ($fakeShape['success'] ?? null)
+        && ($r4['error'] ?? null) === ($fakeShape['error'] ?? null),
+    'จริง=' . json_encode(['s' => $r4['success'] ?? null, 'e' => $r4['error'] ?? null], JSON_UNESCAPED_UNICODE)
+        . ' ปลอม=' . json_encode(['s' => $fakeShape['success'] ?? null, 'e' => $fakeShape['error'] ?? null], JSON_UNESCAPED_UNICODE)
 );
 
 

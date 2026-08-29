@@ -90,32 +90,51 @@ require_once __DIR__ . '/includes/header.php';
                     ลืมรหัสผ่าน
                 </h2>
                 <p class="mt-2 text-sm text-gray-600">
-                    กรอกอีเมลที่ใช้สมัครสมาชิก เพื่อรับลิงก์รีเซ็ตรหัสผ่าน
+                    กรอกอีเมลที่ใช้สมัครสมาชิก เพื่อแจ้งคำขอตั้งรหัสผ่านใหม่
                 </p>
             </div>
 
             <?php displayFlash(); ?>
 
             <?php if ($success): ?>
+                <?php // 🛡️ [SECURITY] ข้อความต้องเหมือนกันทุกกรณี — อีเมลมีจริงหรือไม่ ขอถี่เกินไปหรือไม่
+                      //    ถ้าข้อความต่างกันแม้แต่นิดเดียว จะกลายเป็นเครื่องมือไล่หาว่าใครเป็นสมาชิก
+                      // 🧠 และต้องบอก "ทางออกที่ใช้ได้จริง" ด้วย — ระบบนี้ยังไม่มีการส่งอีเมล
+                      //    เดิมเขียนว่า "(ต้องพัฒนาต่อให้ส่งทางเมล)" ซึ่งเป็นโน้ตของนักพัฒนา
+                      //    หลุดไปถึงผู้ใช้ปลายทางของลูกค้า และไม่ได้บอกว่าต้องทำอะไรต่อ ?>
                 <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-6 rounded-r-lg">
                     <div class="flex">
                         <div class="flex-shrink-0">
                             <i class="bi bi-check-circle-fill text-green-500"></i>
                         </div>
                         <div class="ml-3">
-                            <p class="text-sm text-green-700">
-                                หากอีเมลนี้มีในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน (ต้องพัฒนาต่อให้ส่งทางเมล)
+                            <p class="text-sm text-green-800 font-medium">รับคำขอแล้ว</p>
+                            <p class="text-sm text-green-700 mt-1">
+                                หากอีเมลนี้มีอยู่ในระบบ เจ้าหน้าที่ห้องสมุดจะตั้งรหัสผ่านใหม่ให้ได้
                             </p>
                         </div>
                     </div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-200 p-4 mb-6 rounded-xl">
+                    <p class="text-sm font-medium text-gray-800 mb-1.5">
+                        <i class="bi bi-person-workspace mr-1.5 text-gray-500"></i>ขั้นตอนถัดไป
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        ติดต่อเคาน์เตอร์ห้องสมุดพร้อมแสดงบัตรสมาชิก
+                        เจ้าหน้าที่จะตั้งรหัสผ่านใหม่ให้ได้ทันที
+                    </p>
                 </div>
 
                 <?php if ($resetLink): ?>
                     <!-- Demo Mode: แสดง link (ในโหมด production จะส่งทาง email) -->
                     <div class="bg-blue-50 border border-blue-200 p-4 mb-6 rounded-xl">
                         <p class="text-xs text-blue-600 font-medium mb-2">
-                            <i class="bi bi-info-circle mr-1"></i>
-                            Demo Mode: ลิงก์รีเซ็ตรหัสผ่าน (ปกติจะส่งทาง email)
+                            <i class="bi bi-tools mr-1"></i>
+                            โหมดพัฒนา (APP_DEBUG=true บน localhost เท่านั้น) — ลิงก์ตั้งรหัสผ่านใหม่
+                        </p>
+                        <p class="text-xs text-blue-500 mb-2">
+                            กล่องนี้ไม่แสดงบนเครื่องจริง · ตั้ง APP_DEBUG=false ใน .env ก่อนส่งมอบ
                         </p>
                         <a href="<?= e($resetLink) ?>" class="text-sm text-blue-700 hover:text-blue-800 break-all underline">
                             <?= e($resetLink) ?>
