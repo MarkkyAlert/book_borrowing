@@ -34,7 +34,17 @@ if (!$member) {
 
 // 🎨 ดึงค่าจาก settings (DB) — admin ปรับได้ที่หน้า settings.php
 // 🧠 ค่าเหล่านี้ถูกใช้ใน CSS variable (--primary, --secondary) และ inline style
-$orgName = getSetting('org_name', 'LIBRARY CARD');
+// 🏛️ ชื่อหน่วยงานบนหัวบัตร — ไล่หา 3 ชั้น
+//    🧠 ตาราง settings มี 2 คีย์ที่หมายถึงสิ่งเดียวกัน:
+//       org_name     — ตั้งจากหน้า "ตั้งค่าบัตรสมาชิก"
+//       library_name — มากับข้อมูลตัวอย่าง (sample_data.sql) และหน้าตั้งค่าทั่วไป
+//    เดิมบัตรอ่านแค่ org_name แล้ว fallback เป็น 'LIBRARY CARD'
+//    ลูกค้าที่ติดตั้งใหม่จึงได้บัตรหัวภาษาอังกฤษ ทั้งที่ library_name มีชื่อไทยอยู่แล้ว
+//    ⚠️ ลำดับสำคัญ — org_name ต้องมาก่อน ระบบที่ตั้งไว้แล้วจะได้ค่าเดิม ไม่ถูกทับ
+$orgName = getSetting('org_name', '');
+if ($orgName === '') {
+    $orgName = getSetting('library_name', 'บัตรสมาชิกห้องสมุด');
+}
 $colorPrimary = getSetting('card_color_primary', '#1e3a8a');
 $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
 ?>
@@ -143,17 +153,35 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
             text-transform: uppercase;
         }
 
+        /* 👤 ชื่อสมาชิก — ต้องอ่านได้ครบทั้งชื่อและนามสกุล
+           🔴 เดิมใช้ white-space: nowrap + text-overflow: ellipsis บรรทัดเดียว
+              ชื่อ 55 ตัวอักษรเหลือ "เด็กหญิงพิมพ์ณดาภรณ์ช…" — ไม่มีนามสกุลเลย ระบุตัวไม่ได้
+           🧠 บัตรมีขนาดตายตัว 85.6 × 53.98 มม. (ขนาดบัตรประชาชน) ขยายไม่ได้
+              จึงต้องขึ้นบรรทัดใหม่ + ลดฟอนต์ แทนการตัดทิ้ง
+           🧠 จำกัด 3 บรรทัดเป็นด่านสุดท้าย ไม่งั้นชื่อยาวมากจะไปทับบาร์โค้ดข้างล่าง */
         .member-name {
             font-size: 16px;
             font-weight: 700;
             color: #1e293b;
-            line-height: 1.2;
+            line-height: 1.15;
             margin-bottom: 2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
             max-width: 180px;
+            /* ✂️ ตัดที่ 3 บรรทัด แล้วค่อยใส่ … (ยังดีกว่าตัดกลางชื่อบรรทัดเดียว) */
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            /* 🧠 ชื่อไทยไม่มีช่องว่างระหว่างคำ ต้องยอมให้ตัดกลางคำได้
+               ไม่งั้นคำยาว ๆ จะดันล้นกรอบออกไปแทนที่จะขึ้นบรรทัดใหม่ */
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
+
+        /* 📏 ยิ่งชื่อยาว ฟอนต์ยิ่งเล็กลง — คำนวณที่ฝั่งเซิร์ฟเวอร์ ไม่พึ่ง JS
+           หน้านี้ต้องพิมพ์ได้แม้ JS ไม่ทำงาน (บาร์โค้ด/QR พึ่ง JS อยู่แล้ว ชื่อไม่ควรพึ่งอีก) */
+        .member-name.len-md { font-size: 14px; }
+        .member-name.len-lg { font-size: 12px; }
+        .member-name.len-xl { font-size: 10.5px; line-height: 1.1; }
 
         .member-id {
             font-size: 11px;
@@ -192,8 +220,9 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
             font-size: 8px;
             font-weight: 600;
             color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            /* 🧠 ตัด letter-spacing ออกเพราะข้อความเป็นภาษาไทยแล้ว
+               การถ่างช่องไฟทำให้สระบนล่างกับวรรณยุกต์ลอยออกจากพยัญชนะ
+               (uppercase ไม่มีผลกับภาษาไทย จึงตัดออกด้วยให้เหลือแต่ที่ใช้จริง) */
         }
 
         /* Barcode SVG customization */
@@ -264,9 +293,20 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
             </div>
 
             <div class="member-details">
-                <div class="role-badge">MEMBER</div>
-                <div class="member-name"><?= e($member['name']) ?></div>
-                <div class="member-id">ID: <?= str_pad($member['id'], 6, '0', STR_PAD_LEFT) ?></div>
+                <?php
+                // 📏 เลือกขนาดฟอนต์ตามความยาวชื่อจริง — mb_strlen เพราะภาษาไทยเป็น multibyte
+                //    (strlen จะนับเป็นไบต์ ชื่อไทย 20 ตัวอักษรได้ 60 ไบต์ → เลือกผิดขนาด)
+                $nameLen = mb_strlen($member['name'], 'UTF-8');
+                $nameClass = match (true) {
+                    $nameLen > 40 => 'len-xl',
+                    $nameLen > 28 => 'len-lg',
+                    $nameLen > 18 => 'len-md',
+                    default       => '',
+                };
+                ?>
+                <div class="role-badge">สมาชิก</div>
+                <div class="member-name <?= $nameClass ?>"><?= e($member['name']) ?></div>
+                <div class="member-id">รหัส <?= str_pad($member['id'], 6, '0', STR_PAD_LEFT) ?></div>
             </div>
 
             <div class="barcode-section">
@@ -288,7 +328,7 @@ $colorSecondary = getSetting('card_color_secondary', '#3b82f6');
 
         <div class="sidebar-right">
             <div id="qrcode"></div>
-            <div class="scan-text">SCAN ME</div>
+            <div class="scan-text">สแกนที่นี่</div>
         </div>
     </div>
 
