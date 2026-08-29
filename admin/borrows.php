@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // [SECURITY] CSRF check ก่อนทำ state change
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('borrows.php');
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
     
     // 🔄 ต่ออายุการยืม — เลื่อนกำหนดคืน ไม่แตะสต็อก
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $idempotencyKey = 'renew_' . $borrowId;
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            redirectToList('borrows.php', LIST_STATE_BORROWS);
         }
 
         try {
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
 
     // 📚 แจ้งหนังสือหาย / ชำรุด — ปิดรายการยืม + ลดจำนวนในระบบ + คิดค่าชดใช้
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $idempotencyKey = 'mark_lost_' . $borrowId;
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            redirectToList('borrows.php', LIST_STATE_BORROWS);
         }
 
         try {
@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
 
     // ↩️ ย้อนการแจ้งหาย/ชำรุด — หาหนังสือเจอทีหลัง
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $idempotencyKey = 'undo_lost_' . $borrowId;
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            redirectToList('borrows.php', LIST_STATE_BORROWS);
         }
 
         try {
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('borrows.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
 
     if ($action === 'return') {
@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             // Request นี้ถูก process ไปแล้ว - redirect โดยไม่ทำซ้ำ
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('borrows.php');
+            redirectToList('borrows.php', LIST_STATE_BORROWS);
         }
         
         try {
@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('borrows.php');
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
 }
 
@@ -201,7 +201,7 @@ require_once __DIR__ . '/header.php';
         <h3 class="text-lg font-bold text-gray-800">รายการยืม-คืนหนังสือ</h3>
         <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> รายการ</p>
     </div>
-    <a href="borrow_form.php" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+    <a href="<?= e(listStateLink('borrow_form.php', LIST_STATE_BORROWS)) ?>" class="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-primary-500/30">
         <i class="bi bi-plus-circle mr-2"></i>บันทึกการยืม
     </a>
 </div>

@@ -61,7 +61,7 @@ if (isset($_GET['id'])) {
         $isEdit = true;
     } else {
         setFlash('error', 'ไม่พบหนังสือที่ต้องการแก้ไข');
-        redirect('books.php');
+        redirectToList('books.php', LIST_STATE_BOOKS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
     }
 }
 
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff สร้าง/แก้หนังสือ
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('books.php');
+        redirectToList('books.php', LIST_STATE_BOOKS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
     }
 
     // 📥 รับ input จาก form — trim ป้องกัน whitespace หัว/ท้าย
@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     @unlink($oldPath);
                 }
             }
-            redirect('books.php');
+            redirectToList('books.php', LIST_STATE_BOOKS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
         } catch (Exception $e) {
             $errors[] = $e->getMessage();
         }
@@ -227,6 +227,10 @@ require_once __DIR__ . '/header.php';
 
             <form method="POST" enctype="multipart/form-data" class="space-y-6">
                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <?php // 📄 พาหน้า/ตัวกรองของรายการกลับไปด้วยหลังบันทึก (F-37)
+                      //    ถ้าไม่ส่งต่อตรงนี้ ต่อให้ redirect ถูกก็กู้สถานะไม่ได้
+                      //    เพราะมันหายไปตั้งแต่ตอนกดลิงก์ "แก้ไข" แล้ว ?>
+                <?= listStateHiddenInputs(LIST_STATE_BOOKS) ?>
                 <?php if ($isEdit): ?>
                     <input type="hidden" name="id" value="<?= $book['id'] ?>">
                 <?php endif; ?>
@@ -380,7 +384,7 @@ require_once __DIR__ . '/header.php';
                 </div>
 
                 <div class="flex items-center justify-between pt-6 border-t border-gray-100">
-                    <a href="books.php" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                    <a href="books.php<?= listStateQuery(listState(LIST_STATE_BOOKS, null, 'ret_')) ?>" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                         <i class="bi bi-arrow-left mr-1"></i>ยกเลิก
                     </a>
                     <button type="submit" class="px-5 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors shadow-lg shadow-primary-500/30">

@@ -977,6 +977,131 @@ function paginationPageNumbers(int $current, int $totalPages, int $around = 1): 
 
 /**
  * ==========================================================================
+ * 🎯 จุดประสงค์: เก็บ "สถานะรายการ" (หน้า + ตัวกรอง) ไว้พากลับหลังบันทึก — F-37
+ * ==========================================================================
+ * เดิมทุกการบันทึกจะเด้งกลับหน้าแรกของรายการ ตัวกรองหายหมด
+ * เคลียร์รายการเกินกำหนด 26 รายการ = ต้องกดกรองใหม่ 26 รอบ
+ *
+ * 🛡️ **[SECURITY] ไม่รับ URL จากผู้ใช้เด็ดขาด**
+ *    การพา "ที่อยู่สำหรับกลับ" มาจากฝั่งผู้ใช้คือช่องทางคลาสสิกของ open redirect
+ *    ฟังก์ชันนี้รับเฉพาะ **ค่าของพารามิเตอร์ที่อยู่ใน whitelist** แล้วประกอบ URL
+ *    ขึ้นใหม่ที่ฝั่งเซิร์ฟเวอร์ ปลายทางเป็นชื่อไฟล์ที่ hardcode ไว้ในโค้ดเสมอ
+ *    → ต่อให้ยัด `//evil.com` หรือ `https://...` เข้ามา ก็ออกนอกระบบไม่ได้
+ *
+ * 📥 Input:
+ * @param array      $allowed ชื่อพารามิเตอร์ที่ยอมให้พากลับ เช่น ['page','search','filter']
+ * @param array|null $source  แหล่งข้อมูล (default: $_GET) — ส่ง $_POST มาได้ตอนอ่านจาก hidden field
+ * @param string     $prefix  คำนำหน้าใน $source เช่น 'ret_' (ใช้ตอนส่งผ่านหน้าฟอร์ม)
+ *
+ * 📤 Output: @return array คู่ key/value ที่ผ่านการกรองแล้ว
+ */
+function listState(array $allowed, ?array $source = null, string $prefix = ''): array
+{
+    $source = $source ?? $_GET;
+    $out = [];
+
+    foreach ($allowed as $key) {
+        $srcKey = $prefix . $key;
+        if (!isset($source[$srcKey])) {
+            continue;
+        }
+        $val = $source[$srcKey];
+
+        // 🛡️ รับเฉพาะค่าเดี่ยว — array/object ทิ้งทันที (กันการยัด structure แปลก ๆ)
+        if (!is_scalar($val)) {
+            continue;
+        }
+        $val = trim((string) $val);
+        if ($val === '') {
+            continue;
+        }
+
+        // 🛡️ พารามิเตอร์ที่เป็น "เลขหน้า" ต้องเป็นตัวเลขบวกเท่านั้น
+        //    ไม่งั้นค่าขยะอย่าง `//evil.com` จะหลุดเข้าไปอยู่ใน URL ของเราเอง
+        //    (ยังออกนอกระบบไม่ได้เพราะ path เป็นค่าคงที่ในโค้ด แต่ URL ไม่ควรมีของแบบนี้)
+        if (in_array($key, ['page', 'upage'], true)) {
+            if (!ctype_digit($val) || (int) $val < 1) {
+                continue;
+            }
+        }
+
+        // 🛡️ ตัดความยาวกันคนยัดข้อความยาวมากเพื่อทำให้ URL บวม
+        if (mb_strlen($val) > 200) {
+            $val = mb_substr($val, 0, 200);
+        }
+        $out[$key] = $val;
+    }
+
+    return $out;
+}
+
+/**
+ * 🎯 แปลงสถานะรายการเป็น query string พร้อมต่อท้าย URL ('' ถ้าไม่มีอะไร)
+ *
+ * ✅ Use case: <a href="book_form.php?id=5<?= listStateSuffix(BOOKS_LIST_STATE, null, 'ret_') ?>">
+ */
+function listStateQuery(array $state): string
+{
+    return $state ? '?' . http_build_query($state) : '';
+}
+
+
+/**
+ * 🎯 สร้างลิงก์ไปหน้าฟอร์ม พร้อมพาสถานะรายการไปด้วยในชื่อ ret_*
+ *
+ * 🧠 ทำไมต้องมี prefix — หน้าฟอร์มมีพารามิเตอร์ของตัวเอง (`id`) และอาจมี `page` ของมันเอง
+ *    ถ้าไม่แยกชื่อ สถานะของ "หน้ารายการ" กับของ "หน้าฟอร์ม" จะทับกัน
+ *
+ * ✅ Use case: <a href="<?= listStateLink('book_form.php?id=' . $id, LIST_STATE_BOOKS) ?>">แก้ไข</a>
+ *              <a href="<?= listStateLink('borrow_form.php', LIST_STATE_BORROWS) ?>">บันทึกการยืม</a>
+ */
+function listStateLink(string $target, array $allowed, ?array $source = null, string $prefix = 'ret_'): string
+{
+    $state = listState($allowed, $source);
+    if (!$state) {
+        return $target;
+    }
+
+    $prefixed = [];
+    foreach ($state as $k => $v) {
+        $prefixed[$prefix . $k] = $v;
+    }
+
+    // 🧠 ต่อด้วย ? หรือ & แล้วแต่ว่าปลายทางมี query อยู่แล้วหรือยัง
+    $sep = str_contains($target, '?') ? '&' : '?';
+    return $target . $sep . http_build_query($prefixed);
+}
+
+/**
+ * 🎯 redirect กลับไปหน้ารายการพร้อมสถานะเดิม — ใช้แทน redirect('books.php') ทุกที่
+ *
+ * 🛡️ $page ต้องเป็นค่าคงที่ในโค้ดเท่านั้น ห้ามรับจากผู้ใช้
+ *
+ * ✅ Use case: redirectToList('books.php', BOOKS_LIST_STATE);
+ */
+function redirectToList(string $page, array $allowed, ?array $source = null, string $prefix = ''): void
+{
+    redirect($page . listStateQuery(listState($allowed, $source, $prefix)));
+}
+
+/**
+ * 🎯 ช่อง hidden สำหรับพาสถานะรายการผ่านหน้าฟอร์ม (book_form / member_form)
+ *
+ * 🧠 ลิงก์ "แก้ไข" ในหน้ารายการพา ret_* มาให้ → หน้าฟอร์มพ่นกลับเป็น hidden
+ *    → ตอน POST ถึงจะรู้ว่าต้องกลับไปหน้าไหน
+ *    ถ้าไม่ทำครบ 3 ทอดนี้ ต่อให้ redirect ถูกก็กู้สถานะไม่ได้ เพราะมันหายตั้งแต่ตอนกดลิงก์
+ */
+function listStateHiddenInputs(array $allowed, ?array $source = null, string $prefix = 'ret_'): string
+{
+    $html = '';
+    foreach (listState($allowed, $source, $prefix) as $k => $v) {
+        $html .= '<input type="hidden" name="' . e($prefix . $k) . '" value="' . e($v) . '">' . "\n";
+    }
+    return $html;
+}
+
+/**
+ * ==========================================================================
  * 🎯 จุดประสงค์: สร้าง URL ของหน้าที่ต้องการ โดยคง filter เดิมไว้ครบ
  * ==========================================================================
  * 🧠 ทำไมต้องมี: ถ้าลิงก์ "หน้า 2" ทิ้ง ?search= ไป ผู้ใช้จะเด้งกลับไปเห็นข้อมูลทั้งหมด

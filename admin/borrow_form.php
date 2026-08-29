@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $processedAt = $_SESSION['processed_actions'][$idempotencyKey];
             if (time() - $processedAt < 60) { // ภายใน 60 วินาที ถือว่าซ้ำ
                 setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-                redirect('borrows.php');
+                redirectToList('borrows.php', LIST_STATE_BORROWS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
             }
         }
 
@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             //    ถ้าเล่มใดมีปัญหา จะ throw Exception → ไปที่ catch block ด้านล่าง
             setFlash('success', $result['message']);
 
-            redirect('borrows.php');
+            redirectToList('borrows.php', LIST_STATE_BORROWS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
         } catch (Exception $e) {
             $errors[] = $e->getMessage();
         }
@@ -266,6 +266,8 @@ require_once __DIR__ . '/header.php';
             <?php else: ?>
                 <form method="POST" class="space-y-6">
                     <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <?php // 📄 พาหน้า/ตัวกรองของรายการยืมกลับไปด้วยหลังบันทึก (F-37) ?>
+                    <?= listStateHiddenInputs(LIST_STATE_BORROWS) ?>
 
                     <div>
                         <div class="flex justify-between items-center mb-1">
@@ -322,7 +324,7 @@ require_once __DIR__ . '/header.php';
                     </div>
 
                     <div class="pt-4 flex items-center justify-between border-t border-gray-100">
-                        <a href="borrows.php" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                        <a href="borrows.php<?= listStateQuery(listState(LIST_STATE_BORROWS, null, 'ret_')) ?>" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                             <i class="bi bi-arrow-left mr-1"></i>กลับ
                         </a>
                         <button type="submit" class="px-5 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors shadow-lg shadow-primary-500/30">

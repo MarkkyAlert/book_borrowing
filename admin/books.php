@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     // [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff ลบหนังสือโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('books.php');
+        redirectToList('books.php', LIST_STATE_BOOKS);
     }
 
     $id = (int) ($_POST['id'] ?? 0);
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     $idempotencyKey = 'delete_book_' . $id;
     if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
         setFlash('info', 'รายการนี้ถูกลบไปแล้ว');
-        redirect('books.php');
+        redirectToList('books.php', LIST_STATE_BOOKS);
     }
 
     try {
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     } catch (Exception $e) {
         setFlash('error', $e->getMessage());
     }
-    redirect('books.php');
+    redirectToList('books.php', LIST_STATE_BOOKS);
 }
 
 // ── GET: ดึงข้อมูลหนังสือตาม filter ──
@@ -240,7 +240,7 @@ require_once __DIR__ . '/header.php';
                                 <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 text-right space-x-2">
-                                <a href="book_form.php?id=<?= $book['id'] ?>" class="text-amber-500 hover:text-amber-600 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition-colors inline-block" title="แก้ไข">
+                                <a href="<?= e(listStateLink('book_form.php?id=' . $book['id'], LIST_STATE_BOOKS)) ?>" class="text-amber-500 hover:text-amber-600 border border-amber-200 hover:bg-amber-50 p-1.5 rounded-lg transition-colors inline-block" title="แก้ไข">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 <?php

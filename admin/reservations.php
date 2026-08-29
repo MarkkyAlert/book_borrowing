@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff อนุมัติ/ยกเลิกการจอง
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
-        redirect('reservations.php');
+        redirectToList('reservations.php', LIST_STATE_RESERVATIONS);
     }
 
     $resId = (int) ($_POST['id'] ?? 0);
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $idempotencyKey = 'reservation_' . $action . '_' . $resId;
     if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
         setFlash('info', 'รายการนี้ถูกดำเนินการไปแล้ว');
-        redirect('reservations.php');
+        redirectToList('reservations.php', LIST_STATE_RESERVATIONS);
     }
 
     try {
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setFlash('error', 'เกิดข้อผิดพลาด: ' . $e->getMessage());
     }
 
-    redirect('reservations.php');
+    redirectToList('reservations.php', LIST_STATE_RESERVATIONS);
 }
 
 // ── GET: ดึงรายการจองตาม filter ──

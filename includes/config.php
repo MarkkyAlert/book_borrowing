@@ -119,4 +119,17 @@ define('SEARCH_TOKEN_SIZE', 3);
 define('APP_DEBUG', env('APP_DEBUG', 'false') === 'true');
 
 // 🌏 Timezone — ใช้กับ date(), strtotime() ทั้งระบบ
-date_default_timezone_set(env('TIMEZONE', 'Asia/Bangkok'));
+date_default_timezone_set(env('TIMEZONE', 'Asia/Bangkok'));// ══════════════════════════════════════════════════════════════════
+// 📄 พารามิเตอร์ที่ยอมให้ "พากลับ" หลังบันทึก (F-37)
+// ══════════════════════════════════════════════════════════════════
+// 🛡️ [SECURITY] เป็น whitelist — อะไรที่ไม่อยู่ในนี้จะถูกทิ้งทั้งหมด
+//    ระบบไม่เคยรับ URL จากผู้ใช้ รับแค่ค่าของพารามิเตอร์เหล่านี้แล้วประกอบ URL เอง
+// ⚠️ ห้ามใส่ 'print' — บันทึกเสร็จแล้วจะเด้งเข้าโหมดพิมพ์
+define('LIST_STATE_BOOKS',        ['page', 'search', 'category', 'status', 'sort', 'is_reference']);
+define('LIST_STATE_MEMBERS',      ['page', 'search', 'role', 'status', 'sort']);
+define('LIST_STATE_BORROWS',      ['page', 'search', 'status', 'filter']);
+define('LIST_STATE_RESERVATIONS', ['page', 'status']);
+define('LIST_STATE_PAYMENTS',     ['page', 'upage', 'search']);
+define('LIST_STATE_CATEGORIES',   []);   // หน้านี้ไม่มีตัวกรอง/แบ่งหน้า
+
+

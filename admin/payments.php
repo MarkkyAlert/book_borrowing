@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // [SECURITY] CSRF — ป้องกันถูกหลอกให้บันทึกการชำระโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('payments.php');
+        redirectToList('payments.php', LIST_STATE_PAYMENTS);
     }
     
     if ($action === 'pay_fine') {
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $idempotencyKey = 'pay_fine_' . $borrowId;
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('payments.php');
+            redirectToList('payments.php', LIST_STATE_PAYMENTS);
         }
         
         try {
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('payments.php');
+        redirectToList('payments.php', LIST_STATE_PAYMENTS);
     }
 
     // 💸 ยกเว้นค่าปรับ — ไม่เก็บเงิน แต่ไม่นับเป็นค้างชำระอีก
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $idempotencyKey = 'waive_fine_' . $borrowId;
         if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
             setFlash('info', 'รายการนี้ถูกบันทึกไปแล้ว');
-            redirect('payments.php');
+            redirectToList('payments.php', LIST_STATE_PAYMENTS);
         }
 
         try {
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             setFlash('error', $e->getMessage());
         }
-        redirect('payments.php');
+        redirectToList('payments.php', LIST_STATE_PAYMENTS);
     }
 }
 

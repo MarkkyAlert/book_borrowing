@@ -178,7 +178,10 @@ echo "\n── 2️⃣ PRG PATTERN (Refresh After Submit) ──\n";
 // ============================================================
 
 // CI-06: borrows.php POST → redirect
-$hasReturnRedirect = strpos($returnCode, "redirect('borrows.php')") !== false;
+// 🧠 ตรวจ "พฤติกรรม" ไม่ใช่ชื่อฟังก์ชัน — PRG คือ POST แล้วต้อง redirect
+//    redirectToList() เรียก redirect() ข้างในอีกที และพา page/ตัวกรองกลับไปด้วย (F-37)
+//    เดิมตรวจด้วยสตริงตรงตัว พอเปลี่ยนมาใช้ helper เลยแดงทั้งที่ PRG ยังครบ
+$hasReturnRedirect = (bool) preg_match("/redirect(ToList)?\\('borrows\\.php'/", $returnCode);
 assertTest(
     "CI-06: borrows.php POST คืน → redirect (PRG)",
     $hasReturnRedirect,
@@ -186,7 +189,7 @@ assertTest(
 );
 
 // CI-07: payments.php POST → redirect
-$hasPayRedirect = strpos($payCode, "redirect('payments.php')") !== false;
+$hasPayRedirect = (bool) preg_match("/redirect(ToList)?\\('payments\\.php'/", $payCode);
 assertTest(
     "CI-07: payments.php POST ชำระ → redirect (PRG)",
     $hasPayRedirect,
@@ -194,7 +197,7 @@ assertTest(
 );
 
 // CI-08: reservations.php POST → redirect
-$hasApproveRedirect = strpos($approveCode, "redirect('reservations.php')") !== false;
+$hasApproveRedirect = (bool) preg_match("/redirect(ToList)?\\('reservations\\.php'/", $approveCode);
 assertTest(
     "CI-08: reservations.php POST อนุมัติ/ยกเลิก → redirect (PRG)",
     $hasApproveRedirect,

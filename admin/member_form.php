@@ -52,7 +52,7 @@ if (isset($_GET['id'])) {
         $isEdit = true;
     } else {
         setFlash('error', 'ไม่พบสมาชิกที่ต้องการแก้ไข');
-        redirect('members.php');
+        redirectToList('members.php', LIST_STATE_MEMBERS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
     }
 }
 
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🛡️ [SECURITY] CSRF — ป้องกัน attacker หลอกให้ staff แก้ข้อมูลสมาชิก
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('members.php');
+        redirectToList('members.php', LIST_STATE_MEMBERS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
     }
     
     $member['name'] = trim($_POST['name'] ?? '');
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 setFlash('success', 'เพิ่มสมาชิกสำเร็จ');
             }
-            redirect('members.php');
+            redirectToList('members.php', LIST_STATE_MEMBERS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');
         } catch (Exception $e) {
             $errors[] = $e->getMessage();
         }
@@ -151,6 +151,10 @@ require_once __DIR__ . '/header.php';
             
             <form method="POST" class="space-y-6">
                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <?php // 📄 พาหน้า/ตัวกรองของรายการกลับไปด้วยหลังบันทึก (F-37)
+                      //    ถ้าไม่ส่งต่อตรงนี้ ต่อให้ redirect ถูกก็กู้สถานะไม่ได้
+                      //    เพราะมันหายไปตั้งแต่ตอนกดลิงก์ "แก้ไข" แล้ว ?>
+                <?= listStateHiddenInputs(LIST_STATE_MEMBERS) ?>
                 <?php if ($isEdit): ?>
                     <input type="hidden" name="id" value="<?= $member['id'] ?>">
                 <?php endif; ?>
@@ -241,7 +245,7 @@ require_once __DIR__ . '/header.php';
                 </div>
                 
                 <div class="pt-6 flex items-center justify-between border-t border-gray-100 mt-2">
-                    <a href="members.php" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                    <a href="members.php<?= listStateQuery(listState(LIST_STATE_MEMBERS, null, 'ret_')) ?>" class="px-5 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                         <i class="bi bi-arrow-left mr-1"></i>กลับ
                     </a>
                     <button type="submit" class="px-5 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white <?= $isEdit ? 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500 shadow-amber-500/30' : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 shadow-primary-500/30' ?> focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors shadow-lg">

@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     // 🛡️ [SECURITY] CSRF
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'คำขอไม่ถูกต้อง กรุณาลองใหม่');
-        redirect('members.php');
+        redirectToList('members.php', LIST_STATE_MEMBERS);
     }
     
     $id = (int) ($_POST['id'] ?? 0);
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     $idempotencyKey = 'delete_member_' . $id;
     if (isset($_SESSION['processed_actions'][$idempotencyKey])) {
         setFlash('info', 'รายการนี้ถูกลบไปแล้ว');
-        redirect('members.php');
+        redirectToList('members.php', LIST_STATE_MEMBERS);
     }
     
     try {
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     } catch (Exception $e) {
         setFlash('error', $e->getMessage());
     }
-    redirect('members.php');
+    redirectToList('members.php', LIST_STATE_MEMBERS);
 }
 
 // 📥 รับ filter/sort จาก query string
@@ -222,7 +222,7 @@ require_once __DIR__ . '/header.php';
                                             title="พิมพ์บัตร">
                                         <i class="bi bi-person-vcard"></i>
                                     </button>
-                                    <a href="member_form.php?id=<?= $member['id'] ?>" class="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors" title="แก้ไข">
+                                    <a href="<?= e(listStateLink('member_form.php?id=' . $member['id'], LIST_STATE_MEMBERS)) ?>" class="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors" title="แก้ไข">
                                         <i class="bi bi-pencil-square"></i>
                                     </a>
                                     <?php
