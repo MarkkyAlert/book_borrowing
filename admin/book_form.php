@@ -49,6 +49,8 @@ $book = [
     'available' => 1
 ];
 $isEdit = false;
+// 🔍 [F-36] เล่มที่อาจซ้ำ — ตั้งไว้ก่อนเพื่อให้ชั้นแสดงผลอ้างถึงได้เสมอ แม้ตอน GET
+$duplicateBook = null;
 
 // ── Edit Mode: โหลดข้อมูลหนังสือเข้า form ──
 // 🔍 ถ้ามี ?id=X → ดึงข้อมูลจาก DB เพื่อ pre-fill form
@@ -103,6 +105,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($book['isbn'])) {
         if ($bookRepo->isbnExists($book['isbn'], $book['id'] ?: null)) {
             $errors[] = 'ISBN นี้มีในระบบแล้ว';
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 🔍 [F-36] กันการเพิ่มหนังสือซ้ำ — มี 2 สาเหตุ แก้คนละแบบ
+    // ══════════════════════════════════════════════════════════════
+    // เดิมส่งฟอร์มเดิม 3 ครั้งได้หนังสือ 3 เล่ม ไม่มีคำเตือนเลย
+    // uq_isbn คุ้มครองเฉพาะเล่มที่มี ISBN — NULL ซ้ำได้หลายแถวตามมาตรฐาน SQL
+    // เล่มที่ไม่มี ISBN (เอกสารเย็บเล่มเอง วารสารเก่า หนังสือบริจาค) จึงไม่มีอะไรกัน
+
+    // ── ด่านที่ 1: มีเล่มนั้นอยู่แล้วหรือเปล่า ──
+    // 🔴 **ต้องมาก่อนด่าน idempotency** — เคยสลับลำดับแล้วพบว่า idempotency
+    //    เด้งกลับไปหน้ารายการก่อน ผู้ใช้เลยไม่เห็นคำเตือน ไม่รู้เหตุผล
+    //    และกด "เป็นคนละเล่มจริง ๆ" ไม่ได้เลยเพราะไม่เคยเห็นตัวเลือกนั้น
+    //
+    // ⚠️ **เตือนแล้วให้ยืนยัน ไม่ใช่ห้ามเด็ดขาด** — ชื่อเรื่องซ้ำกันได้จริง
+    //    (คนละสำนักพิมพ์ · คนละปี · เล่ม 1/เล่ม 2 ที่ตั้งชื่อเหมือนกัน)
+    //    ถ้าห้ามเด็ดขาด บรรณารักษ์จะเพิ่มเล่มที่ถูกต้องไม่ได้เลย
+    if (empty($errors) && empty($_POST['confirm_duplicate'])) {
+        $duplicateBook = $bookRepo->findDuplicateCandidate(
+            $book['title'],
+            $book['author'],
+            $isEdit ? (int) $book['id'] : null   // 🔴 ตอนแก้ไขต้องกันตัวเองออก ไม่งั้นเตือนว่าซ้ำกับตัวเอง
+        );
+
+        if ($duplicateBook) {
+            $errors[] = sprintf(
+                'มีหนังสือชื่อนี้ของผู้แต่งคนนี้อยู่แล้ว — "%s" (คงเหลือ %d จาก %d เล่ม)',
+                $duplicateBook['title'],
+                (int) $duplicateBook['available'],
+                (int) $duplicateBook['quantity']
+            );
+        }
+    }
+
+    // ── ด่านที่ 2: กดซ้ำ / refresh เร็ว ๆ ──
+    // 🧠 กันเฉพาะช่วงที่ด่านที่ 1 ยังมองไม่เห็น — คือระหว่างที่คำขอแรกยังบันทึกไม่เสร็จ
+    //    พอบันทึกเสร็จแล้ว ด่านที่ 1 จะเป็นตัวรับหน้าที่ต่อ (และอธิบายให้ผู้ใช้เข้าใจด้วย)
+    // 🧠 key ผูกกับ **เนื้อหาฟอร์ม + สถานะการยืนยัน** ไม่ใช่แค่ผู้ใช้
+    //    - ผูกกับเนื้อหา: เพิ่มหนังสือคนละเล่ม 2 เล่มติดกันต้องไม่ถูกบล็อก
+    //    - ผูกกับการยืนยัน: กด "เป็นคนละเล่มจริง ๆ" ต้องผ่านได้ ไม่ติด key ของรอบก่อนหน้า
+    $idempotencyKey = null;
+    if (empty($errors) && !$isEdit) {
+        cleanupIdempotencyKeys();
+        $idempotencyKey = 'book_add_' . md5(
+            $book['title'] . '|' . $book['author'] . '|' . $book['isbn']
+            . '|' . (empty($_POST['confirm_duplicate']) ? '0' : '1')
+        );
+
+        if (isset($_SESSION['processed_actions'][$idempotencyKey])
+            && (time() - $_SESSION['processed_actions'][$idempotencyKey]) < 60) {
+            setFlash('info', 'หนังสือเล่มนี้เพิ่งถูกเพิ่มไปแล้ว');
+            redirectToList('books.php', LIST_STATE_BOOKS, $_POST, 'ret_');
         }
     }
 
@@ -175,6 +230,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // [WRITE] สร้างหนังสือใหม่ — available = quantity
                 $bookService->createBook($bookData);
+                // 🛡️ [F-36] จดไว้ว่าเพิ่งเพิ่มไป — refresh ภายใน 60 วินาทีจะไม่ได้เล่มซ้ำ
+                if ($idempotencyKey !== null) {
+                    $_SESSION['processed_actions'][$idempotencyKey] = time();
+                }
                 setFlash('success', 'เพิ่มหนังสือสำเร็จ');
             }
             // [CLEANUP] ลบรูปปกเก่าหลัง DB save สำเร็จ — ป้องกัน orphan ถ้า DB ล้มเหลว
@@ -225,7 +284,51 @@ require_once __DIR__ . '/header.php';
                 </div>
             <?php endif; ?>
 
-            <form method="POST" enctype="multipart/form-data" class="space-y-6">
+            <?php // 🔍 [F-36] เจอเล่มที่อาจซ้ำ — ให้ทางเลือกที่ชัดเจน 2 ทาง
+                  //    ไม่ใช่แค่ปฏิเสธแล้วปล่อยให้บรรณารักษ์งง เพราะชื่อเรื่องซ้ำกันได้จริง ?>
+            <?php if (!empty($duplicateBook)): ?>
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+                    <div class="flex items-start gap-3">
+                        <i class="bi bi-exclamation-triangle-fill text-amber-500 text-xl mt-0.5"></i>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-amber-900 mb-1">มีหนังสือชื่อนี้อยู่แล้ว</h3>
+                            <p class="text-sm text-amber-800">
+                                <span class="font-medium"><?= e($duplicateBook['title']) ?></span>
+                                — <?= e($duplicateBook['author']) ?>
+                                · คงเหลือ <?= (int) $duplicateBook['available'] ?> จาก <?= (int) $duplicateBook['quantity'] ?> เล่ม
+                            </p>
+
+                            <div class="mt-4 space-y-2 text-sm">
+                                <p class="text-amber-900 font-medium">ต้องการทำอะไร</p>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <?php // ทางที่ 1 — ได้เล่มเพิ่มของเดิม ให้ไปเพิ่มจำนวนที่เล่มนั้น ?>
+                                    <a href="<?= e(listStateLink('book_form.php?id=' . (int) $duplicateBook['id'], LIST_STATE_BOOKS, $_POST, 'ret_')) ?>"
+                                       class="inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors">
+                                        <i class="bi bi-plus-square mr-2"></i>ไปเพิ่มจำนวนที่เล่มเดิม
+                                    </a>
+                                </div>
+                                <p class="text-xs text-amber-700 pt-1">
+                                    ถ้าได้หนังสือเล่มเดิมมาเพิ่ม ให้ไปแก้ "จำนวน" ที่เล่มเดิม จะได้ไม่มี 2 รายการในระบบ
+                                </p>
+                            </div>
+
+                            <?php // ทางที่ 2 — เป็นคนละเล่มจริง ๆ (คนละสำนักพิมพ์/คนละปี/เล่ม 1-2 ชื่อเหมือนกัน) ?>
+                            <label class="mt-4 flex items-start gap-2 p-3 bg-white border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-50 transition-colors">
+                                <input type="checkbox" name="confirm_duplicate" value="1" form="bookForm"
+                                       class="mt-0.5 rounded text-amber-600 focus:ring-amber-500">
+                                <span class="text-sm text-gray-700">
+                                    <span class="font-medium">เป็นคนละเล่มจริง ๆ</span> — เพิ่มเป็นรายการใหม่
+                                    <span class="block text-xs text-gray-500 mt-0.5">
+                                        เช่น คนละสำนักพิมพ์ · คนละปีที่พิมพ์ · เล่ม 1 กับเล่ม 2 ที่ตั้งชื่อเหมือนกัน
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" enctype="multipart/form-data" class="space-y-6" id="bookForm">
                 <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
                 <?php // 📄 พาหน้า/ตัวกรองของรายการกลับไปด้วยหลังบันทึก (F-37)
                       //    ถ้าไม่ส่งต่อตรงนี้ ต่อให้ redirect ถูกก็กู้สถานะไม่ได้

@@ -191,6 +191,7 @@ $gapSuites = [
     'จองรอคิว'                   => 'test_reservation_queue.php',    // 🔴 แตะ invariant สต็อกโดยตรง
     'รายการค้างชำระ'             => 'test_unpaid_list.php',          // F-35 ตัวเลขจริง + F-39 ลำดับคงที่
     'บันทึกแล้วกลับที่เดิม'      => 'test_list_state.php',           // F-37 + กัน open redirect
+    'กันหนังสือซ้ำ'              => 'test_duplicate_book.php',       // F-36 idempotency + เตือนชื่อซ้ำ
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว

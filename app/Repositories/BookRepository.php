@@ -447,9 +447,61 @@ class BookRepository
         // 🧠 ทำไม exact match? เพราะตอน import CSV ต้องตรวจว่ามีหนังสือนี้แล้วหรือยัง
         //    ถ้ามี → เรียก addQuantity() เพิ่มจำนวน
         //    ถ้าไม่มี → เรียก create() สร้างใหม่
+        // ⚠️ ห้ามเปลี่ยนพฤติกรรมเมธอดนี้ — import_books.php พึ่งมันอยู่
+        //    ถ้าต้องการเวอร์ชันที่กันตัวเองออกได้ ใช้ findDuplicateCandidate() แทน
         $stmt = $this->pdo->prepare("SELECT id FROM books WHERE title = ? AND author = ?");
         $stmt->execute([$title, $author]);
         // 📤 คืน {id} ถ้าเจอ หรือ null ถ้าไม่มี
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หาเล่มที่อาจซ้ำกับที่กำลังจะบันทึก (สำหรับเตือนในฟอร์ม)
+     * ==========================================================================
+     *
+     * 📥 Input:
+     * @param string   $title
+     * @param string   $author
+     * @param int|null $excludeId  ID ที่ต้องไม่นับ (ตอนแก้ไขต้องกันตัวเองออก)
+     *
+     * 📤 Output: @return array|null {id, title, author, quantity, available} หรือ null
+     *
+     * 🧠 **ต่างจาก findByTitleAndAuthor() ตรงไหน**
+     *    ตัวนั้นคืนแค่ id และไม่กันตัวเองออก ใช้กับ import CSV ที่ไม่มีแนวคิด "ตัวเอง"
+     *    เมธอดนี้ใช้กับฟอร์มแก้ไข ซึ่ง**ต้องกันตัวเองออก** ไม่งั้นกดบันทึกโดยไม่เปลี่ยนชื่อ
+     *    จะเจอตัวเองแล้วเตือนว่าซ้ำ — แบบเดียวกับที่ isbnExists() รับ $excludeId
+     *
+     * 🧠 เทียบแบบ **ตัดช่องว่างหัวท้ายและไม่สนตัวพิมพ์เล็กใหญ่**
+     *    เพราะคนพิมพ์ "  Harry Potter " กับ "harry potter" หมายถึงเล่มเดียวกัน
+     *    (collation ของตารางเป็น utf8mb4_unicode_ci อยู่แล้ว จึงไม่สนตัวพิมพ์ให้เอง)
+     *
+     * ⚠️ ผลลัพธ์เป็นแค่ "ผู้ต้องสงสัย" ไม่ใช่ข้อห้าม — ชื่อเรื่องซ้ำกันได้จริง
+     *    (คนละสำนักพิมพ์ · คนละปี · เล่ม 1/เล่ม 2 ที่ตั้งชื่อเหมือนกัน)
+     *    ชั้น Page เป็นคนตัดสินว่าจะเตือนแล้วให้ยืนยัน ไม่ใช่ปฏิเสธทิ้ง
+     *
+     * ✅ Use case: admin/book_form.php
+     */
+    public function findDuplicateCandidate(string $title, string $author, ?int $excludeId = null): ?array
+    {
+        $sql = "
+            SELECT id, title, author, quantity, available
+            FROM books
+            WHERE TRIM(title) = TRIM(?) AND TRIM(author) = TRIM(?)
+        ";
+        $params = [$title, $author];
+
+        if ($excludeId !== null && $excludeId > 0) {
+            $sql .= " AND id <> ?";
+            $params[] = $excludeId;
+        }
+
+        // 🧠 มีตัวตัดสินลำดับ — ถ้าซ้ำหลายเล่มต้องได้เล่มเดิมทุกครั้ง (F-39)
+        $sql .= " ORDER BY id ASC LIMIT 1";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
         return $stmt->fetch() ?: null;
     }
 
