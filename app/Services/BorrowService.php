@@ -42,6 +42,7 @@ require_once __DIR__ . '/../Repositories/BorrowRepository.php';
 require_once __DIR__ . '/../Repositories/UserRepository.php';
 require_once __DIR__ . '/../Repositories/PaymentRepository.php';
 require_once __DIR__ . '/../Repositories/ReservationRepository.php';
+require_once __DIR__ . '/../Repositories/ClosedDayRepository.php';
 // 🔄 ใช้ตอนเลื่อนคิวหลังคืนหนังสือ — ต้องประกาศไว้ตรงนี้ ไม่พึ่ง autoloader อย่างเดียว
 //    เพราะไฟล์นี้ถูก require ตรง ๆ จากชุดทดสอบและสคริปต์ CLI ที่ไม่ได้โหลด bootstrap.php
 require_once __DIR__ . '/ReservationService.php';
@@ -51,6 +52,7 @@ use App\Repositories\BorrowRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\PaymentRepository;
 use App\Repositories\ReservationRepository;
+use App\Repositories\ClosedDayRepository;
 use App\Services\ReservationService;
 use PDO;
 use Exception;
@@ -65,6 +67,8 @@ class BorrowService
     private UserRepository $userRepo;
     private PaymentRepository $paymentRepo;
     private ReservationRepository $reservationRepo;
+    // 📅 วันที่ห้องสมุดไม่เปิดทำการ — ใช้หักออกจากการคิดค่าปรับ
+    private ClosedDayRepository $closedDayRepo;
 
     // 🔄 สร้างตอนใช้จริงเท่านั้น (lazy) — ไม่สร้างใน constructor เพราะ ReservationService
     //    ก็สร้าง repo ชุดเดียวกันอีกรอบ การยืม/คืนส่วนใหญ่ไม่ต้องแตะคิวเลย
@@ -80,6 +84,7 @@ class BorrowService
         $this->userRepo = new UserRepository($pdo);
         $this->paymentRepo = new PaymentRepository($pdo);
         $this->reservationRepo = new ReservationRepository($pdo);
+        $this->closedDayRepo = new ClosedDayRepository($pdo);
     }
 
     /**
@@ -344,7 +349,10 @@ class BorrowService
      * ⭐ แก้สูตรค่าปรับที่ method นี้
      *
      * 📥 Input: @param string $dueDate, @param string|null $returnDate (null = วันนี้)
-     * 📤 Output: @return array {days: int, amount: float}
+     * 📤 Output: @return array {days, amount, calendar_days, closed_days}
+     *    days          = วันสายที่ห้องสมุด **เปิด** (ตัวที่เอาไปคูณค่าปรับ)
+     *    calendar_days = วันสายตามปฏิทิน (ก่อนหักวันปิด)
+     *    closed_days   = จำนวนวันปิดที่ถูกหักออก
      * ✅ Use case: returnBook(), admin/borrows.php (แสดง preview ค่าปรับ)
      */
     public function calculateFine(string $dueDate, ?string $returnDate = null): array
@@ -357,15 +365,45 @@ class BorrowService
         // 📝 คืนเกินกำหนด → คิดค่าปรับ
         //    ⚙️ แก้สูตรค่าปรับ → แก้ตรงนี้ หรือ config.php → FINE_PER_DAY
         if ($return > $due) {
-            $daysOverdue = $return->diff($due)->days;
-            // 💰 สูตร: วันเกิน × ค่าปรับต่อวัน
+            $calendarDays = $return->diff($due)->days;
+
+            // 📅 หักวันที่ห้องสมุดไม่เปิดทำการออก
+            //    🧠 เหตุผล: ยืมก่อนหยุดยาว ครบกำหนดระหว่างที่ปิด กลับมาคืนวันแรกที่เปิด
+            //       เดิมโดนปรับเต็มจำนวน ทั้งที่ไม่มีวันไหนให้มาคืนได้เลย
+            //       ปิดปรับปรุง 60 วัน = 600 บาท/เล่ม ซึ่งแพงกว่าหนังสือส่วนใหญ่
+            //
+            //    🔴 ช่วงที่นับต้องเป็น (วันครบกำหนด, วันคืน] ให้ตรงกับ diff()->days เป๊ะ
+            //       วันครบกำหนดไม่ถูกนับเป็นวันสาย ตัวหักจึงต้องไม่นับด้วย
+            //       ไม่งั้นจะหักเกิน/ขาดไป 1 วัน
+            //
+            //    ⚠️ ขอบเขตที่ตั้งใจ: หักเฉพาะวันปิดที่อยู่ในช่วงเกินกำหนด
+            //       **ไม่เลื่อนวันครบกำหนด** ถ้าครบกำหนดตรงวันปิดพอดี ยังถือว่าครบวันนั้น
+            //       (การเลื่อนวันครบกำหนดเป็นอีกพฤติกรรมที่ห้องสมุดบางแห่งใช้ — ยังไม่ทำ)
+            $closedDays = $this->closedDayRepo->countClosedDaysBetween(
+                $due->format('Y-m-d'),
+                $return->format('Y-m-d')
+            );
+
+            // 🛡️ กันติดลบไว้ — **วันนี้ยังแตะไม่ถึง** เพราะตัวนับวันปิดไล่อยู่ในหน้าต่างเดียวกัน
+            //    กับ $calendarDays พอดี ผลลัพธ์จึงไม่มีทางเกิน
+            //    เก็บไว้เพราะถ้าวันหลังมีใครเปลี่ยนหน้าต่างของฝั่งใดฝั่งหนึ่ง
+            //    ค่าปรับติดลบจะกลายเป็น "ระบบคืนเงินให้คนคืนช้า" ซึ่งแย่กว่าคิดเงินเกิน
+            $daysOverdue = max(0, $calendarDays - $closedDays);
+
+            // 💰 สูตร: วันสายที่ห้องสมุดเปิด × ค่าปรับต่อวัน
             $fineAmount = $daysOverdue * FINE_PER_DAY;
 
-            return ['days' => $daysOverdue, 'amount' => $fineAmount];
+            return [
+                'days' => $daysOverdue,
+                'amount' => $fineAmount,
+                // 📊 ส่งกลับไปด้วยเพื่อให้หน้าจออธิบายได้ว่าทำไมค่าปรับน้อยกว่าที่คิด
+                'calendar_days' => $calendarDays,
+                'closed_days' => $closedDays,
+            ];
         }
 
         // 📤 คืนตรงเวลาหรือก่อนกำหนด → ไม่มีค่าปรับ
-        return ['days' => 0, 'amount' => 0];
+        return ['days' => 0, 'amount' => 0, 'calendar_days' => 0, 'closed_days' => 0];
     }
 
     /**

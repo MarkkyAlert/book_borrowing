@@ -173,6 +173,22 @@ CREATE TABLE IF NOT EXISTS `password_resets` (
 -- =====================================================
 -- ตาราง: settings (ตั้งค่าระบบ)
 -- =====================================================
+-- ==========================================
+-- ตาราง closed_days — วันที่ห้องสมุดไม่เปิดทำการ
+-- ==========================================
+-- 🎯 ใช้หักออกจากการคิดค่าปรับ — ยืมคร่อมวันหยุดยาวแล้วโดนปรับทั้งที่ไม่มีวันให้มาคืน
+-- 🧠 เก็บเป็น "ช่วงวัน" ไม่ใช่วันเดี่ยว เพราะปิดปรับปรุง 60 วันจะกลายเป็น 60 แถว
+--    วันเดียว = ใส่ start_date เท่ากับ end_date
+CREATE TABLE IF NOT EXISTS `closed_days` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `start_date` DATE NOT NULL COMMENT 'วันแรกที่ปิด',
+    `end_date` DATE NOT NULL COMMENT 'วันสุดท้ายที่ปิด (วันเดียว = ใส่ค่าเดียวกับ start_date)',
+    `note` VARCHAR(255) NOT NULL COMMENT 'เหตุผล เช่น วันหยุดนักขัตฤกษ์ / ปิดปรับปรุง',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_closed_range` (`start_date`, `end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `settings` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `setting_key` VARCHAR(50) NOT NULL UNIQUE COMMENT 'Key',

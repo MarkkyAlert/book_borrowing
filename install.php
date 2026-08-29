@@ -297,6 +297,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $messages[] = "✅ สร้างตาราง `settings` สำเร็จ";
 
+        // 📝 สร้างตาราง closed_days — วันที่ห้องสมุดไม่เปิดทำการ
+        //    ใช้หักออกจากการคิดค่าปรับ · เก็บเป็นช่วงวัน วันเดียว = start = end
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `closed_days` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `start_date` DATE NOT NULL,
+                `end_date` DATE NOT NULL,
+                `note` VARCHAR(255) NOT NULL,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX `idx_closed_range` (`start_date`, `end_date`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $messages[] = "✅ สร้างตาราง `closed_days` สำเร็จ";
+
         // ── สร้างบัญชี Admin เริ่มต้น ──
         //    ใช้ password จาก form หรือสร้าง random (ถ้าเว้นว่างหรือสั้นเกินไป)
         $adminEmail = trim($_POST['admin_email'] ?? 'admin@library.com');

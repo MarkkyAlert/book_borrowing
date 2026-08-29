@@ -25,11 +25,56 @@ require_once __DIR__ . '/../bootstrap.php';
 // 🔒 [AUTH] Admin only — staff ไม่ควรเปลี่ยนการตั้งค่าระบบ (เช่น ชื่อหน่วยงาน, สีบัตร)
 requireAdmin();
 
+require_once __DIR__ . '/../app/Repositories/ClosedDayRepository.php';
+$pdo = getDB();
+// 📅 วันที่ห้องสมุดไม่เปิดทำการ — ใช้หักออกจากการคิดค่าปรับ
+$closedDayRepo = new \App\Repositories\ClosedDayRepository($pdo);
+
 // ── POST: บันทึกการตั้งค่า ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🛡️ [SECURITY] CSRF — ป้องกันถูกหลอกให้เปลี่ยนค่าระบบโดยไม่รู้ตัว
     if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
         setFlash('error', 'Token ไม่ถูกต้อง');
+    } elseif (($_POST['form'] ?? 'card') === 'closed_add') {
+        // ══════════════════════════════════════════════════
+        // 📅 [วันปิดทำการ] เพิ่มช่วงวันที่ห้องสมุดไม่เปิด
+        // ══════════════════════════════════════════════════
+        $start = trim($_POST['start_date'] ?? '');
+        $end   = trim($_POST['end_date'] ?? '');
+        $note  = trim($_POST['note'] ?? '');
+        $errors = [];
+
+        // 🛡️ [VALIDATION] รูปแบบวันที่ต้องเป็น Y-m-d จริง ๆ
+        //    checkdate() กันวันที่ที่มีอยู่ในรูปแบบแต่ไม่มีจริง เช่น 2026-02-30
+        $parse = function (string $d): ?array {
+            if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $m)) return null;
+            return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $m : null;
+        };
+        if (!$parse($start)) $errors[] = 'วันเริ่มต้นไม่ถูกต้อง';
+        if (!$parse($end))   $errors[] = 'วันสิ้นสุดไม่ถูกต้อง';
+        if ($note === '')    $errors[] = 'กรุณากรอกเหตุผล (เช่น วันหยุดนักขัตฤกษ์ / ปิดปรับปรุง)';
+        if (mb_strlen($note) > 255) $errors[] = 'เหตุผลต้องไม่เกิน 255 ตัวอักษร';
+
+        // 🔴 วันสิ้นสุดต้องไม่มาก่อนวันเริ่ม — ไม่งั้นได้ช่วงที่ไม่มีวันไหนอยู่ในนั้นเลย
+        //    บันทึกไปก็ไม่มีผลกับค่าปรับ แต่ขึ้นในตารางเหมือนตั้งค่าสำเร็จ = เข้าใจผิด
+        if (!$errors && $start > $end) {
+            $errors[] = 'วันสิ้นสุดต้องไม่มาก่อนวันเริ่มต้น';
+        }
+
+        if ($errors) {
+            setFlash('error', implode(' | ', $errors));
+        } else {
+            $closedDayRepo->create($start, $end, $note);
+            setFlash('success', 'บันทึกวันปิดทำการแล้ว — มีผลกับการคิดค่าปรับทันที รวมรายการที่ยืมไปก่อนหน้านี้');
+        }
+        redirect('settings.php');
+    } elseif (($_POST['form'] ?? 'card') === 'closed_delete') {
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id > 0) {
+            $closedDayRepo->delete($id);
+            setFlash('success', 'ลบวันปิดทำการแล้ว');
+        }
+        redirect('settings.php');
     } elseif (($_POST['form'] ?? 'card') === 'rules') {
         // ══════════════════════════════════════════════════
         // 📥 ฟอร์ม "กฎการยืม-คืน"
@@ -183,6 +228,110 @@ require_once __DIR__ . '/header.php';
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- ══ วันปิดทำการ ══ -->
+        <?php // 📅 ค่าปรับเดิมนับทุกวันตามปฏิทิน ไม่สนใจว่าห้องสมุดเปิดหรือไม่
+              //    ยืมก่อนหยุดยาว ครบกำหนดระหว่างที่ปิด กลับมาคืนวันแรกที่เปิด → โดนปรับ
+              //    ทั้งที่ไม่มีวันไหนให้มาคืนได้เลย ?>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h5 class="font-bold text-gray-800 flex items-center">
+                    <i class="bi bi-calendar-x mr-2 text-primary-600"></i>วันที่ห้องสมุดไม่เปิดทำการ
+                </h5>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    วันที่ระบุไว้ที่นี่จะ<strong>ไม่ถูกคิดค่าปรับ</strong> — ใช้ได้ทั้งวันหยุดวันเดียวและช่วงปิดปรับปรุงยาว
+                </p>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <form method="POST" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <input type="hidden" name="form" value="closed_add">
+
+                    <div class="sm:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ตั้งแต่วันที่</label>
+                        <input type="date" name="start_date" required
+                               class="w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11">
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ถึงวันที่</label>
+                        <input type="date" name="end_date" required
+                               class="w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11">
+                        <p class="mt-1 text-xs text-gray-500">ปิดวันเดียว = ใส่วันเดียวกันทั้งสองช่อง</p>
+                    </div>
+                    <div class="sm:col-span-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">เหตุผล</label>
+                        <input type="text" name="note" required maxlength="255"
+                               placeholder="เช่น วันหยุดนักขัตฤกษ์ / ปิดปรับปรุง"
+                               class="w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button type="submit" class="w-full h-11 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors">
+                            <i class="bi bi-plus-lg mr-1"></i>เพิ่ม
+                        </button>
+                    </div>
+                </form>
+
+                <?php $closedDays = $closedDayRepo->findAll(); ?>
+                <?php if (!$closedDays): ?>
+                    <div class="text-center py-8 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+                        <i class="bi bi-calendar-check text-4xl mb-2 inline-block text-gray-300"></i>
+                        <p class="text-sm">ยังไม่ได้ระบุวันปิด — ตอนนี้ค่าปรับนับทุกวันตามปฏิทิน</p>
+                    </div>
+                <?php else: ?>
+                    <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table class="w-full text-sm text-left sticky-action">
+                            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th class="px-4 py-3 font-medium">ช่วงวันที่</th>
+                                    <th class="px-4 py-3 font-medium">จำนวนวัน</th>
+                                    <th class="px-4 py-3 font-medium">เหตุผล</th>
+                                    <th class="px-4 py-3 font-medium text-right">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <?php foreach ($closedDays as $cd): ?>
+                                    <?php
+                                    $days = (new DateTime($cd['start_date']))->diff(new DateTime($cd['end_date']))->days + 1;
+                                    $rangeText = $cd['start_date'] === $cd['end_date']
+                                        ? formatDate($cd['start_date'])
+                                        : formatDate($cd['start_date']) . ' – ' . formatDate($cd['end_date']);
+                                    ?>
+                                    <tr class="hover:bg-gray-50/50 transition-colors">
+                                        <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-800"><?= e($rangeText) ?></td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-gray-600"><?= number_format($days) ?> วัน</td>
+                                        <td class="px-4 py-3 text-gray-600"><?= e($cd['note']) ?></td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-right">
+                                            <?php // 🔴 [F-47] กล่องยืนยันต้องบอกว่าลบช่วงไหน ?>
+                                            <form method="POST" class="inline-block"
+                                                  onsubmit="return confirmSubmit(this, <?= jsString("ลบวันปิดทำการ
+{$rangeText}
+{$cd['note']}
+
+ค่าปรับของช่วงนี้จะถูกคิดใหม่ทันที") ?>, {title: 'ลบวันปิดทำการ', confirmText: 'ลบ', confirmClass: 'danger'})">
+                                                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                                <input type="hidden" name="form" value="closed_delete">
+                                                <input type="hidden" name="id" value="<?= (int) $cd['id'] ?>">
+                                                <button type="submit" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 leading-relaxed">
+                        <i class="bi bi-info-circle mr-1"></i>
+                        <strong>หักเฉพาะวันที่เลยกำหนดคืนแล้ว</strong> — ไม่ได้เลื่อนวันครบกำหนดให้
+                        ถ้าครบกำหนดตรงกับวันปิดพอดี ระบบยังถือว่าครบกำหนดวันนั้น
+                        แต่วันถัดไปที่ปิดจะไม่ถูกคิดเงิน
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 

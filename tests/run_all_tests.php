@@ -203,6 +203,7 @@ $gapSuites = [
     'มือถือ: ปุ่มอยู่ในจอ'       => 'test_mobile_layout.php',      // F-49 ตรึงคอลัมน์ปุ่มบนจอแคบ
     'รายงานของบรรณารักษ์'        => 'test_reports.php',            // F-50 หนังสือไม่มีการยืม/อายุหนี้/ยอดรวม
     'สิทธิ์เขียนโฟลเดอร์รูป'     => 'test_upload_writable.php',    // F-54 ตัวติดตั้งเตือนก่อน + บอกสาเหตุจริง
+    'วันปิดทำการ'                => 'test_closed_days.php',        // ไม่คิดค่าปรับวันที่ห้องสมุดปิด
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว
