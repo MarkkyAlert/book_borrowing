@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `rate_limits` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `key_name` VARCHAR(255) NOT NULL,
+                `key_name` VARCHAR(255) NOT NULL COMMENT 'action + IP เช่น login_127.0.0.1',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 INDEX `idx_key_name` (`key_name`),
                 INDEX `idx_created_at` (`created_at`)
@@ -274,10 +274,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `password_resets` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `email` VARCHAR(100) NOT NULL,
-                `token` VARCHAR(64) NOT NULL UNIQUE,
-                `expires_at` DATETIME NOT NULL,
-                `used` TINYINT(1) NOT NULL DEFAULT 0,
+                `email` VARCHAR(100) NOT NULL COMMENT 'อีเมลที่ขอรีเซ็ต',
+                `token` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Token สำหรับรีเซ็ต',
+                `expires_at` DATETIME NOT NULL COMMENT 'วันหมดอายุ',
+                `used` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'ใช้แล้วหรือยัง',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 INDEX `idx_email` (`email`),
                 INDEX `idx_token` (`token`),

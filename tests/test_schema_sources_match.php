@@ -75,7 +75,7 @@ $DB_A    = 'bb_schema_chk_install';
 $DB_B    = 'bb_schema_chk_sql';
 // ⚠️ เพิ่มตารางใหม่ → **ต้องเพิ่มชื่อในลิสต์นี้ด้วย** ไม่งั้นชุดนี้จะผ่านแบบไม่ได้ตรวจอะไรเลย
 //    (เจอเองตอนเพิ่ม closed_days: เทสต์เขียวทั้งที่ยังไม่ได้เทียบตารางใหม่เลย)
-$TABLES  = ['users', 'categories', 'books', 'borrows', 'reservations', 'payments', 'settings', 'closed_days'];
+$TABLES  = ['users', 'categories', 'books', 'borrows', 'reservations', 'payments', 'settings', 'closed_days', 'password_resets', 'rate_limits'];
 
 // 🧹 ลบฐานข้อมูลชั่วคราวเสมอ แม้เจอ fatal error กลางคัน
 $cleanupDone = false;
