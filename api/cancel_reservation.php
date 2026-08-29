@@ -15,6 +15,13 @@ if (!isLoggedIn()) {
     redirect(APP_URL . '/login.php');
 }
 
+// 🔑 [F-53] ยังไม่เปลี่ยนรหัสเริ่มต้น = ยังทำอะไรในนามบัญชีนี้ไม่ได้
+//    endpoint นี้ redirect (ไม่ใช่ JSON) เพราะถูกเรียกจากฟอร์มในหน้า my_reservations.php
+if (mustChangePassword()) {
+    setFlash('error', 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน');
+    redirect(APP_URL . '/change_password.php');
+}
+
 // 🛡️ [SECURITY] บังคับ POST — ป้องกันยกเลิกผ่าน GET link
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     setFlash('error', 'Method not allowed');

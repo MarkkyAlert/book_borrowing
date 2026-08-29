@@ -148,7 +148,7 @@ class UserRepository
         // 📝 SQL: ดึง user ตาม ID (ไม่รวม password)
         // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash (ปลอดภัย)
         $stmt = $this->pdo->prepare("
-            SELECT id, name, email, phone, role, created_at 
+            SELECT id, name, email, phone, role, must_change_password, created_at 
             FROM users WHERE id = ?
         ");
         $stmt->execute([$id]);
@@ -243,8 +243,8 @@ class UserRepository
         // 🔴 $data['password'] ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
         //    Service layer ต้อง password_hash() ก่อนเรียก
         $stmt = $this->pdo->prepare("
-            INSERT INTO users (name, email, phone, password, role)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (name, email, phone, password, role, must_change_password)
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
 
         // 🚀 bind ค่าทั้งหมด
@@ -253,7 +253,10 @@ class UserRepository
             $data['email'],             // อีเมล (บังคับ, UNIQUE)
             $data['phone'] ?? null,     // เบอร์โทร (ไม่บังคับ)
             $data['password'],          // password hash (บังคับ, ต้องเป็น hash!)
-            $data['role'] ?? 'member'   // role (default: member)
+            $data['role'] ?? 'member',  // role (default: member)
+            // 🔑 [F-53] default 0 = ไม่บังคับ — คนที่ตั้งรหัสเอง (register.php) ต้องไม่โดน
+            //    ผู้เรียกที่ "รู้รหัสของผู้ใช้" (import, admin สร้างให้) ต้องส่ง 1 มาเอง
+            !empty($data['must_change_password']) ? 1 : 0
         ]);
 
         // 📤 คืน user ID ที่สร้าง (AUTO_INCREMENT)
@@ -326,7 +329,15 @@ class UserRepository
         // 📝 SQL: เปลี่ยนเฉพาะ password (ไม่แตะข้อมูลอื่น)
         // 🔴 $hashedPassword ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
         //    Service layer ต้อง password_hash() ก่อนเรียก
-        $stmt = $this->pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        // 🔑 [F-53] เคลียร์ธง "ต้องเปลี่ยนรหัส" พร้อมกันในคำสั่งเดียว
+        //    🧠 ทำที่นี่จุดเดียว เพราะเมธอดนี้เป็นทางผ่าน **เดียว** ของการเปลี่ยนรหัสทุกทาง:
+        //       AuthService::changePassword() (หน้าโปรไฟล์ + หน้าบังคับเปลี่ยน)
+        //       AuthService::resetPassword()  (ลิงก์ลืมรหัสผ่าน)
+        //    ถ้าไปเคลียร์ที่ชั้น Service จะต้องจำให้ครบทุกทาง — ลืมทางใดทางหนึ่งแล้ว
+        //    ผู้ใช้จะติดอยู่ในหน้าบังคับเปลี่ยนรหัสวนไม่จบ ทั้งที่เปลี่ยนสำเร็จแล้ว
+        $stmt = $this->pdo->prepare("
+            UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?
+        ");
         return $stmt->execute([$hashedPassword, $id]);
     }
 

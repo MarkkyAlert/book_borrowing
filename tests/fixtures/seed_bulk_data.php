@@ -150,12 +150,14 @@ $madeU = 0;
 for ($i = 1; $i <= $nMembers; $i++) {
     $batch[] = [B_TAG . "สมาชิก $i", "bulk_$i" . B_MAIL, $hash, '08' . str_pad((string) $i, 8, '0', STR_PAD_LEFT)];
     if (count($batch) >= 500 || $i === $nMembers) {
-        $ph  = implode(',', array_fill(0, count($batch), "(?,?,?,?,'member')"));
+        // 🔑 [F-53] must_change_password = 0 โดยตั้งใจ — ชุด bulk ใช้วัด performance
+        //    ถ้าติดธง ทุกบัญชีจะเด้งไปหน้าเปลี่ยนรหัสจนวัดอะไรไม่ได้
+        $ph  = implode(',', array_fill(0, count($batch), "(?,?,?,?,'member',0)"));
         $vals = [];
         foreach ($batch as $b) {
             array_push($vals, $b[0], $b[1], $b[2], $b[3]);
         }
-        $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES $ph")->execute($vals);
+        $pdo->prepare("INSERT INTO users (name, email, password, phone, role, must_change_password) VALUES $ph")->execute($vals);
         $madeU += count($batch);
         $batch = [];
     }

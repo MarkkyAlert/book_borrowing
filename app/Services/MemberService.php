@@ -123,7 +123,7 @@ class MemberService
      * 🧠 เหตุผล: คืน plain password ครั้งเดียวสำหรับแสดงให้ admin เห็น
      * ✅ Use case: admin/member_form.php POST, register.php, api/add_member.php
      */
-    public function createMember(array $data): array
+    public function createMember(array $data, bool $mustChangePassword = false): array
     {
         // 📝 Step 1: Validate ผ่าน shared helper (Single Source of Truth)
         //    validateMemberData() อยู่ใน functions.php — ใช้ร่วมกับ import
@@ -146,7 +146,10 @@ class MemberService
             'email' => trim($data['email']),
             'phone' => trim($data['phone'] ?? ''),
             'password' => hashPassword($password),
-            'role' => 'member'
+            'role' => 'member',
+            // 🔑 [F-53] default false = คนที่สมัครเอง (register.php) ตั้งรหัสเองอยู่แล้ว ไม่ต้องบังคับ
+            //    ผู้เรียกที่ admin เป็นคนรู้รหัส (member_form.php, api/add_member.php) ส่ง true มา
+            'must_change_password' => $mustChangePassword ? 1 : 0
         ]);
 
         // 📤 คืน plain password ครั้งเดียวสำหรับแสดงให้ admin เห็น
@@ -386,8 +389,11 @@ class MemberService
      * 🧠 เหตุผล: update เฉพาะ name + phone (ไม่เปลี่ยน password เดิม)
      * ✅ Use case: admin/import_members.php
      */
-    public function importMember(array $data, string $defaultPassword = '123456'): array
+    public function importMember(array $data, ?string $defaultPassword = null): array
     {
+        // 🔑 [F-53] รหัสเริ่มต้นมาจาก config ไม่ฝังในโค้ดแล้ว — ลูกค้าตั้งผ่าน .env ได้
+        $defaultPassword = $defaultPassword ?? IMPORT_DEFAULT_PASSWORD;
+
         // 📝 Step 1: trim ข้อมูล
         $email = trim($data['email']);
         $name = trim($data['name']);
@@ -412,13 +418,18 @@ class MemberService
             return ['action' => 'updated', 'id' => $existing['id']];
         } else {
             // ✨ ยังไม่มี → INSERT ด้วย default password
-            //    ⚠️ ผู้ใช้ควรเปลี่ยน password หลัง login ครั้งแรก
+            //    🔑 [F-53] ทุกคนได้รหัสเดียวกัน จึง **บังคับเปลี่ยนตอนล็อกอินครั้งแรก**
+            //       ไม่งั้นรหัสนี้กลายเป็นกุญแจร่วมที่ใช้ได้ตลอดกาล
+            //       และอีเมลของห้องสมุดโรงเรียนมักเดาได้เป็นชุด (std0001@, std0002@, ...)
+            //    ⚠️ ตั้งเฉพาะแถวที่ **สร้างใหม่** — แถวที่ upsert ไม่แตะรหัสเดิมอยู่แล้ว
+            //       จึงต้องไม่ไปบังคับคนที่ตั้งรหัสของตัวเองไปนานแล้ว
             $memberId = $this->userRepo->create([
                 'name' => $name,
                 'email' => $email,
                 'password' => hashPassword($defaultPassword),
                 'phone' => $phone,
-                'role' => 'member'
+                'role' => 'member',
+                'must_change_password' => 1
             ]);
             return ['action' => 'created', 'id' => $memberId];
         }

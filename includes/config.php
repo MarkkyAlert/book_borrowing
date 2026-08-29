@@ -83,6 +83,13 @@ define('ADMIN_EMAIL', env('ADMIN_EMAIL', 'admin@library.com'));
 // 🛡️ Security Settings — แก้ได้แต่ต้องเข้าใจผลกระทบ
 //    ⚠️ ลด rate limit เกินไป อาจโดน brute force ได้
 define('MIN_PASSWORD_LENGTH', (int) env('MIN_PASSWORD_LENGTH', 6));
+
+// 🔑 [F-53] รหัสผ่านเริ่มต้นของสมาชิกที่ถูก "นำเข้า" หรือ "admin สร้างให้"
+//    เดิมฝัง '123456' ไว้ในโค้ด (MemberService::importMember) ทำให้ลูกค้าเปลี่ยนไม่ได้
+//    🔴 ค่านี้ไม่ใช่ความปลอดภัย — ความปลอดภัยมาจากการ **บังคับเปลี่ยนตอนล็อกอินครั้งแรก**
+//       (users.must_change_password) เปลี่ยนค่านี้เป็นอย่างอื่นก็ยังเป็นรหัสร่วมอยู่ดี
+//    ใช้ที่: MemberService::importMember() · AuthService::changePassword() (ห้ามตั้งกลับมาเป็นค่านี้)
+define('IMPORT_DEFAULT_PASSWORD', (string) env('IMPORT_DEFAULT_PASSWORD', '123456'));
 define('RATE_LIMIT_MAX_ATTEMPTS', (int) env('RATE_LIMIT_MAX_ATTEMPTS', 5));     // 📝 จำนวนครั้งสูงสุดต่อ window
 define('RATE_LIMIT_WINDOW_MINUTES', (int) env('RATE_LIMIT_WINDOW_MINUTES', 15)); // 📝 ช่วงเวลา rate limit (นาที)
 // 🔎 rate limit ของ API ค้นหา แยกจากตัวอื่นเพราะพฤติกรรมต่างกันมาก

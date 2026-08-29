@@ -103,12 +103,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 setFlash('success', 'อัปเดตข้อมูลสมาชิกสำเร็จ');
             } else {
                 // [WRITE] สร้างสมาชิกใหม่ — ถ้าไม่กรอกรหัสผ่าน Service จะ auto-generate ให้
+                //    🔑 [F-53] ส่ง true = บังคับเปลี่ยนรหัสตอนล็อกอินครั้งแรก
+                //       เพราะทางนี้ **เจ้าหน้าที่เป็นคนรู้รหัส** (กรอกเอง หรือระบบสุ่มแล้วโชว์ให้ดู)
+                //       สมาชิกจึงต้องตั้งรหัสที่มีแต่ตัวเองรู้ก่อนใช้งานจริง
                 $memberService->createMember([
                     'name' => $member['name'],
                     'email' => $member['email'],
                     'phone' => $member['phone'],
                     'password' => $password
-                ]);
+                ], true);
                 setFlash('success', 'เพิ่มสมาชิกสำเร็จ');
             }
             redirectToList('members.php', LIST_STATE_MEMBERS, $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET, 'ret_');

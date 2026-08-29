@@ -72,6 +72,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_name'] = $user['name'];
                 $_SESSION['user_email'] = $user['email'];
                 $_SESSION['role'] = $user['role'];
+                // 🔑 [F-53] ธง "ต้องเปลี่ยนรหัสก่อนใช้งาน" — อ่านจาก DB ตอน login ครั้งเดียว
+                //    ด่าน requireLogin() จะอ่านจาก session ต่อ ไม่ต้องยิง DB ทุกหน้า
+                $_SESSION['must_change_password'] = !empty($user['must_change_password']);
+
+                // 🔑 [F-53] ยังใช้รหัสเริ่มต้นที่คนอื่นก็รู้ → พาไปเปลี่ยนก่อน ไม่ต้องต้อนรับ
+                //    🧠 ต้องดักที่นี่ด้วย ไม่ใช่ปล่อยให้ requireLogin() ของหน้าปลายทางดัก
+                //       เพราะ member ถูกส่งไป index.php ซึ่ง **ไม่ต้องล็อกอิน** จึงไม่มีด่าน
+                //       ปล่อยไว้จะได้หน้าแรกที่ใช้งานได้ปกติทั้งที่ยังไม่เปลี่ยนรหัส
+                //    📝 ไม่ต้อง setFlash ที่นี่ — หน้าปลายทางอธิบายเหตุผลไว้ในตัวแล้ว
+                //       ใส่ทั้งสองที่จะได้ข้อความซ้ำกันสองกล่องซ้อนกันบนหน้าเดียว
+                if (!empty($user['must_change_password'])) {
+                    redirect(APP_URL . '/change_password.php');
+                }
 
                 setFlash('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' . $user['name']);
 

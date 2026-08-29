@@ -43,11 +43,14 @@ try {
     // 📝 เรียก Service (Single Source of Truth)
     //    MemberService จัดการ: validate, duplicate check, password generation, hash, INSERT
     //    Controller ไม่ต้องทำอะไรเพิ่มเติม
+    //    🔑 [F-53] true = บังคับเปลี่ยนรหัสตอนล็อกอินครั้งแรก
+    //       endpoint นี้สุ่มรหัสแล้วคืนให้เจ้าหน้าที่อ่านออกเสียงให้สมาชิกฟัง
+    //       = มีคนอื่นรู้รหัสนั้นเสมอ จึงต้องบังคับเปลี่ยน
     $result = $memberService->createMember([
         'name' => trim($_POST['name'] ?? ''),
         'email' => trim($_POST['email'] ?? ''),
         'phone' => trim($_POST['phone'] ?? '')
-    ]);
+    ], true);
     
     // 📤 คืน JSON สำเร็จ
     // 🔑 คืนรหัสผ่านที่ระบบสุ่มให้ กลับไปแสดงบนหน้าจอ "ครั้งเดียว"

@@ -367,12 +367,17 @@ while (count($memberRows) < $needMembers) {
 $memberIds = [];
 $mNotes    = [];
 foreach (array_chunk($memberRows, 200) as $chunk) {
-    $ph = implode(',', array_fill(0, count($chunk), '(?,?,?,?,?)'));
+    // 🔑 [F-53] must_change_password = 0 โดยตั้งใจ — ระบุให้ชัด ไม่พึ่ง DEFAULT ของคอลัมน์
+    //    ชุดนี้จำลอง "สมาชิกที่ใช้งานระบบอยู่แล้ว" (ตั้งรหัสของตัวเองไปนานแล้ว)
+    //    รหัสในไฟล์นี้เหมือนกันทุกคนเพื่อให้เทสต์ล็อกอินได้เท่านั้น
+    //    เส้นทาง "เพิ่งนำเข้า ยังไม่เปลี่ยนรหัส" มีชุดทดสอบของตัวเองที่สร้าง fixture เอง
+    //    (tests/test_must_change_password.php) — ถ้าติดธงตรงนี้ เทสต์ที่ล็อกอินเป็นสมาชิกจะเด้งออกหมด
+    $ph = implode(',', array_fill(0, count($chunk), '(?,?,?,?,?,0)'));
     $vals = [];
     foreach ($chunk as $m) {
         array_push($vals, $m['name'], $m['mail'], $hash, '08' . mt_rand(10000000, 99999999), 'member');
     }
-    $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES $ph")->execute($vals);
+    $pdo->prepare("INSERT INTO users (name, email, password, phone, role, must_change_password) VALUES $ph")->execute($vals);
     $first = (int) $pdo->lastInsertId();
     foreach ($chunk as $i => $m) {
         $memberIds[] = $first + $i;

@@ -23,6 +23,9 @@ if (!isLoggedIn()) {
     exit;
 }
 
+// 🔑 [F-53] ยังไม่เปลี่ยนรหัสเริ่มต้น = ยังจองในนามบัญชีนี้ไม่ได้
+requirePasswordChangedApi();
+
 // 🛡️ [SECURITY] บังคับ POST — ป้องกัน CSRF via GET + ป้องกัน request ถูก cache
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

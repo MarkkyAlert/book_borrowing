@@ -125,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `password` VARCHAR(255) NOT NULL,
                 `phone` VARCHAR(20) DEFAULT NULL,
                 `role` ENUM('member', 'admin', 'staff') NOT NULL DEFAULT 'member',
+                `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_email` (`email`),

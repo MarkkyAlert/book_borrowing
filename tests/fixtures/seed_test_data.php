@@ -286,7 +286,12 @@ try {
     // ── ผู้ใช้ ──
     $userId = [];
     $hash = hashPassword(T_PASSWORD);
-    $stmt = $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, ?, ?)");
+    // 🔑 [F-53] must_change_password = 0 โดยตั้งใจ — ระบุให้ชัด ไม่พึ่ง DEFAULT ของคอลัมน์
+    //    ชุดนี้จำลอง "สมาชิกที่ใช้งานระบบอยู่แล้ว" (ตั้งรหัสของตัวเองไปนานแล้ว)
+    //    รหัสในไฟล์นี้เหมือนกันทุกคนเพื่อให้เทสต์ล็อกอินได้เท่านั้น
+    //    เส้นทาง "เพิ่งนำเข้า ยังไม่เปลี่ยนรหัส" มีชุดทดสอบของตัวเองที่สร้าง fixture เอง
+    //    (tests/test_must_change_password.php) — ถ้าติดธงตรงนี้ เทสต์ที่ล็อกอินเป็นสมาชิกจะเด้งออกหมด
+    $stmt = $pdo->prepare("INSERT INTO users (name, email, password, phone, role, must_change_password) VALUES (?, ?, ?, ?, ?, 0)");
     $i = 0;
     foreach ($USERS as $key => $u) {
         $email = 't_' . substr($key, 2) . T_MAIL;

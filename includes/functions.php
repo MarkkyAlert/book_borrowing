@@ -191,16 +191,44 @@ function isStaff(): bool
 
 /**
  * ==========================================================================
+ * 🎯 จุดประสงค์: ผู้ใช้คนนี้ต้องเปลี่ยนรหัสผ่านก่อนใช้งานหรือยัง (F-53)
+ * ==========================================================================
+ * 🧠 อ่านจาก session ที่ตั้งไว้ตอน login — ไม่ยิง DB ทุก request
+ *    (ด่านนี้ถูกเรียกทุกหน้า ถ้ายิง DB จะเพิ่ม query ให้ทั้งระบบโดยไม่จำเป็น)
+ *
+ * ⚠️ ผลข้างเคียงที่ยอมรับ: คนที่ล็อกอินค้างไว้ *ก่อน* migration รัน จะไม่มีธงใน session
+ *    จึงยังใช้งานได้จนกว่าจะ logout — ล็อกอินรอบหน้าถึงจะโดนบังคับ
+ *    ไม่ใช่ช่องโหว่ เพราะคนนั้นรู้รหัสผ่านอยู่แล้วและกำลังใช้ session ของตัวเอง
+ */
+function mustChangePassword(): bool
+{
+    return !empty($_SESSION['must_change_password']);
+}
+
+/**
+ * ==========================================================================
  * 🎯 จุดประสงค์: บังคับ login (ถ้ายังไม่ login → redirect login.php)
  * ==========================================================================
  * ✅ Use case: ใส่บรรทัดแรกของหน้าที่ต้อง login
+ *
+ * 📥 @param bool $enforcePasswordChange
+ *    true  (default) = ถ้ายังไม่เปลี่ยนรหัสเริ่มต้น ให้เด้งไปหน้าเปลี่ยนรหัส
+ *    false = ยกเว้นด่านนี้ — ใช้ได้ที่ `change_password.php` **ที่เดียว**
+ *            ถ้าหน้านั้นบังคับด้วย จะเด้งหาตัวเองไม่รู้จบ
  */
-function requireLogin(): void
+function requireLogin(bool $enforcePasswordChange = true): void
 {
     // 📝 ถ้ายังไม่ login → flash error + redirect ไป login.php
     if (!isLoggedIn()) {
         setFlash('error', 'กรุณาเข้าสู่ระบบก่อน');
         redirect(APP_URL . '/login.php');
+    }
+
+    // 🔑 [F-53] ยังใช้รหัสเริ่มต้นที่คนอื่นก็รู้ → ทำอะไรไม่ได้จนกว่าจะเปลี่ยน
+    //    🧠 แขวนไว้ที่นี่จุดเดียวเพราะเป็นคอขวดของทุกหน้าที่ต้องล็อกอิน (21 หน้า)
+    //       ถ้าไปใส่ทีละหน้า วันหลังมีหน้าใหม่แล้วลืมใส่ = ช่องโหว่เงียบ ๆ
+    if ($enforcePasswordChange && mustChangePassword()) {
+        redirect(APP_URL . '/change_password.php');
     }
 }
 
@@ -249,6 +277,28 @@ function requireStaffApi(): void
         echo json_encode(['success' => false, 'message' => 'Unauthorized']);
         exit;
     }
+    requirePasswordChangedApi();
+}
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: ด่าน "ต้องเปลี่ยนรหัสก่อน" สำหรับ API (JSON 403 แทน redirect)
+ * ==========================================================================
+ * 🔴 [F-53] จำเป็นต้องมีแยกต่างหาก เพราะ endpoint ใน `api/` **ไม่ได้เรียก
+ *    requireLogin()** — มันเช็ค `isLoggedIn()` เองบ้าง เรียก requireStaffApi() บ้าง
+ *    ถ้ากันแค่หน้าเว็บ คนที่ยึดบัญชีด้วยรหัสเริ่มต้นจะยังยิง API ตรง ๆ ได้
+ *    (จองหนังสือ / ยกเลิกการจอง ในนามเจ้าของบัญชี) ทั้งที่หน้าเว็บเด้งเขาออกไปแล้ว
+ */
+function requirePasswordChangedApi(): void
+{
+    if (mustChangePassword()) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 /**
@@ -264,6 +314,7 @@ function requireAdminApi(): void
         echo json_encode(['success' => false, 'message' => 'Unauthorized']);
         exit;
     }
+    requirePasswordChangedApi();
 }
 
 /**
