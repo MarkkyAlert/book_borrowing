@@ -39,6 +39,8 @@ $reservationService->expireOverdueReservations();
 // 📊 ดึงสถิติ summary cards — query เดียวได้หลายค่า (optimized)
 $stats = $dashboardService->getCardStats();
 $totalBooks = $stats['total_books'];
+// 📖 [F-50] จำนวนชื่อเรื่อง — คนละตัวกับจำนวนเล่ม ตอนทำสำมะโนต้องใช้ทั้งคู่
+$totalTitles = $stats['total_titles'];
 $availableBooks = $stats['available_books'];
 $borrowedBooks = $stats['borrowed_books'];
 $totalMembers = $stats['total_members'];
@@ -111,8 +113,15 @@ require_once __DIR__ . '/header.php';
     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
         <div class="flex justify-between items-start">
             <div>
-                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">หนังสือทั้งหมด</p>
+                <?php // 🔴 [F-50] เดิมเขียนว่า "หนังสือทั้งหมด" เฉย ๆ ซึ่งอ่านได้สองแบบ
+                      //    ตัวเลขที่แสดงคือจำนวน **เล่ม** (นับซ้ำเล่มที่มีหลายก๊อปปี้)
+                      //    ส่วนจำนวน **ชื่อเรื่อง** ไม่เคยปรากฏบนหน้านี้เลย
+                      //    ทั้งที่ตอนทำสำมะโนหนังสือต้องใช้ทั้งสองตัวคู่กัน ?>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">หนังสือทั้งหมด (เล่ม)</p>
                 <h3 class="text-2xl font-bold text-gray-800"><?= number_format($totalBooks) ?></h3>
+                <p class="text-xs text-gray-500 mt-1">
+                    <i class="bi bi-journals mr-1"></i><?= number_format($totalTitles) ?> ชื่อเรื่อง
+                </p>
             </div>
             <div class="p-3 bg-blue-100 text-blue-600 rounded-xl">
                 <i class="bi bi-book text-xl"></i>
@@ -678,7 +687,8 @@ function exportDashboardPDF() {
             
             <div class="stats">
                 <div class="stat-card"><div class="stat-value"><?= number_format($totalMembers) ?></div><div class="stat-label">สมาชิกทั้งหมด</div></div>
-                <div class="stat-card"><div class="stat-value"><?= number_format($totalBooks) ?></div><div class="stat-label">หนังสือทั้งหมด</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($totalBooks) ?></div><div class="stat-label">หนังสือทั้งหมด (เล่ม)</div></div>
+                <div class="stat-card"><div class="stat-value"><?= number_format($totalTitles) ?></div><div class="stat-label">ชื่อเรื่อง</div></div>
                 <div class="stat-card"><div class="stat-value"><?= number_format($availableBooks) ?></div><div class="stat-label">พร้อมให้ยืม</div></div>
                 <div class="stat-card"><div class="stat-value"><?= number_format($activeBorrows) ?></div><div class="stat-label">กำลังยืม</div></div>
                 <div class="stat-card"><div class="stat-value"><?= number_format($overdueBorrows) ?></div><div class="stat-label">เกินกำหนด</div></div>

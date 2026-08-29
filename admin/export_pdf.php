@@ -184,6 +184,10 @@ $orgName = getSetting('org_name', 'ระบบห้องสมุด');
             }
 
             /* 🖨️ [PRINT] ส่วนสรุปท้ายรายงานต้องไม่ถูกแยกจากกัน */
+            .total-row td {
+                background: #f1f5f9;
+                border-top: 2px solid #94a3b8;
+            }
             .summary {
                 break-inside: avoid;
                 page-break-inside: avoid;
@@ -246,6 +250,27 @@ $orgName = getSetting('org_name', 'ระบบห้องสมุด');
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
+                <?php
+                // 🔢 [F-50] แถวยอดรวมท้ายตาราง — ต้องมีในไฟล์ที่พิมพ์ออกไปด้วย
+                //    ไม่ใช่แค่หน้าเว็บ ไม่งั้นบรรณารักษ์ที่ถือกระดาษไปประชุมก็ยังต้องบวกเอง
+                $totals = reportColumnTotals($data);
+                ?>
+                <?php if (array_filter($totals, fn($t) => $t !== null)): ?>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2"><strong>รวมทั้งหมด</strong></td>
+                        <?php
+                        $totalKeys = array_keys($totals);
+                        array_shift($totalKeys);   // ช่องแรกถูก colspan=2 กลืนไปแล้ว
+                        ?>
+                        <?php foreach ($totalKeys as $key): ?>
+                            <td class="<?= in_array($key, REPORT_COUNT_COLUMNS, true) ? 'text-center' : '' ?><?= in_array($key, REPORT_MONEY_COLUMNS, true) ? 'text-right' : '' ?>">
+                                <strong><?= e(formatReportTotal($key, $totals[$key])) ?></strong>
+                            </td>
+                        <?php endforeach; ?>
+                    </tr>
+                </tfoot>
+                <?php endif; ?>
             </table>
 
             <div class="summary">

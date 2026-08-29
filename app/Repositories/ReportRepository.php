@@ -770,6 +770,11 @@ class ReportRepository
                    -- 🧠 หนังสือที่แจ้งหายไม่มี return_date → แสดงวันที่แจ้งแทน ไม่งั้นช่องนี้ว่าง
                    DATE_FORMAT(COALESCE(b.return_date, b.lost_reported_at), '%d/%m/%Y') as return_date,
                    b.status,
+                   -- 🔴 [F-50] อายุหนี้ — เรียงตามยอดเงินอย่างเดียวไม่พอ
+                   --    คนค้าง 20 บาทมา 8 เดือน ต่างจากคนค้าง 200 บาทเมื่อวาน
+                   --    บรรณารักษ์ต้องรู้ว่าค้างมานานแค่ไหน ถึงจะรู้ว่าควรตามใครก่อน
+                   --    ⚠️ อาจเป็น NULL ถ้าไม่มีทั้ง return_date และ lost_reported_at
+                   DATEDIFF(CURDATE(), COALESCE(b.return_date, b.lost_reported_at)) as days_unpaid,
                    b.fine_amount
             FROM borrows b
             JOIN users u ON b.user_id = u.id
@@ -782,6 +787,56 @@ class ReportRepository
             ORDER BY b.fine_amount DESC, b.id DESC
         ");
         $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: หนังสือที่ "ไม่มีใครยืมเลย" ในช่วงวันที่ที่เลือก — F-50
+     * ==========================================================================
+     * 🔄 Flow: admin/reports.php + export_pdf.php → getReportConfig('dormant')
+     *
+     * 🧠 ทำไมต้องมี: ระบบมีแต่รายงาน "ยอดนิยม" (50 อันดับแรก) ซึ่งเป็นด้านตรงข้าม
+     *    รายงานนี้คือตัวที่ห้องสมุดใช้ตัดสินใจ **จำหน่ายหนังสือออก** เพื่อคืนพื้นที่ชั้น
+     *    ไม่มีรายงานนี้ = ตัดสินใจจากความรู้สึกล้วน ๆ
+     *
+     * 🧠 ผูกกับช่วงวันที่ที่ผู้ใช้เลือก ไม่ฝัง "3 เดือน" ตายตัว
+     *    ห้องสมุดแต่ละแห่งใช้เกณฑ์ต่างกัน (บางที่รอถึง 1 ปีก่อนจำหน่ายออก)
+     *
+     * 📥 Input: @param string $startDate, @param string $endDate
+     * 📤 Output: [{title, author, category_name, quantity, last_borrowed}, ...]
+     *
+     * ⚠️ หนังสืออ้างอิงถูกตัดออก — ยืมออกไม่ได้อยู่แล้ว การที่ไม่มีสถิติการยืม
+     *    ไม่ได้แปลว่าไม่มีคนใช้ ถ้าเอามารวมจะเป็นรายชื่อหลอกให้จำหน่ายของที่ยังต้องใช้ทิ้ง
+     */
+    public function getDormantBooksReport(string $startDate, string $endDate): array
+    {
+        // 📝 SQL อธิบาย:
+        //    - NOT EXISTS → ไม่มีการยืมเล่มนี้เลยในช่วงที่เลือก
+        //      🧠 ใช้ borrow_date เป็นตัวตัดสิน (วันที่ "ถูกหยิบออกไป") ไม่ใช่ return_date
+        //         เพราะเล่มที่ยืมออกไปแล้วยังไม่คืน = มีคนใช้อยู่ ต้องไม่ติดรายงานนี้
+        //    - subquery last_borrowed → ยืมครั้งสุดท้ายเมื่อไหร่ (ทั้งประวัติ ไม่จำกัดช่วง)
+        //      NULL = ไม่เคยมีใครยืมเลยตั้งแต่เข้าระบบ ซึ่งเป็นกลุ่มที่ควรดูก่อน
+        $stmt = $this->pdo->prepare("
+            SELECT bk.title,
+                   bk.author,
+                   COALESCE(c.name, '-') as category_name,
+                   bk.quantity,
+                   COALESCE(
+                       DATE_FORMAT((SELECT MAX(b2.borrow_date) FROM borrows b2 WHERE b2.book_id = bk.id), '%d/%m/%Y'),
+                       'ไม่เคยถูกยืม'
+                   ) as last_borrowed
+            FROM books bk
+            LEFT JOIN categories c ON bk.category_id = c.id
+            WHERE bk.is_reference = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM borrows b
+                  WHERE b.book_id = bk.id
+                    AND DATE(b.borrow_date) BETWEEN ? AND ?
+              )
+            ORDER BY (SELECT MAX(b3.borrow_date) FROM borrows b3 WHERE b3.book_id = bk.id) ASC, bk.id ASC
+        ");
+        $stmt->execute([$startDate, $endDate]);
         return $stmt->fetchAll();
     }
 }

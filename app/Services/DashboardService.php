@@ -76,7 +76,7 @@ class DashboardService
      * 🎯 จุดประสงค์: สถิติ summary cards (book/borrow/member/reservation)
      * ==========================================================================
      *
-     * 📤 Output: @return array {total_books, available_books, borrowed_books,
+     * 📤 Output: @return array {total_books, total_titles, available_books, borrowed_books,
      *          total_members, active_borrows, overdue_borrows, pending_reservations}
      * ✅ Use case: admin/index.php → stat cards ด้านบน
      */
@@ -86,7 +86,11 @@ class DashboardService
         //    แต่ละ key เป็น 1 stat card บน dashboard
         $bookStats = $this->bookRepo->getStatistics();
         return [
-            'total_books' => $bookStats['total'],           // หนังสือทั้งหมด
+            'total_books' => $bookStats['total'],           // 📚 จำนวน **เล่ม** (SUM(quantity))
+            // 🔴 [F-50] จำนวน **ชื่อเรื่อง** — Repository คำนวณไว้อยู่แล้วแต่ไม่เคยส่งต่อ
+            //    ตอนทำสำมะโนหนังสือต้องใช้ทั้งสองตัว: 1,187 เล่ม จาก 406 ชื่อเรื่อง
+            //    เดิมหน้าจอมีแต่ตัวเลขเล่ม ติดป้ายว่า "หนังสือทั้งหมด" ซึ่งอ่านได้สองแบบ
+            'total_titles' => $bookStats['titles'],         // 📖 จำนวน **ชื่อเรื่อง** (COUNT(*))
             'available_books' => $bookStats['available'],    // หนังสือว่าง
             'borrowed_books' => $bookStats['borrowed'],      // หนังสือถูกยืม
             'total_members' => $this->userRepo->countMembers(),             // สมาชิกทั้งหมด

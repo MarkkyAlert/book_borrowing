@@ -103,9 +103,21 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
                 //    ROADMAP ข้อ 4 เติม b.status เข้าไปใน query แต่ลืมเติมหัวตาราง
                 //    ผลคือ CSV 217 แถวมีคอลัมน์เกินหัว 1 ช่อง ทุกคอลัมน์ตั้งแต่ "ค่าปรับ" เลื่อนผิดตำแหน่ง
                 //    และค่า enum ภาษาอังกฤษ (returned/lost/damaged) โผล่ในไฟล์ที่ลูกค้าเอาไปใช้
-                'headers' => ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ประเภท', 'ค่าปรับ (บาท)'],
+                // 🔴 [F-50] เพิ่ม "ค้างมา (วัน)" — เรียงตามยอดเงินอย่างเดียวไม่พอ
+                //    ⚠️ ลำดับต้องตรงกับที่ query คืนมาเป๊ะ (ดู getUnpaidFinesReport)
+                'headers' => ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ประเภท', 'ค้างมา (วัน)', 'ค่าปรับ (บาท)'],
                 'filename' => "unpaid_fines_" . date('Y-m-d'),
                 'title' => 'รายงานสมาชิกค้างชำระ (' . $dateRangeText . ')',
+            ];
+
+        case 'dormant':
+            // 📝 [F-50] หนังสือที่ไม่มีใครยืมเลยในช่วงที่เลือก — ใช้ตัดสินใจจำหน่ายออก
+            //    เป็นด้านตรงข้ามของรายงาน 'books' (ยอดนิยม) ซึ่งเดิมมีอยู่ด้านเดียว
+            return [
+                'data' => $repo->getDormantBooksReport($start, $end),
+                'headers' => ['ชื่อหนังสือ', 'ผู้แต่ง', 'หมวดหมู่', 'จำนวน' . ($forPdf ? '' : ' (เล่ม)'), 'ยืมครั้งสุดท้าย'],
+                'filename' => "dormant_books_" . date('Y-m-d'),
+                'title' => 'รายงานหนังสือที่ไม่มีการยืม (' . $dateRangeText . ')',
             ];
 
         default:
@@ -134,7 +146,7 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
  *
  * ⚙️ เพิ่มรายงานใหม่ที่มีคอลัมน์ตัวเลข → เพิ่มชื่อคอลัมน์ในลิสต์นี้
  */
-const REPORT_COUNT_COLUMNS = ['borrow_count', 'currently_borrowed', 'active_loans', 'transaction_count', 'days_overdue'];
+const REPORT_COUNT_COLUMNS = ['borrow_count', 'currently_borrowed', 'active_loans', 'transaction_count', 'days_overdue', 'days_unpaid', 'quantity'];
 const REPORT_MONEY_COLUMNS = ['total_amount', 'fine', 'fine_amount'];
 
 /**
@@ -179,6 +191,86 @@ function formatReportValue(string $key, mixed $value): string
  * ⚙️ เพิ่มรายงานใหม่ที่มีเบอร์โทร/รหัส/ISBN → เพิ่มชื่อคอลัมน์ในลิสต์นี้
  */
 const REPORT_TEXT_CODE_COLUMNS = ['phone', 'user_phone', 'isbn', 'member_code', 'barcode'];
+
+/**
+ * 🎯 คอลัมน์ตัวเลขที่ **ห้ามรวมยอด** ถึงจะเป็นตัวเลขก็ตาม — F-50
+ *
+ * 🔴 เจอตอนทดสอบจริง: แถวรวมของรายงานค้างชำระขึ้นว่า "ค้างมา 11,660 วัน"
+ *    ซึ่งคือผลบวกอายุหนี้ของทุกแถว — ไม่มีความหมายอะไรเลย
+ *    (ไร้สาระแบบเดียวกับรวมเบอร์โทร แค่มองออกยากกว่า)
+ *
+ * 🧠 "จัดรูปแบบเป็นตัวเลข" กับ "รวมยอดได้" เป็นคนละเรื่องกัน
+ *    days_overdue / days_unpaid = **อายุของแต่ละแถว** ไม่ใช่ปริมาณที่บวกกันได้
+ *    ส่วน quantity / borrow_count = ปริมาณจริง บวกแล้วมีความหมาย
+ *
+ * ⚙️ เพิ่มคอลัมน์ที่เป็น "อายุ/ระยะเวลา/ค่าเฉลี่ย/เปอร์เซ็นต์" ในลิสต์นี้
+ */
+const REPORT_NO_TOTAL_COLUMNS = ['days_overdue', 'days_unpaid'];
+
+/**
+ * ==========================================================================
+ * 🎯 จุดประสงค์: คำนวณยอดรวมท้ายตารางรายงาน — F-50
+ * ==========================================================================
+ * 🧠 ปัญหาเดิม: ตาราง 217 แถวไม่มีแถวรวม ต้องเปิด Excel บวกเอง
+ *
+ * 🔴 **ห้ามเดาว่าคอลัมน์ไหนเป็นตัวเลขด้วย is_numeric()**
+ *    เบอร์โทร "0891234567" ก็ผ่าน is_numeric() → จะได้ "ยอดรวมเบอร์โทร" ที่ไร้ความหมาย
+ *    ใช้รายชื่อคอลัมน์ที่ประกาศไว้แล้ว (REPORT_MONEY_COLUMNS / REPORT_COUNT_COLUMNS)
+ *    เป็นตัวตัดสินเท่านั้น — เหตุผลเดียวกับที่ F-44 เขียนเตือนไว้
+ *
+ * 🧠 คอลัมน์ที่ไม่ใช่ตัวเลขจะได้ค่า null → ผู้เรียกเว้นช่องนั้นไว้ว่าง
+ *    ไม่ใส่ 0 เพราะ "รวมชื่อหนังสือได้ 0" อ่านแล้วชวนสับสนกว่าไม่ใส่อะไรเลย
+ *
+ * 📥 Input: @param array $data แถวข้อมูลทั้งหมด (ไม่ใช่แค่หน้าเดียว — รายงานไม่แบ่งหน้า)
+ * 📤 Output: @return array<string, float|null> map ชื่อคอลัมน์ → ยอดรวม (null = รวมไม่ได้)
+ */
+function reportColumnTotals(array $data): array
+{
+    if (!$data) return [];
+
+    $totals = [];
+    foreach (array_keys((array) reset($data)) as $key) {
+        // 🔴 ตัวเลขบางตัวรวมยอดไม่ได้ — ดู REPORT_NO_TOTAL_COLUMNS
+        if (in_array($key, REPORT_NO_TOTAL_COLUMNS, true)) {
+            $totals[$key] = null;
+            continue;
+        }
+        $isMoney = in_array($key, REPORT_MONEY_COLUMNS, true);
+        $isCount = in_array($key, REPORT_COUNT_COLUMNS, true);
+        if (!$isMoney && !$isCount) {
+            $totals[$key] = null;
+            continue;
+        }
+        $sum = 0.0;
+        foreach ($data as $row) {
+            $sum += (float) ($row[$key] ?? 0);
+        }
+        $totals[$key] = $sum;
+    }
+    return $totals;
+}
+
+/**
+ * 🎯 จัดรูปแบบยอดรวมสำหรับ **หน้าจอ** — ใช้คอมมาคั่นหลักให้อ่านง่าย
+ */
+function formatReportTotal(string $key, ?float $total): string
+{
+    if ($total === null) return '';
+    return in_array($key, REPORT_MONEY_COLUMNS, true)
+        ? number_format($total, 2)
+        : number_format($total);
+}
+
+/**
+ * 🎯 จัดรูปแบบยอดรวมสำหรับ **ไฟล์ CSV** — ไม่ใส่คอมมา ให้ Excel SUM ต่อได้
+ */
+function csvReportTotal(string $key, ?float $total): string
+{
+    if ($total === null) return '';
+    return in_array($key, REPORT_MONEY_COLUMNS, true)
+        ? number_format($total, 2, '.', '')
+        : (string) (int) $total;
+}
 
 /**
  * ==========================================================================

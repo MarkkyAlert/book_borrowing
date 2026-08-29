@@ -103,7 +103,24 @@ if ($isExport) {
         }
         fputcsv($output, $line);
     }
-    
+
+    // 🔢 [F-50] แถวยอดรวมท้ายไฟล์ — เดิมลูกค้าต้องเปิด Excel บวกเอง
+    //    🔴 เว้นบรรทัดว่างคั่นก่อน 1 บรรทัด **สำคัญมาก**
+    //       Excel ตัด "ช่วงข้อมูล" ที่บรรทัดว่าง ถ้าต่อแถวรวมติดกันเลย
+    //       ตอน SUM หรือ filter Excel จะนับแถวรวมเป็นข้อมูลอีกแถวหนึ่ง = ยอดเบิ้ล
+    $totals = reportColumnTotals($data);
+    if (array_filter($totals, fn($t) => $t !== null)) {
+        fputcsv($output, []);
+        $totalLine = ['รวมทั้งหมด'];
+        $first = true;
+        foreach ($totals as $key => $total) {
+            // ช่องแรกใช้เป็นป้าย "รวมทั้งหมด" ไปแล้ว
+            if ($first) { $first = false; continue; }
+            $totalLine[] = csvSafeValue(csvReportTotal((string) $key, $total));
+        }
+        fputcsv($output, $totalLine);
+    }
+
     fclose($output);
     exit; // ⚠️ ต้อง exit — ห้ามให้ HTML ด้านล่างถูกต่อเข้าไปในไฟล์
 }
@@ -256,6 +273,11 @@ function setDateRange(range) {
         <a href="reports.php?report=books" class="<?= $reportType === 'books' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-book mr-2"></i>หนังสือยอดนิยม
         </a>
+        <?php // 🔴 [F-50] ด้านตรงข้ามของ "ยอดนิยม" — ใช้ตัดสินใจจำหน่ายหนังสือออก
+              //    วางไว้ติดกันเพื่อให้เห็นว่าเป็นคู่กัน ?>
+        <a href="reports.php?report=dormant" class="<?= $reportType === 'dormant' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
+            <i class="bi bi-archive mr-2"></i>หนังสือที่ไม่มีการยืม
+        </a>
         <a href="reports.php?report=members" class="<?= $reportType === 'members' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-people mr-2"></i>นักอ่านตัวยง
         </a>
@@ -317,6 +339,31 @@ function setDateRange(range) {
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
+                <?php
+                // 🔢 [F-50] แถวยอดรวม — เดิมตาราง 217 แถวไม่มีแถวรวม ต้องเปิด Excel บวกเอง
+                //    รายงานหน้านี้ **ไม่แบ่งหน้า** ($data คือทั้งชุด) ยอดจึงเป็นยอดจริงทั้งรายงาน
+                //    ถ้าวันหลังมีการเพิ่มแบ่งหน้า ต้องเปลี่ยนมาคิดยอดจาก query แยก ไม่งั้นยอดผิดแบบดูไม่ออก
+                $totals = reportColumnTotals($data);
+                ?>
+                <?php if (array_filter($totals, fn($t) => $t !== null)): ?>
+                <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                        <td class="px-6 py-4 text-sm font-bold text-gray-700" colspan="2">
+                            รวมทั้งหมด <?= number_format(count($data)) ?> รายการ
+                        </td>
+                        <?php
+                        // ข้ามคอลัมน์แรกไป เพราะถูก colspan=2 ของช่องป้ายกลืนไปแล้ว
+                        $totalKeys = array_keys($totals);
+                        array_shift($totalKeys);
+                        ?>
+                        <?php foreach ($totalKeys as $key): ?>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold <?= in_array($key, REPORT_MONEY_COLUMNS, true) ? 'text-green-700' : 'text-gray-800' ?>">
+                                <?= e(formatReportTotal($key, $totals[$key])) ?><?= ($totals[$key] !== null && in_array($key, REPORT_MONEY_COLUMNS, true)) ? ' ฿' : '' ?>
+                            </td>
+                        <?php endforeach; ?>
+                    </tr>
+                </tfoot>
+                <?php endif; ?>
             </table>
         </div>
     <?php endif; ?>
