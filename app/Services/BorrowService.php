@@ -29,7 +29,7 @@
  * - payFine(): transaction + borrow lock (FOR UPDATE)
  *
  * ⚙️ ถ้าต้องการแก้กฎ:
- * - จำนวนวันยืม/เล่มสูงสุด → config.php (MAX_BORROW_BOOKS, DEFAULT_BORROW_DAYS)
+ * - จำนวนวันยืม/เล่มสูงสุด → หน้าตั้งค่าระบบ · เพดานยืมแยกตาม role ผ่าน quotaForRole()
  * - สูตรค่าปรับ           → calculateFine() ในไฟล์นี้
  *
  * @package App\Services
@@ -166,20 +166,24 @@ class BorrowService
             try {
                 // 🔒 Step 5: ล็อค User Row ก่อน — ป้องกัน race condition
                 //    เช่น admin 2 คนกดยืมให้ member เดียวกันพร้อมกัน
-                $this->userRepo->lockById($userId);
+                $lockedUser = $this->userRepo->lockById($userId);
 
                 // 📝 Step 6: ตรวจโควต้า (FOR UPDATE lock บน borrows)
-                //    ⚙️ แก้เล่มสูงสุด → config.php → MAX_BORROW_BOOKS
+                //    ⚙️ แก้เล่มสูงสุด → หน้าตั้งค่าระบบ (แยกตาม role)
                 //    🛡️ นับ pending reservations ด้วย — เพราะจะกลายเป็น borrow เมื่อ approve
                 //    ป้องกัน: admin สร้าง borrow จนเต็ม → approve reservation ไม่ได้
+                //
+                //    👔 เพดานขึ้นกับ role ของ **ผู้ยืม** ไม่ใช่คนที่กดบันทึก
+                //       อ่าน role จากแถวที่เพิ่งล็อกไป จึงเป็นค่าเดียวกับที่ล็อกไว้แน่นอน
+                $quotaLimit = quotaForRole($lockedUser['role'] ?? null);
                 $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
                 $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
-                $availableSlots = MAX_BORROW_BOOKS - $currentBorrows - $pendingReservations;
+                $availableSlots = $quotaLimit - $currentBorrows - $pendingReservations;
 
                 if ($availableSlots <= 0) {
                     // 🧠 [F-41] บอกที่มาของตัวเลขด้วย ไม่งั้นเจ้าหน้าที่อธิบายให้สมาชิกไม่ได้
                     //    สมาชิกถือหนังสือมา 2 เล่มแต่ระบบบอกว่าเต็ม 3 → ต้องรู้ว่าเล่มที่ 3 คือการจอง
-                    throw new Exception($this->buildQuotaFullMessage('ผู้ยืม', $currentBorrows, $pendingReservations));
+                    throw new Exception($this->buildQuotaFullMessage('ผู้ยืม', $currentBorrows, $pendingReservations, $quotaLimit));
                 }
 
                 if (count($bookIds) > $availableSlots) {
@@ -321,13 +325,17 @@ class BorrowService
      *    สมาชิกถือหนังสือมาแค่ 2 เล่ม เจ้าหน้าที่จึงอธิบายไม่ได้ว่าเล่มที่ 3 หายไปไหน
      *    (คำตอบคือมันคือการจองที่รอมารับอยู่ ซึ่งกินโควตาเหมือนกัน)
      *
-     * 📥 Input: @param string $who 'ผู้ยืม' หรือ 'ผู้จอง', @param int $borrows, @param int $pending
+     * 📥 Input: @param string $who 'ผู้ยืม' หรือ 'ผู้จอง', @param int $borrows, @param int $pending,
+     *           @param int|null $limit เพดานของ role นั้น (null = ใช้ของสมาชิกทั่วไป)
      * 📤 Output: @return string ข้อความพร้อมแสดง
      *
      * ⚠️ ห้ามเอาคิวรอ (waiting) มารวม — ไม่กินโควตายืม
+     * 🔴 ต้องรับเพดานเข้ามา ไม่อ่าน MAX_BORROW_BOOKS เอง
+     *    ไม่งั้นเจ้าหน้าที่ที่เพดาน 10 จะเห็นข้อความว่า "3 จาก 3 เล่ม" ซึ่งไม่ตรงกับที่ระบบใช้จริง
      */
-    private function buildQuotaFullMessage(string $who, int $borrows, int $pending): string
+    private function buildQuotaFullMessage(string $who, int $borrows, int $pending, ?int $limit = null): string
     {
+        $limit = $limit ?? MAX_BORROW_BOOKS;
         $detail = $pending > 0
             ? sprintf('ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม', $borrows, $pending)
             : sprintf('ยืมอยู่ %d เล่ม', $borrows);
@@ -337,7 +345,7 @@ class BorrowService
             $who,
             $detail,
             $borrows + $pending,
-            MAX_BORROW_BOOKS,
+            $limit,
             $pending > 0 ? ' (การจองที่รอมารับนับรวมในโควตาด้วย)' : ''
         );
     }

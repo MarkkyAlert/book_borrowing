@@ -91,7 +91,11 @@ class MemberService
      */
     private function withQuotaRule(array $filters): array
     {
-        $filters['quota_limit'] = MAX_BORROW_BOOKS;
+        // 👔 [โควตาตาม role] ส่งเพดานของทั้งสองกลุ่มลงไป ให้ SQL เลือกใช้ตาม role ของแต่ละแถว
+        //    🔴 ส่งค่าเดียวไม่ได้แล้ว — ตารางสมาชิกมีทั้ง member และ staff ปนกันในหน้าเดียว
+        //       ถ้าใช้เพดานเดียวกันหมด เจ้าหน้าที่ที่เพดาน 10 จะขึ้นว่า "เต็มโควตา" ตั้งแต่เล่มที่ 3
+        $filters['quota_limit']       = MAX_BORROW_BOOKS;
+        $filters['quota_limit_staff'] = MAX_BORROW_BOOKS_STAFF;
         return $filters;
     }
 

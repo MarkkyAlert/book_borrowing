@@ -154,7 +154,9 @@ class ReservationService
                 //    ป้องกัน: admin สร้าง borrow ให้ user ขณะเดียวกับที่ user จอง
                 //    → ถ้าไม่ lock ทั้งคู่อาจเห็น count ต่ำกว่าจริง → เกินโควต้าได้
                 //    เทียบกับ BorrowService::createBorrow() ที่ใช้ lockById() เช่นกัน
-                $this->userRepo->lockById($userId);
+                $lockedUser = $this->userRepo->lockById($userId);
+                // 👔 เพดานขึ้นกับ role ของผู้จอง — อ่านจากแถวที่เพิ่งล็อกไป
+                $quotaLimit = quotaForRole($lockedUser['role'] ?? null);
 
                 // 🛡️ Step 4.2: ตรวจโควต้า (active borrows + pending reservations)
                 //    ป้องกัน: จองสำเร็จ แต่ admin อนุมัติไม่ได้เพราะเกินโควต้า
@@ -163,14 +165,14 @@ class ReservationService
                 //    เพื่อ lock borrow rows ป้องกัน concurrent borrow+reserve
                 $activeBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
                 $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
-                if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
+                if (($activeBorrows + $pendingReservations) >= $quotaLimit) {
                     // 🧠 [F-41] ฝั่งสมาชิกก็ต้องรู้ว่าโควตาถูกใช้ไปกับอะไร
                     throw new Exception(sprintf(
                         'คุณเต็มโควตาแล้ว — ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม = %d จาก %d เล่ม%s',
                         $activeBorrows,
                         $pendingReservations,
                         $activeBorrows + $pendingReservations,
-                        MAX_BORROW_BOOKS,
+                        $quotaLimit,
                         $pendingReservations > 0 ? ' (การจองที่รอมารับนับรวมในโควตาด้วย)' : ''
                     ));
                 }
@@ -218,7 +220,7 @@ class ReservationService
      *
      * 🧠 กติกาที่ตกลงไว้:
      *    - คิวรอ **ไม่กินโควตายืม** (ยังไม่ได้ถือหนังสือ)
-     *    - แต่จำกัดจำนวนคิวต่อคน = MAX_BORROW_BOOKS ("ยืมได้ 3 จองรอได้ 3")
+     *    - แต่จำกัดจำนวนคิวต่อคน = เพดานของ role นั้น ("ยืมได้เท่าไหร่ ต่อคิวรอได้เท่านั้น")
      *    - คิวไม่มีวันหมดอายุ ยกเลิกเองได้
      *
      * ✅ Use case: book.php → ปุ่ม "เข้าคิวรอ" (api/reserve_book.php)
@@ -271,9 +273,11 @@ class ReservationService
                 //    🧠 **ไม่รวมจำนวนที่ยืมอยู่** — คิวรอไม่กินโควตายืม (ตกลงไว้ใน ROADMAP)
                 //    ถ้ารวม คนที่ยืมครบ 3 เล่มจะต่อคิวไม่ได้เลย ทั้งที่การต่อคิว
                 //    คือสิ่งที่เขาควรทำระหว่างรออ่านเล่มที่ถืออยู่ให้จบ
+                // 👔 จำนวนคิวที่ต่อได้ = เพดานของ role นั้น ("ยืมได้เท่าไหร่ ต่อคิวรอได้เท่านั้น")
+                $queueLimit = quotaForRole($this->userRepo->findById($userId)['role'] ?? null);
                 $waiting = $this->reservationRepo->countWaitingByUser($userId);
-                if ($waiting >= MAX_BORROW_BOOKS) {
-                    throw new Exception('คุณต่อคิวครบ ' . MAX_BORROW_BOOKS . ' เล่มแล้ว กรุณายกเลิกคิวเดิมก่อน');
+                if ($waiting >= $queueLimit) {
+                    throw new Exception('คุณต่อคิวครบ ' . $queueLimit . ' เล่มแล้ว กรุณายกเลิกคิวเดิมก่อน');
                 }
 
                 // 📝 เข้าคิว — ไม่แตะ available
@@ -460,16 +464,18 @@ class ReservationService
                 //    🔒 [I-08 FIX] นับ pending reservations อื่นด้วย (ลบ 1 = ตัวที่กำลัง fulfill)
                 //    ป้องกัน: user มี 2 pending + 1 borrow (max=3) → ถ้า approve ทั้ง 2 จะเกินโควต้า
                 //    เดิมเช็คแค่ currentBorrows → ไม่เห็น pending อื่นที่กำลังจะกลายเป็น borrow
+                // 👔 เพดานของ **ผู้จอง** ไม่ใช่เจ้าหน้าที่ที่กดอนุมัติ
+                $fulfillLimit = quotaForRole($this->userRepo->findById($reservation['user_id'])['role'] ?? null);
                 $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
                 $otherPending = $this->reservationRepo->countPendingByUser($reservation['user_id']) - 1;
-                if (($currentBorrows + max(0, $otherPending)) >= MAX_BORROW_BOOKS) {
+                if (($currentBorrows + max(0, $otherPending)) >= $fulfillLimit) {
                     // 🧠 [F-41] บอกที่มาของตัวเลข — ดูเหตุผลที่ BorrowService::buildQuotaFullMessage()
                     throw new Exception(sprintf(
                         'ผู้จองเต็มโควตาแล้ว — ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม = %d จาก %d เล่ม',
                         $currentBorrows,
                         max(0, $otherPending),
                         $currentBorrows + max(0, $otherPending),
-                        MAX_BORROW_BOOKS
+                        $fulfillLimit
                     ));
                 }
 

@@ -304,7 +304,8 @@ require_once __DIR__ . '/header.php';
                                     <?= (int) $member['id'] === $prefillUserId ? 'selected' : '' ?>
                                     data-email="<?= e($member['email']) ?>"
                                     data-code="<?= e($memberCode) ?>"
-                                    data-phone="<?= e($member['phone'] ?? '-') ?>">
+                                    data-phone="<?= e($member['phone'] ?? '-') ?>"
+        data-quota="<?= quotaForRole($member['role'] ?? null) ?>">
                                     <?= e($member['name']) ?> — รหัส <?= e($memberCode) ?> (<?= e($member['email']) ?>)
                                 </option>
                             <?php endforeach; ?>
@@ -324,8 +325,10 @@ require_once __DIR__ . '/header.php';
                         </select>
                         <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
                             <span>พิมพ์เพื่อค้นหา</span>
+                            <?php // 👔 [โควตาตาม role] ตัวเลขนี้เปลี่ยนตามผู้ยืมที่เลือก (ดู JS ท้ายไฟล์)
+                                  //    ค่าเริ่มต้นใช้ของสมาชิกทั่วไป ซึ่งเป็นค่าที่เข้มที่สุด ?>
                             <span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
-                                เลือกได้สูงสุด <?= MAX_BORROW_BOOKS ?> เล่ม
+                                เลือกได้สูงสุด <span id="quotaHint"><?= MAX_BORROW_BOOKS ?></span> เล่ม
                             </span>
                         </div>
                     </div>
@@ -363,7 +366,8 @@ require_once __DIR__ . '/header.php';
             <i class="bi bi-info-circle mr-2 text-xl"></i>ข้อมูล
         </h6>
         <ul class="space-y-2 text-sm text-blue-800/80 list-disc list-inside">
-            <li>ยืมได้สูงสุด <?= MAX_BORROW_BOOKS ?> เล่มต่อคน</li>
+            <li>ยืมได้สูงสุด <?= MAX_BORROW_BOOKS ?> เล่มต่อคน<?= MAX_BORROW_BOOKS_STAFF !== MAX_BORROW_BOOKS
+                ? ' (เจ้าหน้าที่ ' . MAX_BORROW_BOOKS_STAFF . ' เล่ม)' : '' ?></li>
             <li>ระยะเวลายืมเริ่มต้น <?= DEFAULT_BORROW_DAYS ?> วัน</li>
             <li>พิมพ์ชื่อเพื่อค้นหาผู้ยืมหรือหนังสือ</li>
             <li>สามารถเลือกยืมหลายเล่มพร้อมกันได้</li>
@@ -437,6 +441,38 @@ require_once __DIR__ . '/header.php';
 <script src="<?= APP_URL ?>/assets/vendor/select2/select2.min.js"></script>
 <script>
     $(document).ready(function() {
+        /**
+         * 👔 [โควตาตาม role] ปรับเพดานการเลือกหนังสือตามผู้ยืมที่เลือก
+         *
+         * 🔴 ทำไมต้องมี: ถ้าหน้าจอใช้ค่าเดียวตายตัว จะเกิดสภาพ
+         *    **หน้าจอบอกอย่าง ระบบทำอีกอย่าง** — เจ้าหน้าที่ที่เพดาน 10
+         *    จะเลือกได้แค่ 3 (หน้าจอห้าม) หรือถ้าตั้งค่าเป็น 10 ไว้ตายตัว
+         *    สมาชิกทั่วไปจะเลือกได้ 10 แล้วไปเด้ง error ตอนกดบันทึก
+         *
+         * 🧠 เพดานของแต่ละคนฝังมากับ option แล้ว (data-quota) — ไม่ต้องยิง API ถาม
+         *    ⚠️ นี่เป็นแค่การช่วยเจ้าหน้าที่ไม่ให้เลือกเกิน — **ด่านจริงอยู่ที่ Service**
+         *    JS ถูกปิด/แก้ได้ ฝั่งเซิร์ฟเวอร์จึงตรวจซ้ำเสมอ (BorrowService::createBorrow)
+         */
+        var defaultQuota = <?= (int) MAX_BORROW_BOOKS ?>;
+
+        function applyQuotaForSelectedMember() {
+            var opt = $('#user_id').find('option:selected');
+            var quota = parseInt(opt.attr('data-quota'), 10);
+            if (!quota || quota < 1) quota = defaultQuota;
+
+            $('#quotaHint').text(quota);
+
+            var $books = $('#book_ids');
+            if ($books.data('select2')) {
+                $books.data('select2').options.options.maximumSelectionLength = quota;
+                // ถ้าเลือกไว้เกินเพดานใหม่แล้ว ให้ตัดส่วนเกินออก ไม่ปล่อยให้กดบันทึกแล้วค่อยเด้ง
+                var picked = $books.val() || [];
+                if (picked.length > quota) {
+                    $books.val(picked.slice(0, quota)).trigger('change');
+                }
+            }
+        }
+
         // Initialize Select2 with simple theme
         $('#user_id').select2({
             width: '100%',
@@ -454,6 +490,9 @@ require_once __DIR__ . '/header.php';
 
         $('#book_ids').select2({
             width: '100%',
+            // 👔 [โควตาตาม role] เริ่มที่เพดานของสมาชิกทั่วไป แล้วปรับตามผู้ยืมที่เลือก
+            //    🔴 ถ้าไม่ปรับตาม จะเกิดสภาพ "หน้าจอให้เลือก 3 แต่ด่านหลังบ้านยอม 10"
+            //       หรือแย่กว่านั้น: ให้เลือก 10 แล้วค่อยไปเด้ง error ตอนกดบันทึก
             maximumSelectionLength: <?= MAX_BORROW_BOOKS ?>,
             language: {
                 maximumSelected: function(e) {
@@ -467,6 +506,11 @@ require_once __DIR__ . '/header.php';
                 }
             }
         });
+
+        // 👔 ผูกหลัง select2 ทั้งสองตัวพร้อมแล้ว — ต้องเรียกครั้งแรกด้วย
+        //    เพราะหน้านี้เปิดมาพร้อมผู้ยืมที่เลือกไว้ล่วงหน้าได้ (มาจากหน้ารายการจอง)
+        $('#user_id').on('change', applyQuotaForSelectedMember);
+        applyQuotaForSelectedMember();
 
         // Add Member Modal Logic
         const modal = document.getElementById('addMemberModal');

@@ -210,14 +210,18 @@ require_once __DIR__ . '/header.php';
                                 $qPending = (int) ($member['pending_reservations'] ?? 0);
                                 $qWaiting = (int) ($member['waiting_reservations'] ?? 0);
                                 $qUsed    = $qBorrow + $qPending;
-                                $qFull    = $qUsed >= MAX_BORROW_BOOKS;
+                                // 👔 [โควตาตาม role] เพดานของแถวนี้ ไม่ใช่ค่าเดียวทั้งตาราง
+                                //    ตารางนี้มี member กับ staff ปนกัน ถ้าใช้ค่าเดียว
+                                //    เจ้าหน้าที่ที่เพดานสูงกว่าจะขึ้นว่า "เต็ม" ตั้งแต่ยังไม่เต็ม
+                                $qLimit   = quotaForRole($member['role'] ?? null);
+                                $qFull    = $qUsed >= $qLimit;
                                 ?>
                                 <?php if ($qUsed > 0 || $qWaiting > 0): ?>
                                     <div class="flex flex-col items-center gap-1">
                                         <?php if ($qUsed > 0): ?>
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $qFull ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800' ?>"
-                                                  title="<?= $qFull ? 'เต็มโควตาแล้ว ยืมเพิ่มไม่ได้' : 'ยืมได้อีก ' . (MAX_BORROW_BOOKS - $qUsed) . ' เล่ม' ?>">
-                                                <?= $qUsed ?>/<?= MAX_BORROW_BOOKS ?>
+                                                  title="<?= $qFull ? 'เต็มโควตาแล้ว ยืมเพิ่มไม่ได้' : 'ยืมได้อีก ' . ($qLimit - $qUsed) . ' เล่ม' ?>">
+                                                <?= $qUsed ?>/<?= $qLimit ?>
                                                 <?= $qFull ? ' เต็ม' : '' ?>
                                             </span>
                                             <?php if ($qPending > 0): ?>

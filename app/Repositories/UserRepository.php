@@ -445,10 +445,12 @@ class UserRepository
         //    request อื่นที่อยากแก้ user นี้ต้อง "wait" จน transaction นี้จบ
         //    ป้องกันยืมหนังสือ 2 เล่มพร้อมกัน (race condition)
         // ⚠️ ต้องเรียกใน transaction (beginTransaction...commit) เท่านั้น!
-        // 🧠 SELECT เฉพาะ id (ไม่ต้องการข้อมูลอื่น แค่ล็อกแถว)
-        $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = ? FOR UPDATE");
+        // 🧠 ดึง role มาด้วย — โควตาต่างกันตาม role และต้องอ่านค่า
+        //    **ในธุรกรรมเดียวกับที่ล็อกแถว** ไม่งั้นถ้ามีใครเปลี่ยน role ระหว่างนั้น
+        //    ด่านโควตาจะตัดสินด้วยค่าที่ล้าสมัย
+        $stmt = $this->pdo->prepare("SELECT id, role FROM users WHERE id = ? FOR UPDATE");
         $stmt->execute([$id]);
-        // 📤 คืน {id} (ถูกล็อก) หรือ null
+        // 📤 คืน {id, role} (ถูกล็อก) หรือ null
         return $stmt->fetch() ?: null;
     }
 
@@ -539,6 +541,10 @@ class UserRepository
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM (
                 SELECT u.id,
+                       -- 👔 ต้อง select role มาด้วย เพราะ HAVING ของตัวกรอง 'เต็มโควตา'
+                       --    เลือกเพดานตาม role ของแถว · ไม่ select = Unknown column = หน้าขาว
+                       --    (กับดักเดียวกับที่ F-48 เจอกับคอลัมน์คำนวณ)
+                       u.role,
                        {$this->memberComputedColumns()}
                 FROM users u
                 {$whereSQL}
@@ -632,7 +638,10 @@ class UserRepository
             //    ⚠️ ห้ามเอา waiting_reservations มารวม — คิวรอไม่กินโควตา (F-41)
             //    ถ้ารวม คนที่ต่อคิว 3 เล่มจะขึ้นว่าเต็มโควตาทั้งที่ยังยืมได้อีก
             // 🧠 เพดานส่งมาจากชั้น Service ไม่ให้ Repository อ่าน constant เอง
-            $having[] = "(active_borrows + pending_reservations) >= ?";
+            // 👔 เลือกเพดานตาม role ของ **แต่ละแถว** — ตารางนี้มี member กับ staff ปนกัน
+            //    ใช้ค่าเดียวกันหมดไม่ได้ ไม่งั้นเจ้าหน้าที่ที่เพดานสูงกว่าจะขึ้นว่าเต็มก่อนเวลา
+            $having[] = "(active_borrows + pending_reservations) >= CASE WHEN role IN ('staff','admin') THEN ? ELSE ? END";
+            $params[] = max(1, (int) ($filters['quota_limit_staff'] ?? $filters['quota_limit'] ?? 1));
             $params[] = max(1, (int) ($filters['quota_limit'] ?? 1));
         } elseif ($status === 'has_unpaid_fine') {
             // 🔴 [F-48] ใช้นิยามเดียวกับหน้าการเงิน — ดู memberComputedColumns()
