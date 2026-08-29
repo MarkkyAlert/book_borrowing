@@ -172,7 +172,9 @@ class BorrowService
                 $availableSlots = MAX_BORROW_BOOKS - $currentBorrows - $pendingReservations;
 
                 if ($availableSlots <= 0) {
-                    throw new Exception('ผู้ยืมถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+                    // 🧠 [F-41] บอกที่มาของตัวเลขด้วย ไม่งั้นเจ้าหน้าที่อธิบายให้สมาชิกไม่ได้
+                    //    สมาชิกถือหนังสือมา 2 เล่มแต่ระบบบอกว่าเต็ม 3 → ต้องรู้ว่าเล่มที่ 3 คือการจอง
+                    throw new Exception($this->buildQuotaFullMessage('ผู้ยืม', $currentBorrows, $pendingReservations));
                 }
 
                 if (count($bookIds) > $availableSlots) {
@@ -303,6 +305,36 @@ class BorrowService
                 throw $e;
             }
         }, 'BorrowService::returnBook');
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ข้อความ "เต็มโควตา" ที่บอกที่มาของตัวเลข — F-41
+     * ==========================================================================
+     *
+     * 🧠 เดิมบอกแค่ "ถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (3 เล่ม)"
+     *    สมาชิกถือหนังสือมาแค่ 2 เล่ม เจ้าหน้าที่จึงอธิบายไม่ได้ว่าเล่มที่ 3 หายไปไหน
+     *    (คำตอบคือมันคือการจองที่รอมารับอยู่ ซึ่งกินโควตาเหมือนกัน)
+     *
+     * 📥 Input: @param string $who 'ผู้ยืม' หรือ 'ผู้จอง', @param int $borrows, @param int $pending
+     * 📤 Output: @return string ข้อความพร้อมแสดง
+     *
+     * ⚠️ ห้ามเอาคิวรอ (waiting) มารวม — ไม่กินโควตายืม
+     */
+    private function buildQuotaFullMessage(string $who, int $borrows, int $pending): string
+    {
+        $detail = $pending > 0
+            ? sprintf('ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม', $borrows, $pending)
+            : sprintf('ยืมอยู่ %d เล่ม', $borrows);
+
+        return sprintf(
+            '%sเต็มโควตาแล้ว — %s = %d จาก %d เล่ม%s',
+            $who,
+            $detail,
+            $borrows + $pending,
+            MAX_BORROW_BOOKS,
+            $pending > 0 ? ' (การจองที่รอมารับนับรวมในโควตาด้วย)' : ''
+        );
     }
 
     /**

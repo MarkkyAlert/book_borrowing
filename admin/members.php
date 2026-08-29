@@ -162,7 +162,7 @@ require_once __DIR__ . '/header.php';
                         <th class="px-6 py-4 font-medium">สิทธิ์</th>
                         <th class="px-6 py-4 font-medium">อีเมล</th>
                         <th class="px-6 py-4 font-medium">เบอร์โทร</th>
-                        <th class="px-6 py-4 font-medium text-center">กำลังยืม</th>
+                        <th class="px-6 py-4 font-medium text-center">โควตาที่ใช้</th>
                         <th class="px-6 py-4 font-medium text-center">ยืมทั้งหมด</th>
                         <th class="px-6 py-4 font-medium">สมัครเมื่อ</th>
                         <th class="px-6 py-4 font-medium text-end" width="100">การจัดการ</th>
@@ -194,10 +194,46 @@ require_once __DIR__ . '/header.php';
                             <td class="px-6 py-4 text-gray-600"><?= e($member['email']) ?></td>
                             <td class="px-6 py-4 text-gray-600 font-mono text-xs"><?= e($member['phone'] ?: '-') ?></td>
                             <td class="px-6 py-4 text-center">
-                                <?php if ($member['active_borrows'] > 0): ?>
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                                        <?= $member['active_borrows'] ?> เล่ม
-                                    </span>
+                                <?php
+                                // 🔴 [F-41] โควตา = ยืมค้าง + จองที่ของพร้อมแล้ว
+                                //    เดิมแสดงแค่ active_borrows → เจ้าหน้าที่เห็น "2 เล่ม"
+                                //    แล้วสรุปว่ายืมได้อีก 1 ทั้งที่เต็มแล้ว เพราะมีการจองอีก 1
+                                //
+                                // 🔴 waiting (ต่อคิวรอ) **ห้ามเอามารวม** — ไม่กินโควตายืม
+                                //    ถ้ารวม คนที่ต่อคิว 3 เล่มจะขึ้นว่าเต็มโควตา ทั้งที่ยืมได้อีก 3
+                                //    แสดงแยกไว้เป็นบรรทัดรองแทน เพื่อให้เห็นภาพครบโดยไม่ปนตัวเลข
+                                $qBorrow  = (int) ($member['active_borrows'] ?? 0);
+                                $qPending = (int) ($member['pending_reservations'] ?? 0);
+                                $qWaiting = (int) ($member['waiting_reservations'] ?? 0);
+                                $qUsed    = $qBorrow + $qPending;
+                                $qFull    = $qUsed >= MAX_BORROW_BOOKS;
+                                ?>
+                                <?php if ($qUsed > 0 || $qWaiting > 0): ?>
+                                    <div class="flex flex-col items-center gap-1">
+                                        <?php if ($qUsed > 0): ?>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $qFull ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800' ?>"
+                                                  title="<?= $qFull ? 'เต็มโควตาแล้ว ยืมเพิ่มไม่ได้' : 'ยืมได้อีก ' . (MAX_BORROW_BOOKS - $qUsed) . ' เล่ม' ?>">
+                                                <?= $qUsed ?>/<?= MAX_BORROW_BOOKS ?>
+                                                <?= $qFull ? ' เต็ม' : '' ?>
+                                            </span>
+                                            <?php if ($qPending > 0): ?>
+                                                <?php // 📝 บอกที่มาของตัวเลขเมื่อไม่ได้มาจากการยืมล้วน ?>
+                                                <span class="text-[11px] text-gray-500 leading-tight">
+                                                    ยืม <?= $qBorrow ?> · จอง <?= $qPending ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="text-gray-300">-</span>
+                                        <?php endif; ?>
+
+                                        <?php if ($qWaiting > 0): ?>
+                                            <?php // 🔄 คิวรอไม่กินโควตา แสดงแยกคนละสี ไม่ให้อ่านปนกับตัวเลขบน ?>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700"
+                                                  title="ต่อคิวรอหนังสือที่ถูกยืมหมด — ไม่กินโควตายืม">
+                                                <i class="bi bi-people mr-1"></i>คิว <?= $qWaiting ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php else: ?>
                                     <span class="text-gray-300">-</span>
                                 <?php endif; ?>

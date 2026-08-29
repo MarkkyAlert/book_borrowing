@@ -494,7 +494,11 @@ class UserRepository
             SELECT u.*,
                    (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
                    (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
-                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations,
+                   -- 🔴 waiting = ต่อคิวรอ **ไม่กินโควตายืม** (ROADMAP ข้อ 5)
+                   --    ต้องแยกจาก pending ให้ขาด ไม่งั้นหน้าจอจะบอกว่าเต็มโควตา
+                   --    ทั้งที่คนนั้นยังยืมได้อีก — ดู ReservationRepository::countPendingByUser()
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'waiting') as waiting_reservations
             FROM users u
             {$whereSQL}
             {$havingSQL}

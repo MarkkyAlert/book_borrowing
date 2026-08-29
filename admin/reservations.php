@@ -90,6 +90,11 @@ $filters['offset'] = $pagination['offset'];
 
 $reservations = $reservationRepo->findAll($filters);
 
+// 🔢 [F-42] จำนวน "จองแล้วไม่มารับ" — มาจาก query ที่ไม่มี LIMIT
+//    🔴 ห้ามนับจากแถวที่แสดง เพราะจะได้เลขที่ตัดแล้ว (บทเรียนจาก F-35)
+$expiredCount = $reservationRepo->countAll(['status' => 'expired']);
+$expiredThisMonth = $reservationRepo->countExpiredThisMonth();
+
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วเด้งกลับไปดู "รออนุมัติ"
 $paginationParams = ['status' => $statusFilter];
 
@@ -114,11 +119,30 @@ require_once __DIR__ . '/header.php';
             <a href="reservations.php?status=waiting" class="px-4 py-2 text-sm font-medium border border-gray-300 border-l-0 <?= $statusFilter === 'waiting' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
                 ต่อคิวรอ
             </a>
+            <?php // 🔴 [F-42] แท็บ "ไม่มารับ" — บรรณารักษ์ต้องหาให้เจอว่าใครจองแล้วไม่มารับ
+                  //    เดิมต้องกด "ทั้งหมด" แล้วไล่หาสถานะ "หมดอายุ" ใน 47 รายการ 3 หน้า
+                  //    ยิ่งเพราะ lazy expire เคลียร์ให้ก่อนหน้าจอจะ render สภาพนี้จึงมองไม่เห็นเลย ?>
+            <a href="reservations.php?status=expired" class="px-4 py-2 text-sm font-medium border border-gray-300 border-l-0 <?= $statusFilter === 'expired' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
+                ไม่มารับ
+                <?php if ($expiredCount > 0): ?>
+                    <span class="ml-1 px-1.5 py-0.5 bg-gray-500 text-white text-xs rounded-full"><?= number_format($expiredCount) ?></span>
+                <?php endif; ?>
+            </a>
             <a href="reservations.php?status=all" class="px-4 py-2 text-sm font-medium border border-gray-300 border-l-0 rounded-r-lg <?= $statusFilter === 'all' ? 'bg-primary-50 text-primary-700 border-primary-300 z-10 ring-1 ring-primary-300' : 'bg-white text-gray-700 hover:bg-gray-50' ?>">
                 ทั้งหมด
             </a>
         </div>
     </div>
+
+    <?php // 📊 [F-42] ตัวเลข "จองแล้วไม่มารับ" — ปัญหานี้เกิดบ่อยแค่ไหน
+          //    lazy expire เคลียร์ให้ก่อนหน้าจอ render สภาพนี้จึงมองไม่เห็นระหว่างใช้งานปกติ ?>
+    <?php if ($expiredThisMonth > 0 && $statusFilter !== 'expired'): ?>
+        <div class="px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm text-gray-600 flex items-center gap-2">
+            <i class="bi bi-info-circle text-gray-400"></i>
+            เดือนนี้มีการจองที่ไม่มารับ <span class="font-semibold text-gray-800"><?= number_format($expiredThisMonth) ?></span> ครั้ง
+            <a href="reservations.php?status=expired" class="text-primary-600 hover:text-primary-700 underline">ดูรายการ</a>
+        </div>
+    <?php endif; ?>
 
     <?php if (empty($reservations)): ?>
         <div class="text-center py-12">
@@ -219,6 +243,15 @@ require_once __DIR__ . '/header.php';
                                             </button>
                                         </form>
                                     </div>
+                                <?php elseif ($res['status'] === 'expired'): ?>
+                                    <?php // 🔄 [F-42] เดิมเขียนว่า "ดำเนินการแล้ว" เฉย ๆ ทำอะไรต่อไม่ได้
+                                          //    แต่งานจริงคือ "สมาชิกมาช้า อยากได้อยู่" → ให้จองใหม่ได้เลย
+                                          //    ลิงก์พาไปหน้าหนังสือพร้อมค้นชื่อสมาชิกไว้ให้ ?>
+                                    <a href="<?= e(listStateLink('borrow_form.php?user_id=' . (int) $res['user_id'] . '&book_id=' . (int) $res['book_id'], LIST_STATE_RESERVATIONS)) ?>"
+                                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200 transition-colors"
+                                       title="สมาชิกมาช้าแต่ยังอยากได้ — บันทึกการยืมให้เลย">
+                                        <i class="bi bi-arrow-repeat mr-1"></i> ให้ยืมเลย
+                                    </a>
                                 <?php else: ?>
                                     <span class="text-gray-400 italic text-xs">ดำเนินการแล้ว</span>
                                 <?php endif; ?>

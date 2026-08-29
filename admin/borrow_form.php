@@ -134,6 +134,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// 🔗 [F-42] เติมค่าเริ่มต้นจาก URL — ใช้ตอนกด "ให้ยืมเลย" จากรายการจองที่ไม่มารับ
+//    🛡️ cast เป็น int เท่านั้น และตรวจว่ามีจริงก่อนเลือกให้ — ไม่เชื่อค่าจาก URL ตรง ๆ
+//    ถ้า id ไม่มีอยู่จริง ก็แค่ไม่เลือกอะไรให้ ฟอร์มยังใช้งานได้ตามปกติ
+$prefillUserId = (int) ($_GET['user_id'] ?? 0);
+$prefillBookId = (int) ($_GET['book_id'] ?? 0);
+
 $pageTitle = 'บันทึกการยืม';
 require_once __DIR__ . '/header.php';
 ?>
@@ -282,6 +288,7 @@ require_once __DIR__ . '/header.php';
                             <option value="">พิมพ์เพื่อค้นหาสมาชิก...</option>
                             <?php foreach ($members as $member): ?>
                                 <option value="<?= $member['id'] ?>"
+                                    <?= (int) $member['id'] === $prefillUserId ? 'selected' : '' ?>
                                     data-email="<?= e($member['email']) ?>"
                                     data-phone="<?= e($member['phone'] ?? '-') ?>">
                                     <?= e($member['name']) ?> (<?= e($member['email']) ?>)
@@ -296,7 +303,7 @@ require_once __DIR__ . '/header.php';
                         </label>
                         <select id="book_ids" name="book_ids[]" multiple="multiple" class="w-full" required>
                             <?php foreach ($availableBooks as $book): ?>
-                                <option value="<?= $book['id'] ?>">
+                                <option value="<?= $book['id'] ?>" <?= (int) $book['id'] === $prefillBookId ? 'selected' : '' ?>>
                                     <?= e($book['title']) ?> - <?= e($book['author']) ?> (ว่าง <?= $book['available'] ?> เล่ม)
                                 </option>
                             <?php endforeach; ?>

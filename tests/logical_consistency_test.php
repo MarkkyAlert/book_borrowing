@@ -555,11 +555,21 @@ class LogicalConsistencyTest
 
             $afterCount = $this->countActiveBorrows($this->testMemberB);
 
+            // 🧠 ตรวจ "ความหมาย" ไม่ใช่ถ้อยคำเดิม —
+            //    ถูกปฏิเสธจริง · จำนวนที่ยืมไม่เพิ่ม · ข้อความบอกเพดานเป็นตัวเลข
+            //    [F-41] ข้อความเปลี่ยนจาก "ถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (3 เล่ม)"
+            //    เป็น "เต็มโควตาแล้ว — ยืมอยู่ 2 เล่ม + จองรอรับอีก 1 เล่ม = 3 จาก 3 เล่ม"
+            //    เพื่อให้เจ้าหน้าที่อธิบายให้สมาชิกได้ว่าโควตาถูกใช้ไปกับอะไร
+            //    เดิมเช็คคำว่า "สูงสุด" ตรงตัว จึงแดงทั้งที่พฤติกรรมยังถูก
+            $mentionsQuota = strpos($error, 'โควตา') !== false || strpos($error, 'สูงสุด') !== false;
+            $mentionsLimit = strpos($error, (string) MAX_BORROW_BOOKS) !== false;
+
             $this->assert(
                 $testName,
                 $success === false
                     && $afterCount === MAX_BORROW_BOOKS
-                    && strpos($error, 'สูงสุด') !== false,
+                    && $mentionsQuota
+                    && $mentionsLimit,
                 "success={$success}, count: {$beforeCount}→{$afterCount}, error: {$error}"
             );
         } catch (Exception $e) {

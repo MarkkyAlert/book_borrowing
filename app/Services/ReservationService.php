@@ -164,7 +164,15 @@ class ReservationService
                 $activeBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($userId);
                 $pendingReservations = $this->reservationRepo->countPendingByUser($userId);
                 if (($activeBorrows + $pendingReservations) >= MAX_BORROW_BOOKS) {
-                    throw new Exception('คุณถึงจำนวนหนังสือที่ยืม/จองได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+                    // 🧠 [F-41] ฝั่งสมาชิกก็ต้องรู้ว่าโควตาถูกใช้ไปกับอะไร
+                    throw new Exception(sprintf(
+                        'คุณเต็มโควตาแล้ว — ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม = %d จาก %d เล่ม%s',
+                        $activeBorrows,
+                        $pendingReservations,
+                        $activeBorrows + $pendingReservations,
+                        MAX_BORROW_BOOKS,
+                        $pendingReservations > 0 ? ' (การจองที่รอมารับนับรวมในโควตาด้วย)' : ''
+                    ));
                 }
 
                 // 📝 Step 5: INSERT reservation + คำนวณวันหมดอายุ
@@ -455,7 +463,14 @@ class ReservationService
                 $currentBorrows = $this->borrowRepo->countActiveBorrowsForUpdate($reservation['user_id']);
                 $otherPending = $this->reservationRepo->countPendingByUser($reservation['user_id']) - 1;
                 if (($currentBorrows + max(0, $otherPending)) >= MAX_BORROW_BOOKS) {
-                    throw new Exception('ผู้จองถึงจำนวนหนังสือที่ยืมได้สูงสุดแล้ว (' . MAX_BORROW_BOOKS . ' เล่ม)');
+                    // 🧠 [F-41] บอกที่มาของตัวเลข — ดูเหตุผลที่ BorrowService::buildQuotaFullMessage()
+                    throw new Exception(sprintf(
+                        'ผู้จองเต็มโควตาแล้ว — ยืมอยู่ %d เล่ม + จองรอรับอีก %d เล่ม = %d จาก %d เล่ม',
+                        $currentBorrows,
+                        max(0, $otherPending),
+                        $currentBorrows + max(0, $otherPending),
+                        MAX_BORROW_BOOKS
+                    ));
                 }
 
                 // 📝 Step 4: INSERT borrow record
