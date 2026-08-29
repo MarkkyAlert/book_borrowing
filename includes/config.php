@@ -132,7 +132,7 @@ date_default_timezone_set(env('TIMEZONE', 'Asia/Bangkok'));// ══════
 // 🛡️ [SECURITY] เป็น whitelist — อะไรที่ไม่อยู่ในนี้จะถูกทิ้งทั้งหมด
 //    ระบบไม่เคยรับ URL จากผู้ใช้ รับแค่ค่าของพารามิเตอร์เหล่านี้แล้วประกอบ URL เอง
 // ⚠️ ห้ามใส่ 'print' — บันทึกเสร็จแล้วจะเด้งเข้าโหมดพิมพ์
-define('LIST_STATE_BOOKS',        ['page', 'search', 'category', 'status', 'sort', 'is_reference']);
+define('LIST_STATE_BOOKS',        ['page', 'search', 'category', 'status', 'sort', 'is_reference', 'no_isbn']);
 define('LIST_STATE_MEMBERS',      ['page', 'search', 'role', 'status', 'sort']);
 define('LIST_STATE_BORROWS',      ['page', 'search', 'status', 'filter']);
 define('LIST_STATE_RESERVATIONS', ['page', 'status']);

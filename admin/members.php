@@ -124,6 +124,10 @@ require_once __DIR__ . '/header.php';
                 <option value="">ทั้งหมด</option>
                 <option value="has_borrow" <?= $status === 'has_borrow' ? 'selected' : '' ?>>กำลังยืมหนังสือ</option>
                 <option value="no_borrow" <?= $status === 'no_borrow' ? 'selected' : '' ?>>ปกติ (ไม่ได้ยืม)</option>
+                <?php // 🔎 [F-48] สองอันนี้คืองานที่บรรณารักษ์ทำจริงหน้าเคาน์เตอร์
+                      //    "คนนี้ยืมเพิ่มได้ไหม" และ "ใครค้างเงินบ้าง" ?>
+                <option value="quota_full" <?= $status === 'quota_full' ? 'selected' : '' ?>>เต็มโควตา (ยืมเพิ่มไม่ได้)</option>
+                <option value="has_unpaid_fine" <?= $status === 'has_unpaid_fine' ? 'selected' : '' ?>>ค้างค่าปรับ</option>
             </select>
         </div>
         <div class="md:col-span-2">

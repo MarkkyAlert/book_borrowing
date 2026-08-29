@@ -61,6 +61,7 @@ $search = trim($_GET['search'] ?? '');
 $category = $_GET['category'] ?? '';
 $status = $_GET['status'] ?? '';
 $isReference = $_GET['is_reference'] ?? '';   // 📚 '' = ทั้งหมด, '1' = เฉพาะอ้างอิง, '0' = เฉพาะที่ยืมออกได้
+$noIsbn = $_GET['no_isbn'] ?? '';            // 🏷️ [F-48] '1' = เฉพาะเล่มที่ยังไม่ได้ลง ISBN
 $sort = $_GET['sort'] ?? 'newest';
 $page = (int) ($_GET['page'] ?? 1);
 
@@ -72,6 +73,8 @@ $bookFilters = [
     'status' => in_array($status, ['available', 'out_of_stock', 'low_stock']) ? $status : '',
     // 🛡️ whitelist — รับเฉพาะ '0' กับ '1' ค่าอื่นถือว่าไม่กรอง
     'is_reference' => in_array($isReference, ['0', '1'], true) ? $isReference : '',
+    // 🛡️ whitelist — รับเฉพาะ '1' ค่าอื่นถือว่าไม่กรอง
+    'no_isbn' => $noIsbn === '1' ? '1' : '',
     'sort' => $sort
 ];
 
@@ -85,7 +88,7 @@ $books = $bookService->getBooks($bookFilters);
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
 // 📄 ทุกตัวกรองต้องอยู่ในลิงก์เลขหน้า ไม่งั้นกดหน้า 2 แล้วตัวกรองหลุด
-$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'sort' => $sort];
+$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'no_isbn' => $noIsbn, 'sort' => $sort];
 $paginationUnit = 'เล่ม';
 
 // ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
@@ -156,6 +159,16 @@ require_once __DIR__ . '/header.php';
                 <option value="oldest" <?= $sort === 'oldest' ? 'selected' : '' ?>>เก่าที่สุด</option>
                 <option value="az" <?= $sort === 'az' ? 'selected' : '' ?>>ชื่อ (A-Z, ก-ฮ)</option>
             </select>
+        </div>
+        <?php // 🏷️ [F-48] งานลงรายการ: "เล่มไหนยังไม่ได้ลง ISBN"
+              //    เป็น checkbox ไม่ใช่ตัวเลือกในดรอปดาวน์สถานะ
+              //    เพราะต้องใช้ร่วมกับตัวกรองอื่นได้ (เช่น เล่มที่ว่าง + ยังไม่ลง ISBN) ?>
+        <div class="md:col-span-2 flex items-end">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none pb-2">
+                <input type="checkbox" name="no_isbn" value="1" <?= $noIsbn === '1' ? 'checked' : '' ?>
+                       class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer">
+                ยังไม่ได้ลง ISBN
+            </label>
         </div>
         <div class="md:col-span-2 flex gap-2">
             <button type="submit" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">

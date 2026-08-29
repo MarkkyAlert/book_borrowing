@@ -503,13 +503,7 @@ class UserRepository
         //    ทำให้กดหน้า 2 แล้วเจอสมาชิกซ้ำจากหน้า 1 หรือบางคนหายไปเลย
         $stmt = $this->pdo->prepare("
             SELECT u.*,
-                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
-                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
-                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations,
-                   -- 🔴 waiting = ต่อคิวรอ **ไม่กินโควตายืม** (ROADMAP ข้อ 5)
-                   --    ต้องแยกจาก pending ให้ขาด ไม่งั้นหน้าจอจะบอกว่าเต็มโควตา
-                   --    ทั้งที่คนนั้นยังยืมได้อีก — ดู ReservationRepository::countPendingByUser()
-                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'waiting') as waiting_reservations
+                   {$this->memberComputedColumns()}
             FROM users u
             {$whereSQL}
             {$havingSQL}
@@ -539,10 +533,13 @@ class UserRepository
     {
         [$whereSQL, $havingSQL, $params] = $this->buildMemberQuery($filters);
 
+        // 🔴 [F-48] ต้องใช้คอลัมน์คำนวณ **ชุดเดียวกับ findMembers()** เป๊ะ
+        //    ไม่งั้น HAVING ที่อ้างคอลัมน์ซึ่งมีแค่ฝั่งเดียวจะทำให้ query นี้พัง
+        //    แล้วหน้าจะขาวทั้งหน้าทันทีที่มีคนกดตัวกรองนั้น
         $stmt = $this->pdo->prepare("
             SELECT COUNT(*) FROM (
                 SELECT u.id,
-                       (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows
+                       {$this->memberComputedColumns()}
                 FROM users u
                 {$whereSQL}
                 {$havingSQL}
@@ -562,6 +559,39 @@ class UserRepository
      * 📤 Output: [$whereSQL, $havingSQL, $params, $orderBy]
      * 🛡️ [SECURITY] user input bind ผ่าน ? · ORDER BY มาจาก whitelist เท่านั้น
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: คอลัมน์คำนวณของตารางสมาชิก — **แหล่งเดียว**
+     * ==========================================================================
+     * 🔴 [F-48] ต้องอยู่ในทั้ง findMembers() และ countFilteredMembers()
+     *    เดิม countFilteredMembers() มีแค่ active_borrows ตัวเดียว
+     *    พอเพิ่ม HAVING ที่อ้างคอลัมน์อื่น ตัวนับจะพังด้วย "Unknown column"
+     *    = หน้าขาวทั้งหน้าทันทีที่มีคนกดตัวกรองนั้น
+     *    ดึงมาไว้ที่เดียวเพื่อไม่ให้สองฟังก์ชันเขียนไม่ตรงกันได้อีก
+     *
+     * 🧠 unpaid_fine_total ใช้เงื่อนไขเดียวกับ BorrowRepository::getUnpaidDebtors()
+     *    (fine_amount > 0 · ยังไม่มีใบเสร็จ · ยังไม่ถูกยกเว้น)
+     *    ถ้านิยามต่างกัน ตัวเลขบนหน้าสมาชิกกับหน้าการเงินจะไม่ตรงกัน
+     */
+    private function memberComputedColumns(): string
+    {
+        return "
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id) as total_borrows,
+                   (SELECT COUNT(*) FROM borrows WHERE user_id = u.id AND status = 'borrowing') as active_borrows,
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'pending') as pending_reservations,
+                   -- 🔴 waiting = ต่อคิวรอ **ไม่กินโควตายืม** (ROADMAP ข้อ 5)
+                   --    ต้องแยกจาก pending ให้ขาด ไม่งั้นหน้าจอจะบอกว่าเต็มโควตา
+                   --    ทั้งที่คนนั้นยังยืมได้อีก — ดู ReservationRepository::countPendingByUser()
+                   (SELECT COUNT(*) FROM reservations WHERE user_id = u.id AND status = 'waiting') as waiting_reservations,
+                   (SELECT COALESCE(SUM(b.fine_amount), 0)
+                      FROM borrows b
+                      LEFT JOIN payments p ON b.id = p.borrow_id
+                     WHERE b.user_id = u.id
+                       AND b.fine_amount > 0
+                       AND p.id IS NULL
+                       AND b.fine_waived_at IS NULL) as unpaid_fine_total";
+    }
+
     private function buildMemberQuery(array $filters): array
     {
         // 📝 แสดง member + staff (ไม่รวม admin)
@@ -590,13 +620,25 @@ class UserRepository
         // 🏷️ Status filter: กรองตามสถานะการยืม
         // 🧠 ใช้ HAVING ไม่ใช้ WHERE เพราะ active_borrows มาจาก subquery
         //    WHERE กรองได้แค่ column จริง / HAVING กรองได้ค่าจาก subquery/aggregate
-        $havingSQL = "";
+        $having = [];
         $status = $filters['status'] ?? '';
         if ($status === 'has_borrow') {
-            $havingSQL = "HAVING active_borrows > 0";
+            $having[] = "active_borrows > 0";
         } elseif ($status === 'no_borrow') {
-            $havingSQL = "HAVING active_borrows = 0";
+            $having[] = "active_borrows = 0";
+        } elseif ($status === 'quota_full') {
+            // 🔴 [F-48] "เต็มโควตา" = ยืมค้าง + จองที่ของพร้อมแล้ว >= เพดาน
+            //    สูตรเดียวกับ BorrowService::borrowBook() ที่ตัดสินว่ายืมเพิ่มได้ไหม
+            //    ⚠️ ห้ามเอา waiting_reservations มารวม — คิวรอไม่กินโควตา (F-41)
+            //    ถ้ารวม คนที่ต่อคิว 3 เล่มจะขึ้นว่าเต็มโควตาทั้งที่ยังยืมได้อีก
+            // 🧠 เพดานส่งมาจากชั้น Service ไม่ให้ Repository อ่าน constant เอง
+            $having[] = "(active_borrows + pending_reservations) >= ?";
+            $params[] = max(1, (int) ($filters['quota_limit'] ?? 1));
+        } elseif ($status === 'has_unpaid_fine') {
+            // 🔴 [F-48] ใช้นิยามเดียวกับหน้าการเงิน — ดู memberComputedColumns()
+            $having[] = "unpaid_fine_total > 0";
         }
+        $havingSQL = $having ? 'HAVING ' . implode(' AND ', $having) : '';
 
         // 📊 Sort mapping (whitelist ป้องกัน SQL Injection)
         // 🛡️ ไม่ใช้ user input ตรงๆ ใน ORDER BY — ใช้ switch แปลงเป็นค่าที่อนุญาต

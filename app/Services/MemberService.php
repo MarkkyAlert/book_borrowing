@@ -77,7 +77,22 @@ class MemberService
     public function getMembers(array $filters = []): array
     {
         // 📝 Pass-through → findMembers (member + staff + search/status/role/sort)
-        return $this->userRepo->findMembers($filters);
+        return $this->userRepo->findMembers($this->withQuotaRule($filters));
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เติมเพดานโควตาให้ filter ก่อนส่งลง Repository
+     * ==========================================================================
+     * 🧠 [F-48] กฎธุรกิจ ("ยืมได้สูงสุดกี่เล่ม") อยู่ที่ชั้น Service
+     *    Repository แค่รับตัวเลขมาใส่ SQL — ไม่ต้องรู้จัก MAX_BORROW_BOOKS
+     * 🔴 ต้องเรียกทั้งใน getMembers() และ countFilteredMembers()
+     *    ถ้าเรียกที่เดียว ยอดรวมกับรายการจะใช้เพดานคนละค่าแล้วนับไม่ตรงกัน
+     */
+    private function withQuotaRule(array $filters): array
+    {
+        $filters['quota_limit'] = MAX_BORROW_BOOKS;
+        return $filters;
     }
 
     /**
@@ -91,7 +106,7 @@ class MemberService
      */
     public function countFilteredMembers(array $filters = []): int
     {
-        return $this->userRepo->countFilteredMembers($filters);
+        return $this->userRepo->countFilteredMembers($this->withQuotaRule($filters));
     }
 
     /**
