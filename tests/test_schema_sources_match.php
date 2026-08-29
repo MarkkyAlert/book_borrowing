@@ -190,10 +190,26 @@ check('SCHEMA-B2', $migrationError === null,
 // ============================================================
 echo "\n── C. เทียบคอลัมน์ทีละตาราง ──\n";
 
-/** ดึงนิยามคอลัมน์แบบเทียบกันได้ (ไม่สนใจลำดับคอลัมน์ และไม่สนใจ comment) */
+/**
+ * ดึงนิยามคอลัมน์แบบเทียบกันได้ (ไม่สนใจลำดับคอลัมน์)
+ *
+ * 🧠 เทียบ COMMENT ด้วย ทั้งที่ COMMENT ไม่มีผลต่อการทำงาน
+ *    เพราะมันคือที่เดียวที่บอกว่าคอลัมน์นั้น**มีไว้ทำอะไร** — คนที่เปิด DB ดู
+ *    ต้องเห็นคำอธิบายเดียวกันไม่ว่าลูกค้าจะติดตั้งผ่านหน้าเว็บหรือ import schema.sql
+ *
+ * 🔴 ตอนเปิดการเทียบนี้ครั้งแรก **แดงทันที 30 คอลัมน์** — install.php เขียน COMMENT
+ *    ไว้แค่ 5 จุด ส่วน schema.sql เขียนไว้เกือบทุกคอลัมน์ สะสมมานานโดยไม่มีใครเห็น
+ *    เพราะเทียบเฉพาะชนิดข้อมูลจะผ่านฉลุย
+ *
+ * ⚠️ ตรวจแค่ "แหล่งที่ส่งมอบ" ตรงกันไหม — ไม่ได้ตรวจ DB ของลูกค้าที่ติดตั้งไปแล้ว
+ *    ลูกค้าเก่ายังมี COMMENT ว่างอยู่ และ**จงใจไม่เขียน migration ไปตามแก้**
+ *    เพราะ MariaDB แก้ COMMENT ต้องใช้ MODIFY COLUMN ซึ่งต้องเขียนนิยามคอลัมน์ใหม่ทั้งบรรทัด
+ *    พิมพ์ผิดตัวเดียว (VARCHAR(100) → VARCHAR(10)) = ข้อมูลลูกค้าถูกตัดถาวร
+ *    ไม่คุ้มกับการได้คำอธิบาย
+ */
 $describe = function (PDO $pdo, string $db, string $table): array {
     $stmt = $pdo->prepare("
-        SELECT column_name, column_type, is_nullable, column_default
+        SELECT column_name, column_type, is_nullable, column_default, column_comment
         FROM information_schema.columns
         WHERE table_schema = ? AND table_name = ?
         ORDER BY column_name
@@ -203,7 +219,8 @@ $describe = function (PDO $pdo, string $db, string $table): array {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $out[strtolower($r['column_name'])] = strtolower($r['column_type'])
             . '|' . $r['is_nullable']
-            . '|' . ($r['column_default'] ?? 'NULL');
+            . '|' . ($r['column_default'] ?? 'NULL')
+            . '|' . trim((string) $r['column_comment']);
     }
     return $out;
 };

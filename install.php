@@ -120,12 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `users` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `name` VARCHAR(100) NOT NULL,
-                `email` VARCHAR(100) NOT NULL UNIQUE,
-                `password` VARCHAR(255) NOT NULL,
-                `phone` VARCHAR(20) DEFAULT NULL,
-                `role` ENUM('member', 'admin', 'staff') NOT NULL DEFAULT 'member',
-                `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
+                `name` VARCHAR(100) NOT NULL COMMENT 'ชื่อ-นามสกุล',
+                `email` VARCHAR(100) NOT NULL UNIQUE COMMENT 'อีเมล',
+                `password` VARCHAR(255) NOT NULL COMMENT 'รหัสผ่าน (bcrypt)',
+                `phone` VARCHAR(20) DEFAULT NULL COMMENT 'เบอร์โทรศัพท์',
+                `role` ENUM('member', 'admin', 'staff') NOT NULL DEFAULT 'member' COMMENT 'บทบาท',
+                `must_change_password` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน (ตั้งตอนนำเข้า/admin สร้างให้)',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_email` (`email`),
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `categories` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `name` VARCHAR(100) NOT NULL UNIQUE,
+                `name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'ชื่อหมวดหมู่',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -151,17 +151,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `books` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `title` VARCHAR(200) NOT NULL,
-                `author` VARCHAR(100) NOT NULL,
-                `isbn` VARCHAR(20) DEFAULT NULL,
+                `title` VARCHAR(200) NOT NULL COMMENT 'ชื่อหนังสือ',
+                `author` VARCHAR(100) NOT NULL COMMENT 'ผู้แต่ง',
+                `isbn` VARCHAR(20) DEFAULT NULL COMMENT 'รหัส ISBN',
                 `call_number` VARCHAR(50) DEFAULT NULL COMMENT 'เลขเรียกหนังสือ — ที่อยู่บนชั้น (รูปแบบอิสระ แต่ละห้องสมุดกำหนดเอง)',
                 `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
-                `category_id` INT DEFAULT NULL,
-                `description` TEXT DEFAULT NULL,
-                `cover_image` VARCHAR(255) DEFAULT NULL,
-                `quantity` INT NOT NULL DEFAULT 1,
-                `price` DECIMAL(10,2) NULL DEFAULT NULL COMMENT 'ราคาปก — ใช้ตั้งต้นค่าชดใช้ตอนแจ้งหาย',
-                `available` INT NOT NULL DEFAULT 1,
+                `category_id` INT DEFAULT NULL COMMENT 'หมวดหมู่',
+                `description` TEXT DEFAULT NULL COMMENT 'รายละเอียด',
+                `cover_image` VARCHAR(255) DEFAULT NULL COMMENT 'ชื่อไฟล์รูปปก',
+                `quantity` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนทั้งหมด',
+                `price` DECIMAL(10,2) NULL DEFAULT NULL COMMENT 'ราคาปก — ใช้ตั้งต้นค่าชดใช้ตอนแจ้งหาย (NULL = ยังไม่ระบุ)',
+                `available` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนที่ว่าง',
                 `is_visible` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'แสดงให้สาธารณะเห็น',
                 `is_reference` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'หนังสืออ้างอิง — อ่านในห้องสมุดเท่านั้น ยืม/จองไม่ได้',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -183,21 +183,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `borrows` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `user_id` INT NOT NULL,
-                `book_id` INT NOT NULL,
-                `borrow_date` DATE NOT NULL,
-                `due_date` DATE NOT NULL,
+                `user_id` INT NOT NULL COMMENT 'ผู้ยืม',
+                `book_id` INT NOT NULL COMMENT 'หนังสือที่ยืม',
+                `borrow_date` DATE NOT NULL COMMENT 'วันที่ยืม',
+                `due_date` DATE NOT NULL COMMENT 'กำหนดคืน',
                 `renew_count` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'ต่ออายุไปแล้วกี่ครั้ง',
-                `return_date` DATE DEFAULT NULL,
-                `lost_reported_at` DATETIME NULL DEFAULT NULL COMMENT 'เวลาที่แจ้งหาย/ชำรุด',
+                `return_date` DATE DEFAULT NULL COMMENT 'วันที่คืนจริง',
+                `lost_reported_at` DATETIME NULL DEFAULT NULL COMMENT 'เวลาที่แจ้งหาย/ชำรุด (แยกจาก return_date เพราะรายงานนับ \"คืนแล้ว\" จาก return_date โดยไม่กรอง status)',
                 `lost_reported_by` INT NULL DEFAULT NULL COMMENT 'ผู้แจ้ง',
                 `lost_note` VARCHAR(255) NULL DEFAULT NULL COMMENT 'รายละเอียด/เหตุผล',
-                `status` ENUM('borrowing', 'returned', 'lost', 'damaged') NOT NULL DEFAULT 'borrowing',
-                `fine_amount` DECIMAL(10,2) DEFAULT 0,
+                `status` ENUM('borrowing', 'returned', 'lost', 'damaged') NOT NULL DEFAULT 'borrowing' COMMENT 'borrowing=ยังไม่คืน / returned=คืนแล้ว / lost=หาย / damaged=ชำรุดจนใช้ไม่ได้',
+                `fine_amount` DECIMAL(10,2) DEFAULT 0 COMMENT 'ค่าปรับ',
                 `fine_waived_at` DATETIME NULL DEFAULT NULL COMMENT 'เวลาที่ยกเว้นค่าปรับ (NULL = ยังไม่ยกเว้น)',
                 `fine_waived_by` INT NULL DEFAULT NULL COMMENT 'ผู้ยกเว้น',
                 `fine_waived_note` VARCHAR(255) NULL DEFAULT NULL COMMENT 'เหตุผลที่ยกเว้น',
-                `notes` TEXT DEFAULT NULL,
+                `notes` TEXT DEFAULT NULL COMMENT 'หมายเหตุ',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_status` (`status`),
@@ -291,8 +291,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `settings` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `setting_key` VARCHAR(50) NOT NULL UNIQUE,
-                `setting_value` TEXT DEFAULT NULL,
+                `setting_key` VARCHAR(50) NOT NULL UNIQUE COMMENT 'Key',
+                `setting_value` TEXT DEFAULT NULL COMMENT 'Value',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -304,9 +304,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `closed_days` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `start_date` DATE NOT NULL,
-                `end_date` DATE NOT NULL,
-                `note` VARCHAR(255) NOT NULL,
+                `start_date` DATE NOT NULL COMMENT 'วันแรกที่ปิด',
+                `end_date` DATE NOT NULL COMMENT 'วันสุดท้ายที่ปิด (วันเดียว = ใส่ค่าเดียวกับ start_date)',
+                `note` VARCHAR(255) NOT NULL COMMENT 'เหตุผล เช่น วันหยุดนักขัตฤกษ์ / ปิดปรับปรุง',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_closed_range` (`start_date`, `end_date`)

@@ -2720,6 +2720,52 @@ JS ปรับ `maximumSelectionLength` ของช่องเลือกห
 
 ---
 
+## ✅ COMMENT ของคอลัมน์ตรงกันทั้ง 3 แหล่งแล้ว — 2026-08-29
+
+**ที่มา:** ระหว่างตรวจงานเลขเรียกหนังสือบน clone สด เอา `SHOW CREATE TABLE`
+ของ DB ที่ติดตั้งใหม่ มาวางเทียบกับ DB ที่อัปเกรดมา แล้วเห็นว่า `call_number`
+มี COMMENT ฝั่งเดียว ตามรอยต่อพบว่าเป็นปัญหาเก่าที่ใหญ่กว่านั้นมาก
+
+**ขนาดของปัญหา: 30 คอลัมน์**
+`install.php` เขียน COMMENT ไว้แค่ 5 จุด · `schema.sql` เขียนไว้ 50 จุด
+ทิศทางเดียวกันหมด — install.php เป็นฝ่ายขาด
+
+| ตาราง | คอลัมน์ที่ขาดคำอธิบาย |
+|---|---|
+| users | name · email · password · phone · role · must_change_password |
+| books | title · author · isbn · category_id · description · cover_image · quantity · price · available |
+| borrows | user_id · book_id · borrow_date · due_date · return_date · status · fine_amount · lost_reported_at · notes |
+| categories | name |
+| closed_days | start_date · end_date · note |
+| settings | setting_key · setting_value |
+
+**🔴 ทำไมไม่มีใครเห็นมาก่อน**
+`test_schema_sources_match.php` **จงใจไม่เทียบ COMMENT** — เขียนไว้ในโค้ดตรง ๆ ว่า
+"ไม่สนใจ comment" เทียบแค่ชนิดข้อมูล/null/default เลยเขียว 18/18 มาตลอด
+ทั้งที่ 30 คอลัมน์ต่างกัน
+
+**🧠 ทำไมถึงสำคัญทั้งที่ COMMENT ไม่มีผลต่อการทำงาน**
+ลูกค้าส่วนใหญ่ติดตั้งผ่านหน้าเว็บ ไม่ได้ import schema.sql
+= คนที่เปิด DB ดูจริง ๆ คือกลุ่มที่ได้ DB ที่**ไม่มีคำอธิบายเลย**
+คำอธิบายอยู่ในไฟล์ที่เขาไม่ได้ใช้
+
+**✅ แก้แล้ว** เติม COMMENT ที่ `install.php` ครบ 30 จุด ลอกจาก `schema.sql`
+คำต่อคำ (diff 30 บรรทัด ไม่แตะบรรทัดอื่นเลย) แล้ว**เปิดการเทียบ COMMENT**
+ใน `test_schema_sources_match.php` ไว้ถาวร
+
+⚠️ `borrows.lost_reported_at` มีเครื่องหมาย `"` อยู่ในคำอธิบาย และ SQL ของ
+install.php อยู่ในสตริง PHP แบบ double-quote จึงต้อง escape เป็น `\"`
+ตัวเทสต์ดึง SQL ด้วย regex แล้วรันตรง ๆ (MySQL ถอด escape ให้) ส่วนของจริง
+รันผ่าน PHP ก่อน (PHP ถอดให้) — **คนละทางกัน** จึงติดตั้งจริงแล้วเทียบซ้ำ
+ยืนยันว่าได้ `"คืนแล้ว"` เหมือนกันทั้งสองทาง
+
+**🔴 ลูกค้าที่ติดตั้งไปแล้วยังมี COMMENT ว่าง — จงใจไม่ตามแก้**
+MariaDB แก้ COMMENT ต้องใช้ `MODIFY COLUMN` ซึ่ง**ต้องเขียนนิยามคอลัมน์ใหม่ทั้งบรรทัด**
+พิมพ์ผิดตัวเดียว (`VARCHAR(100)` → `VARCHAR(10)`) = ข้อมูลลูกค้าถูกตัดถาวร
+เอาความเสี่ยงระดับนั้นไปแลกกับคำอธิบายไม่คุ้ม · ของใหม่ตรงกัน ของเก่าปล่อยไว้
+
+---
+
 ## ✅ เลขเรียกหนังสือ — เพิ่มแล้ว 2026-08-29
 
 **ที่มา:** เจ้าของถามว่า "ตรงตามที่ห้องสมุดควรมีและใช่หรือยัง" ตรวจแล้วพบว่า
