@@ -200,6 +200,9 @@ class BookService
                 'title' => $data['title'],
                 'author' => $data['author'],
                 'isbn' => $data['isbn'] ?? null,
+                // 📍 เลขเรียกหนังสือ — ต้องส่งต่อ ไม่งั้นแก้ไขแล้วค่าหาย
+                //    (Service สร้าง array ใหม่ทีละ key คีย์ที่ไม่ได้ระบุจะตกหล่นเงียบ ๆ)
+                'call_number' => $data['call_number'] ?? null,
                 'category_id' => $data['category_id'] ?? null,
                 'description' => $data['description'] ?? null,
                 'cover_image' => $data['cover_image'] ?? null,

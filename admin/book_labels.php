@@ -57,6 +57,7 @@ require_once __DIR__ . '/header.php';
                         </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อหนังสือ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เลขเรียก</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ISBN</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">จำนวน</th>
                     </tr>
@@ -65,11 +66,12 @@ require_once __DIR__ . '/header.php';
                     <?php foreach ($books as $book): ?>
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3">
-                                <input type="checkbox" name="book_ids[]" value="<?= $book['id'] ?>" data-title="<?= e($book['title']) ?>" data-isbn="<?= e($book['isbn'] ?? $book['id']) ?>"
+                                <input type="checkbox" name="book_ids[]" value="<?= $book['id'] ?>" data-title="<?= e($book['title']) ?>" data-isbn="<?= e($book['isbn'] ?? $book['id']) ?>" data-call="<?= e($book['call_number'] ?? '') ?>"
                                        class="book-checkbox rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer">
                             </td>
                             <td class="px-6 py-3 font-mono text-sm text-gray-600"><?= $book['id'] ?></td>
                             <td class="px-6 py-3 font-medium text-gray-900"><?= e($book['title']) ?></td>
+                            <td class="px-6 py-3 font-mono text-sm text-amber-700"><?= e($book['call_number'] ?? '-') ?></td>
                             <td class="px-6 py-3 font-mono text-sm text-gray-500"><?= e($book['isbn'] ?? '-') ?></td>
                             <td class="px-6 py-3">
                                 <input type="number" name="qty[<?= $book['id'] ?>]" value="1" min="1" max="100" 
@@ -124,14 +126,19 @@ require_once __DIR__ . '/header.php';
     .label .title {
         font-size: 8pt;
         text-align: center;
-        margin-bottom: 2mm;
+        margin-bottom: 1mm;
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
     
-    .label svg { width: 100% !important; height: 15mm !important; }
+    /* 📍 เลขเรียกหนังสือ — ตัวที่คนอ่านตอนเดินหาหนังสือบนชั้น
+       จึงเป็นบรรทัดที่เด่นที่สุดบนฉลาก เด่นกว่าชื่อเรื่องด้วยซ้ำ
+       ⚠️ ฉลากสูง 30mm ลบ padding 2mm×2 = ใช้ได้ 26mm
+          ชื่อ ~3 + เลขเรียก ~3.5 + บาร์โค้ด 14 + รหัส ~3 = ~24mm ยังเหลือที่ */
+    .label .call { font-family: monospace; font-size: 9pt; font-weight: 700; margin-bottom: 1mm; }
+    .label svg { width: 100% !important; height: 14mm !important; }
     .label .code { font-family: monospace; font-size: 8pt; }
 }
 </style>
@@ -165,6 +172,7 @@ function generateLabels() {
         const bookId = cb.value;
         const title = cb.dataset.title || '';
         const isbn = cb.dataset.isbn || bookId; // ใช้ ISBN ถ้ามี, ไม่งั้นใช้ book ID
+        const callNo = cb.dataset.call || '';   // 📍 เลขเรียกหนังสือ (อาจว่างได้)
         const qty = document.querySelector(`input[name="qty[${bookId}]"]`)?.value || 1;
         
         for (let i = 0; i < qty; i++) {
@@ -179,6 +187,15 @@ function generateLabels() {
             titleEl.className = 'title';
             titleEl.textContent = title;
 
+            // 📍 เลขเรียกหนังสือ — ใส่เฉพาะเล่มที่ลงไว้แล้ว
+            //    🛡️ textContent เหมือนกัน — ค่ามาจากฐานข้อมูลที่เจ้าหน้าที่กรอกเอง
+            let callEl = null;
+            if (callNo) {
+                callEl = document.createElement('div');
+                callEl.className = 'call';
+                callEl.textContent = callNo;
+            }
+
             // 📝 svg ต้องสร้างใน namespace ของ SVG ไม่งั้น JsBarcode วาดไม่ขึ้น
             const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svgEl.setAttribute('class', `barcode-${bookId}`);
@@ -187,7 +204,9 @@ function generateLabels() {
             codeEl.className = 'code';
             codeEl.textContent = isbn;
 
-            label.append(titleEl, svgEl, codeEl);
+            // ลำดับบนฉลาก: ชื่อ → เลขเรียก → บาร์โค้ด → รหัส
+            if (callEl) label.append(titleEl, callEl, svgEl, codeEl);
+            else label.append(titleEl, svgEl, codeEl);
             grid.appendChild(label);
         }
     });

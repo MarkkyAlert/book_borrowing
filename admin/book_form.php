@@ -41,6 +41,7 @@ $book = [
     'title' => '',
     'author' => '',
     'isbn' => '',
+    'call_number' => '',
     'category_id' => '',
     'description' => '',
     'cover_image' => '',
@@ -79,6 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $book['title'] = trim($_POST['title'] ?? '');
     $book['author'] = trim($_POST['author'] ?? '');
     $book['isbn'] = trim($_POST['isbn'] ?? '');
+    // 📍 เลขเรียกหนังสือ — รูปแบบอิสระ ไม่บังคับ
+    //    🔴 ห้ามตรวจรูปแบบดิวอี้ — ห้องสมุดเล็กจำนวนมากใช้รหัสของตัวเอง
+    //       เช่น "ก-01-03" (ตู้ ก ชั้น 1 ช่อง 3) หรือ "นิยาย-045"
+    //       บังคับรูปแบบ = ลูกค้าครึ่งหนึ่งใช้ไม่ได้
+    $book['call_number'] = trim($_POST['call_number'] ?? '');
     $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
     $book['description'] = trim($_POST['description'] ?? '');
     $book['quantity'] = max(0, (int) ($_POST['quantity'] ?? 1)); // ขั้นต่ำ 0 เล่ม (สำหรับซ่อนหนังสือที่หาย/ชำรุด)
@@ -222,6 +228,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'title' => $book['title'],
             'author' => $book['author'],
             'isbn' => $book['isbn'] ?: null,
+            // 📍 '' → null เพื่อให้ "ยังไม่ได้ลงเลขเรียก" เป็นค่าเดียวกันทั้งระบบ
+            //    ไม่งั้นจะมีทั้งแถวที่เป็น '' และ null ปนกัน ค้นหา/กรองแล้วได้ผลไม่ครบ
+            //    (บทเรียนจาก F-48: ISBN มีทั้ง '' และ NULL จนต้องเช็คสองแบบ)
+            'call_number' => $book['call_number'] ?: null,
             'category_id' => $book['category_id'],
             'description' => $book['description'] ?: null,
             'cover_image' => $coverImage,
@@ -368,6 +378,24 @@ require_once __DIR__ . '/header.php';
                                 class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 border-gray-300 rounded-xl"
                                 placeholder="978-xxx-xxx">
                         </div>
+                    </div>
+
+                    <?php // 📍 เลขเรียกหนังสือ — "ที่อยู่" ของหนังสือบนชั้น
+                          //    คนละเรื่องกับ ISBN: ISBN บอกว่าเป็นหนังสือเรื่องอะไร (ทั้งโลกใช้เลขเดียวกัน)
+                          //    เลขเรียกบอกว่าอยู่ชั้นไหนใน **ห้องสมุดนี้** (แต่ละแห่งกำหนดเอง) ?>
+                    <div class="md:col-span-1">
+                        <label for="call_number" class="block text-sm font-medium text-gray-700 mb-1">เลขเรียกหนังสือ</label>
+                        <div class="relative rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="bi bi-signpost-split text-gray-400"></i>
+                            </div>
+                            <input type="text" id="call_number" name="call_number" maxlength="50" value="<?= e($book['call_number']) ?>"
+                                class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 border-gray-300 rounded-xl"
+                                placeholder="เช่น 371.3 ส236ค หรือ ก-01-03">
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            ตำแหน่งบนชั้น — ใช้รูปแบบไหนก็ได้ตามที่ห้องสมุดใช้อยู่ (ไม่บังคับ)
+                        </p>
                     </div>
 
                     <div class="md:col-span-1">

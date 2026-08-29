@@ -205,6 +205,7 @@ $gapSuites = [
     'สิทธิ์เขียนโฟลเดอร์รูป'     => 'test_upload_writable.php',    // F-54 ตัวติดตั้งเตือนก่อน + บอกสาเหตุจริง
     'วันปิดทำการ'                => 'test_closed_days.php',        // ไม่คิดค่าปรับวันที่ห้องสมุดปิด
     'โควตาตาม role'              => 'test_role_quota.php',         // เจ้าหน้าที่ยืมได้มากกว่าสมาชิกทั่วไป
+    'เลขเรียกหนังสือ'            => 'test_call_number.php',        // ที่อยู่ของหนังสือบนชั้น
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว

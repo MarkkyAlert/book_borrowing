@@ -337,6 +337,21 @@ require_once __DIR__ . '/includes/header.php';
                         </div>
                     </div>
 
+                    <?php // 📍 เลขเรียกหนังสือ — วางไว้ **ก่อน** ISBN โดยตั้งใจ
+                          //    ISBN ไม่มีประโยชน์กับคนที่กำลังจะเดินไปหยิบหนังสือ
+                          //    แต่เลขเรียกคือสิ่งเดียวที่บอกว่าไปหยิบที่ไหน ?>
+                    <?php if (!empty($book['call_number'])): ?>
+                        <div class="flex items-start p-4 rounded-xl bg-amber-50 border border-amber-200 shadow-sm">
+                            <div class="flex-shrink-0 p-2 bg-amber-100 text-amber-700 rounded-lg">
+                                <i class="bi bi-signpost-split text-xl"></i>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-amber-800">อยู่ที่ชั้น (เลขเรียกหนังสือ)</p>
+                                <p class="text-lg font-bold text-amber-900 font-mono"><?= e($book['call_number']) ?></p>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if ($book['isbn']): ?>
                         <div class="flex items-start p-4 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-primary-100 transition-colors shadow-sm">
                             <div class="flex-shrink-0 p-2 bg-pink-100 text-pink-600 rounded-lg">

@@ -212,6 +212,13 @@ require_once __DIR__ . '/header.php';
                                 <a href="<?= APP_URL ?>/book.php?id=<?= $book['id'] ?>" class="font-bold text-gray-900 hover:text-primary-600 transition-colors line-clamp-2 max-w-xs block" target="_blank">
                                     <?= e($book['title']) ?>
                                 </a>
+                                <?php // 📍 เลขเรียกเด่นกว่า ISBN โดยตั้งใจ — บรรณารักษ์ใช้เลขเรียกเดินหาของ
+                                      //    ส่วน ISBN ใช้ตอนสั่งซื้อ/ลงรายการ ซึ่งไม่ใช่งานประจำวัน ?>
+                                <?php if (!empty($book['call_number'])): ?>
+                                    <span class="text-xs text-amber-700 font-mono mt-1 inline-flex items-center gap-1">
+                                        <i class="bi bi-signpost-split"></i><?= e($book['call_number']) ?>
+                                    </span>
+                                <?php endif; ?>
                                 <?php if ($book['isbn']): ?>
                                     <span class="text-xs text-gray-400 font-mono mt-1 block">ISBN: <?= e($book['isbn']) ?></span>
                                 <?php endif; ?>

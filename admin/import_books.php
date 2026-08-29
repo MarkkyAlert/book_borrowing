@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             if (!$handle) {
                 $errors[] = 'ไม่สามารถอ่านไฟล์ได้';
             } else {
-                fgetcsv($handle); // ข้าม header row (Title, Author, ISBN, Category, Quantity)
+                fgetcsv($handle); // ข้าม header row (Title, Author, ISBN, Category, Quantity, Reference, CallNumber)
                 
                 // [DATA INTEGRITY] Transaction ครอบทุกแถว — ถ้า error กลางทาง rollback ทั้งหมด (all-or-nothing)
                 $pdo->beginTransaction();
@@ -89,6 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         //    รับได้ทั้ง 1 / yes / y / true / ใช่ เผื่อคนกรอกคนละแบบ
                         $refRaw = strtolower(trim($row[5] ?? ''));
                         $isReference = in_array($refRaw, ['1', 'yes', 'y', 'true', 'ใช่'], true) ? 1 : 0;
+                        // 📍 คอลัมน์ที่ 7 (ไม่บังคับ) — เลขเรียกหนังสือ (ที่อยู่บนชั้น)
+                        //    วางท้ายสุดด้วยเหตุผลเดียวกับคอลัมน์ 6: ไฟล์เดิมของลูกค้าต้องใช้ได้เหมือนเดิม
+                        //    🔴 ไม่ตรวจรูปแบบ — แต่ละห้องสมุดใช้คนละแบบ (ดิวอี้ / ก-01-03 / นิยาย-045)
+                        $callNumber = mb_substr(trim($row[6] ?? ''), 0, 50);
                         
                         // 🔍 Validation ผ่าน shared helper (Single Source of Truth — ใช้ร่วมกับ book_form.php)
                         $bookErrors = validateBookData(['title' => $title, 'author' => $author, 'isbn' => $isbn]);
@@ -133,6 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                                 'title' => $title,
                                 'author' => $author,
                                 'isbn' => $isbn ?: null,
+                                'call_number' => $callNumber ?: null,
                                 'category_id' => $categoryId,
                                 'quantity' => $qty,
                                 'is_reference' => $isReference
@@ -195,7 +200,7 @@ require_once __DIR__ . '/header.php';
                 <h4 class="text-sm font-bold text-gray-700 mb-2">1. เตรียมไฟล์ CSV</h4>
                 <p class="text-sm text-gray-600 mb-2">สร้างไฟล์ CSV โดยมีคอลัมน์เรียงตามลำดับดังนี้:</p>
                 <div class="bg-gray-800 text-gray-200 p-3 rounded-lg font-mono text-xs overflow-x-auto mb-3">
-                    Title, Author, ISBN, Category, Quantity, Reference
+                    Title, Author, ISBN, Category, Quantity, Reference, CallNumber
                 </div>
                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm">
                     <strong>ตัวอย่างข้อมูล:</strong><br>
@@ -208,7 +213,7 @@ require_once __DIR__ . '/header.php';
                     </p>
                 </div>
                 <div class="mt-2">
-                    <a href="data:text/csv;charset=utf-8,Title,Author,ISBN,Category,Quantity,Reference%0AExample Book,John Doe,123456789,Fiction,5,0" download="template_books.csv" class="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center">
+                    <a href="data:text/csv;charset=utf-8,Title,Author,ISBN,Category,Quantity,Reference,CallNumber%0AExample Book,John Doe,123456789,Fiction,5,0,371.3 J65E" download="template_books.csv" class="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center">
                         <i class="bi bi-download mr-1"></i>ดาวน์โหลดเทมเพลต (Template)
                     </a>
                 </div>

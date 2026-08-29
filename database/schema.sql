@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `books` (
     `title` VARCHAR(200) NOT NULL COMMENT 'ชื่อหนังสือ',
     `author` VARCHAR(100) NOT NULL COMMENT 'ผู้แต่ง',
     `isbn` VARCHAR(20) DEFAULT NULL COMMENT 'รหัส ISBN',
+    `call_number` VARCHAR(50) DEFAULT NULL COMMENT 'เลขเรียกหนังสือ — ที่อยู่บนชั้น (รูปแบบอิสระ แต่ละห้องสมุดกำหนดเอง)',
     -- 🔎 index ค้นหา: trigram ของ title+author+isbn สร้างโดย PHP (buildSearchTokens())
     --    ⚠️ ถ้า INSERT หนังสือด้วย SQL ตรง ๆ คอลัมน์นี้จะว่าง → ค้นหาเล่มนั้นไม่เจอ
     --       ต้องรัน `php database/rebuild_search_index.php` ตามหลังเสมอ
@@ -71,6 +72,8 @@ CREATE TABLE IF NOT EXISTS `books` (
     INDEX `idx_available` (`available`),
     INDEX `idx_category` (`category_id`),
     UNIQUE INDEX `uq_isbn` (`isbn`),
+    -- 📇 สำหรับ "อ่านชั้น" (เรียงตามเลขเรียก) และค้นหาด้วยเลขเรียก
+    INDEX `idx_call_number` (`call_number`),
     -- 🔎 FULLTEXT บน trigram ไม่ใช่บน title/author โดยตรง
     --    เพราะ MySQL ตัดคำด้วยช่องว่าง ภาษาไทยไม่มีช่องว่าง → ค้นคำกลางชื่อเรื่องไม่เจอ
     FULLTEXT KEY `ft_books_search` (`search_tokens`),

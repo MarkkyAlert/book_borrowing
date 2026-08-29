@@ -356,9 +356,10 @@ class BookRepository
                 $params[] = $ftQuery;
             }
 
-            $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)";
-            // 📌 ต้องใส่ 3 ค่า เพราะมี ? 3 ตัว (title, author, isbn)
-            $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%"]);
+            // 📍 ค้นด้วยเลขเรียกได้ด้วย — บรรณารักษ์ที่ยืนอยู่หน้าชั้นมักถือเลขเรียกมา
+            $where[] = "(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ? OR b.call_number LIKE ?)";
+            // 📌 ต้องใส่ 4 ค่า เพราะมี ? 4 ตัว (title, author, isbn, call_number)
+            $params = array_merge($params, ["%{$search}%", "%{$search}%", "%{$search}%", "%{$search}%"]);
         }
 
         // 🏷️ Filter: หมวดหมู่ — กรองเฉพาะ category_id ที่เลือก
@@ -433,11 +434,12 @@ class BookRepository
 
     public function findAllForLabels(): array
     {
-        // 📝 SQL: ดึงเฉพาะ id, title, isbn (เบาๆ สำหรับพิมพ์ label)
-        // 🧠 ไม่ดึง * เพราะหน้าพิมพ์ label ใช้แค่ 3 field
+        // 📝 SQL: ดึงเฉพาะ field ที่ฉลากใช้ (เบาๆ สำหรับพิมพ์ label)
+        // 📍 ต้องมี call_number ด้วย — ฉลากที่ติดสันหนังสือคือที่ที่เลขเรียกต้องอยู่
+        //    (สติกเกอร์บนสันคือสิ่งที่คนใช้เดินหาหนังสือบนชั้น)
         // ORDER BY id DESC = ใหม่สุดก่อน (พิมพ์ label หนังสือที่เพิ่งเพิ่ม)
         return $this->pdo->query("
-            SELECT id, title, isbn FROM books ORDER BY id DESC
+            SELECT id, title, isbn, call_number FROM books ORDER BY id DESC
         ")->fetchAll();
     }
 
@@ -597,8 +599,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, search_tokens, category_id, description, cover_image, price, quantity, available, is_visible, is_reference)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, call_number, search_tokens, category_id, description, cover_image, price, quantity, available, is_visible, is_reference)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -610,6 +612,10 @@ class BookRepository
             $data['title'],              // ชื่อหนังสือ (บังคับ)
             $data['author'],             // ผู้แต่ง (บังคับ)
             $data['isbn'] ?? null,       // ISBN (ไม่บังคับ — ใช้สแกน barcode)
+            // 📍 เลขเรียกหนังสือ — "ที่อยู่บนชั้น" คนละเรื่องกับ ISBN
+            //    ISBN บอกว่าเป็นหนังสือเรื่องอะไร · เลขเรียกบอกว่าอยู่ชั้นไหนในห้องสมุดนี้
+            //    null = ยังไม่ได้ลงเลขเรียก (ห้องสมุดทยอยลงทีหลังได้)
+            $data['call_number'] ?? null,
             // 🔎 index ค้นหา — ถ้าไม่เติมตรงนี้ หนังสือเล่มนี้จะ **ค้นหาไม่เจอ** ทั้งระบบ
             $this->makeSearchTokens($data),
             $data['category_id'] ?? null, // หมวดหมู่ (ไม่บังคับ)
@@ -656,7 +662,7 @@ class BookRepository
         //    ห้ามส่ง available > quantity เด็ดขาด
         $stmt = $this->pdo->prepare("
             UPDATE books SET 
-                title = ?, author = ?, isbn = ?, search_tokens = ?, category_id = ?, 
+                title = ?, author = ?, isbn = ?, call_number = ?, search_tokens = ?, category_id = ?, 
                 description = ?, cover_image = COALESCE(?, cover_image), 
                 price = ?, quantity = ?, available = ?, is_visible = ?, is_reference = ?
             WHERE id = ?
@@ -667,18 +673,19 @@ class BookRepository
             $data['title'],              // 1. ชื่อหนังสือ
             $data['author'],             // 2. ผู้แต่ง
             $data['isbn'] ?? null,       // 3. ISBN
-            // 🔎 4. index ค้นหา — ต้องสร้างใหม่ทุกครั้งที่แก้ชื่อ/ผู้แต่ง/ISBN
+            $data['call_number'] ?? null, // 4. 📍 เลขเรียกหนังสือ (ที่อยู่บนชั้น)
+            // 🔎 5. index ค้นหา — ต้องสร้างใหม่ทุกครั้งที่แก้ชื่อ/ผู้แต่ง/ISBN
             //    ไม่งั้นจะยังค้นเจอด้วย "ชื่อเดิม" แต่ค้นด้วยชื่อใหม่ไม่เจอ
             $this->makeSearchTokens($data),
-            $data['category_id'] ?? null, // 5. หมวดหมู่
-            $data['description'] ?? null, // 6. รายละเอียด
-            $data['cover_image'] ?? null, // 7. รูปปก (null = เก็บรูปเดิม)
-            $data['price'] ?? null,      // 8. 💰 ราคาปก (null = ยังไม่ระบุ ไม่ใช่ 0)
-            $data['quantity'],           // 9. จำนวนทั้งหมด
-            $data['available'],          // 10. จำนวนที่ว่าง
-            $data['is_visible'] ?? 1,    // 11. 👁️ การมองเห็น
-            $data['is_reference'] ?? 0,  // 12. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
-            $id                          // 13. WHERE id = ?
+            $data['category_id'] ?? null, // 6. หมวดหมู่
+            $data['description'] ?? null, // 7. รายละเอียด
+            $data['cover_image'] ?? null, // 8. รูปปก (null = เก็บรูปเดิม)
+            $data['price'] ?? null,      // 9. 💰 ราคาปก (null = ยังไม่ระบุ ไม่ใช่ 0)
+            $data['quantity'],           // 10. จำนวนทั้งหมด
+            $data['available'],          // 11. จำนวนที่ว่าง
+            $data['is_visible'] ?? 1,    // 12. 👁️ การมองเห็น
+            $data['is_reference'] ?? 0,  // 13. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
+            $id                          // 14. WHERE id = ?
         ]);
     }
 

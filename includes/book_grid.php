@@ -68,6 +68,14 @@
                         <?= e($book['author']) ?>
                     </p>
 
+                    <?php // 📍 เลขเรียกบนการ์ดผลค้นหา — คนค้นเจอแล้วเดินไปหยิบได้เลย
+                          //    ไม่ต้องกดเข้าหน้ารายละเอียดก่อน ?>
+                    <?php if (!empty($book['call_number'])): ?>
+                        <p class="text-xs text-amber-700 font-mono mb-4 -mt-2 flex items-center">
+                            <i class="bi bi-signpost-split mr-2"></i><?= e($book['call_number']) ?>
+                        </p>
+                    <?php endif; ?>
+
                     <div class="mt-auto pt-4 border-t border-gray-100">
                         <a href="book.php?id=<?= $book['id'] ?>" class="block w-full py-2.5 rounded-lg bg-gray-50 text-gray-600 text-center text-sm font-semibold hover:bg-primary-600 hover:text-white transition-colors">
                             ดูรายละเอียด
