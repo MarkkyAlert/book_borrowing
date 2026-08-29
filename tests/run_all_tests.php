@@ -200,6 +200,7 @@ $gapSuites = [
     'บังคับเปลี่ยนรหัสครั้งแรก'  => 'test_must_change_password.php', // 🔴 F-53 ปิดช่องรหัสเริ่มต้นร่วม
     'กล่องยืนยัน'                => 'test_confirm_dialogs.php',     // F-47 บอกว่าทำอะไรกับใคร + escape
     'ตัวกรองของบรรณารักษ์'       => 'test_filters.php',            // F-48 ไม่มี ISBN / เต็มโควตา / ค้างค่าปรับ
+    'มือถือ: ปุ่มอยู่ในจอ'       => 'test_mobile_layout.php',      // F-49 ตรึงคอลัมน์ปุ่มบนจอแคบ
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว

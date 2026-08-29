@@ -377,7 +377,7 @@ require_once __DIR__ . '/header.php';
         </div>
     <?php else: ?>
     <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="min-w-full text-sm sticky-action">
             <thead class="text-xs text-red-700 uppercase bg-red-100/50">
                 <tr>
                     <th class="px-4 py-2 text-left font-medium">สมาชิก</th>

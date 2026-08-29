@@ -192,7 +192,7 @@ require_once __DIR__ . '/header.php';
                 </a>
             </div>
         <?php else: ?>
-            <table class="w-full text-sm text-left">
+            <table class="w-full text-sm text-left sticky-action">
                 <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
                     <tr>
                         <th class="px-6 py-4 font-medium" width="50">#</th>
