@@ -2,7 +2,7 @@
 
 > เอกสารชุดนี้สร้างจากการอ่าน **Source Code + Database Schema จริง** (ไม่ใช่จากเอกสารเดิม)
 > วันที่ตรวจ: 2026-08-26 | Commit ฐาน: `1453c01`
-> อัปเดตล่าสุด: 2026-08-29 — ปิด F-01…F-34 + ROADMAP ข้อ 0–5 + F-35…F-46 · F-51 · F-52 (ชุดทดสอบ 898/898 · 56 ชุด)
+> อัปเดตล่าสุด: 2026-08-30 — ปิด **F-01…F-54 ครบทุกข้อ** + **ROADMAP ข้อ 0–5 ครบ** + 8 งานประจำของห้องสมุด + เลขเรียกหนังสือ + ใบรายชื่อโทรตาม (ชุดทดสอบ 901/901 · 56 ชุด)
 > · **F-53 แก้แล้ว** — บังคับเปลี่ยนรหัสตอนล็อกอินครั้งแรก + backfill ให้ลูกค้าเดิม
 > · **F-35…F-54 ปิดครบทุกข้อแล้ว** — เจอจากการทดสอบสวมบทบาทบรรณารักษ์บนข้อมูลขนาดจริง
 > ✅ ผ่านการทดสอบ **ติดตั้งจาก clone สด** แล้ว — ทั้งติดตั้งใหม่, import ข้อมูลตัวอย่าง และอัปเกรดจากเวอร์ชันเก่า
@@ -14,22 +14,22 @@
 |-------|--------|-------------------|
 | **0** | **[AI_HANDOFF.md](AI_HANDOFF.md)** | **🔴 อ่านก่อนเพื่อน** — กติกาของเจ้าของ, กับดัก 8 ข้อที่เสียเวลาค้นพบมาแล้ว, สิ่งที่พูดได้/ห้ามพูดตอนขาย, วิธีรันเทสต์ |
 | 1 | [PROJECT_MAP.md](PROJECT_MAP.md) | "โค้ดอยู่ตรงไหน" — โครงสร้าง, Page→Service→Repository→Table |
-| 2 | [DATABASE_MAP.md](DATABASE_MAP.md) | "ข้อมูลเก็บยังไง" — 9 ตาราง, FK, Constraint, โมเดล stock |
+| 2 | [DATABASE_MAP.md](DATABASE_MAP.md) | "ข้อมูลเก็บยังไง" — 10 ตาราง, FK, Constraint, โมเดล stock |
 | 3 | [FEATURE_MATRIX.md](FEATURE_MATRIX.md) | "ทำ X ได้ไหม" — มีแล้ว / ต่อยอดได้ / ไม่เหมาะ |
 | 4 | [BUSINESS_RULES.md](BUSINESS_RULES.md) | "กติกาของระบบคืออะไร" — ทุกกฎพร้อมที่มาในโค้ด |
 | 5 | [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) | "ปลอดภัยแค่ไหน" — control ที่มีจริง + วิธีที่ยืนยัน |
 | 6 | [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) | "ข้อจำกัดคืออะไร" — ขอบเขตที่พูดตรง ๆ |
 | 7 | [WHERE_TO_EDIT_MAP.md](WHERE_TO_EDIT_MAP.md) | "จะแก้ X ต้องแตะไฟล์ไหน" |
 | 8 | [FINDINGS.md](FINDINGS.md) | จุดที่ Context/Comment **ไม่ตรง** กับโค้ด + บั๊กที่เจอจากการทดสอบ · **F-01…F-54 ปิดครบทุกข้อแล้ว** · 8 งานประจำของห้องสมุดทำครบแล้ว · ที่เหลือคือช่องว่างที่จงใจไม่ทำ (อีเมล) และงานใหญ่ที่ยังไม่ทำ (เลขทะเบียนรายเล่ม) |
-| 9 | [ROADMAP.md](ROADMAP.md) | **"ตกลงแล้วว่าจะทำอะไรต่อ"** — 5 ฟีเจอร์ที่เจ้าของสั่งให้เข้าคิวแก้ พร้อมคำตอบ 8 ข้อตาม `AI_HANDOFF §21` ครบทุกข้อ (ต่ออายุการยืม · หนังสือหาย/ชำรุด · ยกเว้นค่าปรับ · จองรอคิว · หนังสืออ้างอิงห้ามยืม) |
+| 9 | [ROADMAP.md](ROADMAP.md) | 📜 **"เคยตกลงว่าจะทำอะไร" — ทำครบแล้วทั้ง 5 ข้อ** เก็บไว้อ่านเป็นเหตุผลเบื้องหลังการออกแบบ พร้อมคำตอบ 8 ข้อตาม `AI_HANDOFF §21` (ต่ออายุการยืม · หนังสือหาย/ชำรุด · ยกเว้นค่าปรับ · จองรอคิว · หนังสืออ้างอิงห้ามยืม) |
 
 ## สรุประบบใน 5 บรรทัด
 
 - Pure PHP 8.1+ / MySQL(MariaDB) / PDO — ไม่มี framework, ไม่มี composer, ไม่มี build step
 - Layered: `Page/API → Service → Repository → PDO → MySQL` + autoloader ใน `bootstrap.php`
-- 8 Service / 9 Repository / 9 ตาราง / 3 role (admin, staff, member)
+- 8 Service / 10 Repository / 10 ตาราง / 3 role (admin, staff, member)
 - ทุก write flow สำคัญใช้ **Transaction + `SELECT ... FOR UPDATE`** จริง (ไม่ใช่แค่เคลม)
-- 18,500 บรรทัด PHP + ชุดทดสอบ 898 เคส ใน 56 ชุด (**ผ่าน 898/898**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
+- 18,500 บรรทัด PHP + ชุดทดสอบ 901 เคส ใน 56 ชุด (**ผ่าน 901/901**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
 
 ## ชุดข้อมูลสำหรับทดสอบ
 
@@ -52,8 +52,8 @@ L2 รวมหมวดเก่าของ L0 เข้ากับ 12 หม
 
 | รายการ | ผล |
 |--------|-----|
-| ติดตั้ง (`install.php`) | ✅ สำเร็จ — 9 ตาราง, admin, ตัวอย่าง 5 เล่ม/5 หมวด |
-| Test suite (`php tests/run_all_tests.php 123456`) | **898/898 ผ่าน (100%)** — 56 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~22 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
+| ติดตั้ง (`install.php`) | ✅ สำเร็จ — 10 ตาราง, admin, ตัวอย่าง 5 เล่ม/5 หมวด |
+| Test suite (`php tests/run_all_tests.php 123456`) | **901/901 ผ่าน (100%)** — 56 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~22 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
 | `.htaccess` ป้องกันไฟล์สำคัญ | ✅ `.env`, `app/`, `includes/*.php`, `tests/`, `database/`, `*.sql`, `*.md`, `.installed` → 403 ทั้งหมด |
 | XSS escaping (probe จริง) | ✅ `?search=<script>` ถูก escape เป็น `&lt;script&gt;` |
 | Rate limit login (probe จริง) | ✅ บล็อกตามค่าใน `.env` (ตอนนี้ = 5 ครั้ง / 15 นาที) |

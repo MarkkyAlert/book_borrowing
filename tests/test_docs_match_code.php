@@ -397,6 +397,91 @@ check('DOC-F3', !$entryOffenders,
 
 // ============================================================
 // ============================================================
+// G. แผนที่โครงสร้างต้องครบตามโค้ดจริง
+// ============================================================
+echo "\n── G. แผนที่โครงสร้าง (DATABASE_MAP / PROJECT_MAP) ──\n";
+
+/**
+ * 🔴 ที่มา: เพิ่มตาราง `closed_days` + `ClosedDayRepository` ตอนทำ "วันปิดทำการ"
+ *    แล้วอัปเดตแค่ FINDINGS · **DATABASE_MAP ไม่มีตารางนี้เลย** ทั้งที่หน้าที่ของไฟล์
+ *    คืออธิบายทุกตาราง · PROJECT_MAP ก็ไม่มี Repository ตัวนี้
+ *    และ 00_INDEX ยังบอก "9 ตาราง / 9 Repository" ผิด 3 จุด
+ *
+ * 🧠 ดึงรายชื่อตารางจาก **schema.sql** ไม่ใช่จาก DB ที่รันอยู่
+ *    ไม่งั้นผลจะเปลี่ยนตามเครื่องที่รัน (เช่นเครื่องที่ยังไม่ได้ migrate)
+ */
+$schemaSql = (string) file_get_contents($ROOT . '/database/schema.sql');
+preg_match_all('/CREATE TABLE(?:\s+IF NOT EXISTS)?\s+`([a-z_]+)`/i', $schemaSql, $tm);
+$schemaTables = array_values(array_diff(array_unique($tm[1] ?? []), ['schema_migrations']));
+
+$dbMap = (string) file_get_contents($ctxDir . '/DATABASE_MAP.md');
+$missingTables = array_values(array_filter($schemaTables, fn($t) => !str_contains($dbMap, '`' . $t . '`')));
+
+check('DOC-G1', $schemaTables && !$missingTables,
+    'DATABASE_MAP พูดถึงครบทั้ง ' . count($schemaTables) . ' ตารางใน schema.sql',
+    $schemaTables
+        ? '🔴 ตารางที่ไม่มีใน DATABASE_MAP: ' . implode(', ', $missingTables)
+            . "\n       ไฟล์นี้มีหน้าที่อธิบายทุกตาราง — ตารางที่หายไปเท่ากับไม่มีใครรู้ว่ามันมี"
+        : '🔴 ดึงรายชื่อตารางจาก schema.sql ไม่ได้ — รูปแบบไฟล์เปลี่ยน ต้องแก้เทสต์นี้');
+
+// G2 — ทุก Service / Repository ต้องมีชื่ออยู่ใน PROJECT_MAP
+$classFiles = array_merge(glob($ROOT . '/app/Services/*.php') ?: [], glob($ROOT . '/app/Repositories/*.php') ?: []);
+$classNames = array_map(fn($f) => basename($f, '.php'), $classFiles);
+$projMap    = (string) file_get_contents($ctxDir . '/PROJECT_MAP.md');
+$missingCls = array_values(array_filter($classNames, fn($c) => !str_contains($projMap, $c)));
+
+check('DOC-G2', $classNames && !$missingCls,
+    'PROJECT_MAP พูดถึงครบทั้ง ' . count($classNames) . ' คลาส (Service + Repository)',
+    '🔴 คลาสที่ไม่มีใน PROJECT_MAP: ' . implode(', ', $missingCls));
+
+// G3 — ตัวเลขที่เอกสารอ้าง ต้องตรงกับของจริง
+$realCounts = [
+    'ตาราง'      => count($schemaTables),
+    'Repository' => count(glob($ROOT . '/app/Repositories/*.php') ?: []),
+    'Service'    => count(glob($ROOT . '/app/Services/*.php') ?: []),
+];
+$wrongNums = [];
+foreach ($ctxFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        // 🔴 ข้ามข้อความที่ยกมาอ้างและบล็อกบันทึกอดีต ด้วยเหตุผลเดียวกับข้อ F
+        $clean = preg_replace('/`[^`]*`/u', ' ', $line);
+        $clean = preg_replace('/"[^"]{0,200}"/u', ' ', $clean);
+        if (str_contains($line, '📜')) continue;
+        foreach ($realCounts as $word => $real) {
+            /**
+             * 🔴 คำว่า "ตาราง" ในภาษาไทยหมายได้ทั้ง **ตารางฐานข้อมูล** และ **ตาราง HTML บนหน้าจอ**
+             *    เคยจับผิด 3 จุดที่พูดถึง "6 ตาราง" ซึ่งหมายถึงตารางบนหน้าแอดมิน (งาน F-49 มือถือ)
+             *    จึงนับเป็นคำกล่าวอ้างเรื่องฐานข้อมูล **เฉพาะเมื่อบรรทัดนั้นมีบริบท DB กำกับ**
+             */
+            if ($word === 'ตาราง') {
+                $dbContext = false;
+                foreach (['FK', 'Constraint', 'schema', 'ฐานข้อมูล', 'Repository', 'ติดตั้ง'] as $marker) {
+                    if (str_contains($clean, $marker)) { $dbContext = true; break; }
+                }
+                if (!$dbContext) continue;
+            }
+            if (preg_match('/(\d+)\s*' . preg_quote($word, '/') . '\b/u', $clean, $m)
+                && (int) $m[1] !== $real) {
+                $wrongNums[] = sprintf('%s:%d → เขียนว่า %d %s (จริง %d)',
+                    $rel($file), $i + 1, (int) $m[1], $word, $real);
+            }
+        }
+    }
+}
+// 📌 หัวข้อของ DATABASE_MAP เขียนเป็น "ตารางทั้งหมด (N)" คนละรูปแบบกับบรรทัดอื่น
+if (preg_match('/ตารางทั้งหมด\s*\((\d+)\)/u', $dbMap, $m)
+    && (int) $m[1] !== $realCounts['ตาราง']) {
+    $wrongNums[] = sprintf('docs/ai-context/DATABASE_MAP.md → หัวข้อเขียนว่า %d ตาราง (จริง %d)',
+        (int) $m[1], $realCounts['ตาราง']);
+}
+
+check('DOC-G3', !$wrongNums,
+    'ตัวเลขที่เอกสารอ้างตรงกับของจริง (ตาราง ' . $realCounts['ตาราง']
+        . ' · Repository ' . $realCounts['Repository'] . ' · Service ' . $realCounts['Service'] . ')',
+    "🔴 ตัวเลขไม่ตรง " . count($wrongNums) . " จุด:\n       " . implode("\n       ", $wrongNums));
+
+// ============================================================
+// ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
     $results['passed'], $results['total'],

@@ -50,9 +50,9 @@ Browser
 
 > `AuthService::register()` **delegate** ไป `MemberService::createMember()` — การสร้างสมาชิกมีทางเดียว (single source of truth)
 
-## 4. Repository Layer (9)
+## 4. Repository Layer (10)
 
-`BookRepository` (19 method) · `BorrowRepository` (25) · `ReservationRepository` (16) · `UserRepository` (15) · `ReportRepository` (14) · `CategoryRepository` (11) · `PaymentRepository` (6) · `PasswordResetRepository` (6) · `SettingsRepository` (5)
+`BookRepository` (19 method) · `BorrowRepository` (25) · `ReservationRepository` (16) · `UserRepository` (15) · `ReportRepository` (14) · `CategoryRepository` (11) · `PaymentRepository` (6) · `PasswordResetRepository` (6) · `SettingsRepository` (5) · `ClosedDayRepository` (4 — วันปิดทำการ ใช้ตอนคิดค่าปรับ)
 
 **Method ที่ล็อกแถว (`FOR UPDATE`) — ห้ามเอาออก:**
 

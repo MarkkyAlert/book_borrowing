@@ -13,7 +13,7 @@ Engine: InnoDB / `utf8mb4_unicode_ci` ทุกตาราง · ตรวจ�
 `sample_data.sql` จะ **ล้างข้อมูลเดิมทั้งหมดก่อนเสมอ** (`DELETE FROM` ทุกตารางหลัก) ยกเว้น `users.id = 1` เพื่อรักษารหัส admin ที่ตั้งไว้ตอน install
 และคำนวณ `available` ใหม่ท้ายไฟล์จาก borrows + reservations จริง — ไม่ hard-code ตัวเลข
 
-## 1. ตารางทั้งหมด (9)
+## 1. ตารางทั้งหมด (10)
 
 | ตาราง | หน้าที่ | จำนวนแถวตอนติดตั้งใหม่ |
 |-------|--------|------------------------|
@@ -26,6 +26,7 @@ Engine: InnoDB / `utf8mb4_unicode_ci` ทุกตาราง · ตรวจ�
 | `password_resets` | token รีเซ็ตรหัสผ่าน | 0 |
 | `settings` | key-value ตั้งค่า | 0 (สร้าง lazily) |
 | `rate_limits` | นับ attempt กัน brute force | 0 |
+| `closed_days` | วันที่ห้องสมุดปิด — หักออกจากการคิดค่าปรับ | 0 |
 
 ## 2. ความสัมพันธ์
 
@@ -85,15 +86,30 @@ CONSTRAINT chk_books_quantity_gte_available CHECK (quantity >= available)
 `UNIQUE INDEX unique_borrow_payment (borrow_id)` = ด่านสุดท้ายกันชำระซ้ำระดับ DB · 1 borrow ชำระได้ครั้งเดียว จ่ายบางส่วนไม่ได้
 
 ### `settings`
-key-value ธรรมดา ใช้จริงแค่ 3 key: `org_name`, `card_color_primary`, `card_color_secondary`
-> ⚠️ กฎการยืม (จำนวนวัน/โควตา/ค่าปรับ) **ไม่ได้อยู่ที่นี่** — อยู่ใน `.env` → `includes/config.php` (ดู FINDINGS F-06)
+key-value ธรรมดา · ใช้จริง 2 กลุ่ม:
+- **กฎการยืม-คืน** — key ขึ้นต้นด้วย `rule_` (9 ข้อ: `rule_borrow_days`, `rule_max_books`,
+  `rule_max_books_staff`, `rule_fine_per_day`, `rule_max_renew`, `rule_lost_book_fee`,
+  `rule_waive_staff_limit`, `rule_due_soon_days`, `rule_reservation_days`)
+- **บัตรสมาชิก** — `org_name`, `card_color_primary`, `card_color_secondary`
+
+> 🔴 **กฎการยืมย้ายมาอยู่ที่นี่แล้ว** (ROADMAP ข้อ 0) — ค่าที่ใช้จริงอ่านเรียง
+> **ตาราง settings → `.env` → ค่าเริ่มต้นในทะเบียน** ดู `resolveRuleValue()` ใน `includes/rules.php`
+> พอผู้ดูแลกดบันทึกในหน้าตั้งค่าครั้งแรก ค่าใน `.env` จะไม่ถูกใช้อีกเลย
+> ⚠️ แถวถูกสร้างแบบ lazy — ไม่มีแถว = ยังไม่เคยตั้งในหน้าเว็บ ไม่ได้แปลว่ากฎไม่มีผล
 
 ### `rate_limits`
 `key_name` = `action_IP` หรือ `action_userId` · 1 แถว = 1 attempt · ล้างอัตโนมัติแบบ probabilistic ~1% ของ request (`bootstrap.php:59`)
 
+### `closed_days`
+ช่วงวันที่ห้องสมุดไม่เปิดทำการ (`start_date` … `end_date` แบบรวมปลายทั้งสองข้าง) + `note`
+> 🔴 ใช้ตอนคิดค่าปรับ — `ClosedDayRepository::countClosedDaysBetween()` หักวันปิดออกจากวันที่เกินกำหนด
+> **ช่วงที่นับคือ (วันครบกำหนด, วันคืนจริง]** ต้องตรงกับสูตรค่าปรับเป๊ะ ไม่งั้นหักเกิน/ขาดไป 1 วัน
+> ⚠️ ช่วงวันปิดซ้อนทับกันได้ จึงกางเป็น "เซ็ตของวัน" ก่อนนับ ห้ามบวกความยาวช่วงตรง ๆ
+> 📌 แก้วันปิดแล้วมีผลกับรายการที่ยืมไปก่อนหน้าด้วย (คิดค่าปรับตอนคืน ไม่ได้เก็บค่าไว้ล่วงหน้า)
+
 ## 5. Index ที่มีอยู่
 
-`books`: idx_available, idx_category, uq_isbn · `borrows`: idx_status, idx_user, idx_book, idx_due_date
+`books`: idx_available, idx_category, uq_isbn, idx_call_number · `borrows`: idx_status, idx_user, idx_book, idx_due_date
 `reservations`: idx_status, idx_user, idx_book · `users`: idx_email, idx_role · `password_resets`: idx_email, idx_token, idx_expires · `rate_limits`: idx_key_name, idx_created_at
 
 > 🔎 **FULLTEXT:** `books.search_tokens` + index `ft_books_search` (F-24)
