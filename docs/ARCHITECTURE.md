@@ -92,9 +92,14 @@
 
 | กฎ/ค่า | อยู่ที่ไหน | ใช้ที่ไหนบ้าง |
 |--------|----------|-------------|
-| **MAX_BORROW_BOOKS = 3** | `config.php` (อ่านจาก `.env`) | BorrowService, ReservationService |
-| **FINE_PER_DAY = 10** | `config.php` (อ่านจาก `.env`) | BorrowService::calculateFine() |
+| **ทะเบียนกฎการยืม** (`MAX_BORROW_BOOKS`, `FINE_PER_DAY`, ...) | `includes/rules.php` → `ruleDefinitions()` | BorrowService, ReservationService, หน้าตั้งค่าระบบ |
+| **ค่าที่ใช้จริงของแต่ละกฎ** | `resolveRuleValue()` อ่านเรียง **ตาราง settings → `.env` → ค่าเริ่มต้นในทะเบียน** | ทุกที่ที่ใช้ค่าคงที่นั้น |
 | **validateMemberData()** | `functions.php` | MemberService, AuthService, import |
+
+> 🔴 **กฎการยืมไม่ได้อยู่ในไฟล์แล้ว** — ย้ายขึ้น **หน้าตั้งค่าระบบ** ตั้งแต่ ROADMAP ข้อ 0
+> `resolveRuleValue()` อ่านเรียง **ตาราง settings → `.env` → ค่าเริ่มต้น** พอผู้ดูแล
+> กดบันทึกในหน้าเว็บครั้งแรก ค่าใน `.env` จะไม่ถูกใช้อีกเลย
+> เพิ่มกฎใหม่ → เพิ่มใน `ruleDefinitions()` **ที่เดียว** หน้าตั้งค่าจะสร้างช่องกรอกให้เอง
 | **validateBookData()** | `functions.php` | book_form, import_books |
 | **hashPassword()** | `functions.php` | ทุกจุดที่สร้าง/เปลี่ยน password |
 | **emailExists()** | `MemberService` → `UserRepository` | register, create member, update member |
@@ -392,7 +397,8 @@ book_borrowing/
 
 | ไฟล์ | หน้าที่ | ตัวอย่างฟังก์ชัน |
 |------|--------|---------------|
-| **config.php** | อ่าน `.env` → define constants | `MAX_BORROW_BOOKS`, `FINE_PER_DAY` |
+| **config.php** | อ่าน `.env` → define ค่าคงที่ของระบบ | `DB_HOST`, `APP_URL`, `APP_DEBUG` |
+| **rules.php** | ทะเบียนกฎการยืม + define ค่าคงที่ของกฎตามลำดับ settings → `.env` → default | `ruleDefinitions()`, `quotaForRole()` |
 | **db.php** | สร้าง PDO connection (singleton) | `getDB()` |
 | **functions.php** | helper ทุกประเภท | `e()`, `requireStaff()`, `validateCSRFToken()`, `validateMemberData()` |
 | **bootstrap.php** | โหลดทุกอย่าง + autoloader | ทุกหน้าเรียก `require bootstrap.php` |

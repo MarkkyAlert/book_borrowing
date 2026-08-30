@@ -371,7 +371,7 @@ return function (PDO $pdo): string {
 | Redirect วนลูป | `APP_URL` ไม่ตรง | ตรวจ `.env` → `APP_URL` |
 | รูปปกไม่แสดง | path `uploads/` ผิด หรือ permission | ตรวจ `uploads/covers/` มีไฟล์ + เขียนได้ |
 | Login แล้ว session หาย | `SESSION_LIFETIME` สั้นเกินไป | ตรวจ `.env` |
-| ค่าปรับคำนวณผิด | `FINE_PER_DAY` ไม่ตรง หรือ timezone ผิด | ตรวจ `.env` → `FINE_PER_DAY`, `TIMEZONE` |
+| ค่าปรับคำนวณผิด | ตั้งค่าปรับไม่ตรง หรือ timezone ผิด | ตรวจที่ **Admin → ตั้งค่าระบบ → กฎการยืม-คืน** ก่อน (หน้านี้มาก่อน `.env` เสมอ) แล้วค่อยตรวจ `TIMEZONE` ใน `.env` |
 | Stock ติดลบ | Cron ไม่ทำงาน + การจองไม่ถูก expire | ตั้ง cron (ดูหัวข้อ 7) |
 | "ระบบขัดข้อง กรุณาติดต่อผู้ดูแล" | DB connection fail | ตรวจ DB_HOST/USER/PASS ใน `.env` |
 
@@ -550,7 +550,7 @@ FULLTEXT index, CHECK constraint, FOREIGN KEY, UNIQUE, ข้อมูลภา�
 
 | กรณี | เหตุผล |
 |------|--------|
-| ห้องสมุดขนาดใหญ่ (หมื่นเล่ม+) | ค้นหาใช้ `LIKE '%คำ%'` ซึ่งใช้ index ไม่ได้ ยังไม่มี FULLTEXT index (แบ่งหน้าแล้ว — วัดจริงถึง 2,000 เล่มยังสบาย) |
+| ห้องสมุดขนาดใหญ่ (หมื่นเล่ม+) | มี FULLTEXT index (trigram สำหรับภาษาไทย) ตั้งแต่ F-24 แล้ว แต่ยังมีเงื่อนไข `LIKE '%คำ%'` ประกอบด้วยเพื่อให้ค้น ISBN/เลขเรียกได้ ซึ่งใช้ index ไม่ได้ (แบ่งหน้าแล้ว — วัดจริงถึง 2,000 เล่มยังสบาย) |
 | ผู้ใช้พร้อมกันมาก (100+) | session เก็บบน file system, ไม่มี caching layer |
 | หลายสาขา | ออกแบบสำหรับห้องสมุดเดียว ไม่มีระบบ multi-branch |
 | Mobile app / Third-party integration | มี API เบื้องต้น แต่ไม่ครบ (ไม่มี token-based auth) |

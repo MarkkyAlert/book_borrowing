@@ -207,6 +207,7 @@ $gapSuites = [
     'โควตาตาม role'              => 'test_role_quota.php',         // เจ้าหน้าที่ยืมได้มากกว่าสมาชิกทั่วไป
     'เลขเรียกหนังสือ'            => 'test_call_number.php',        // ที่อยู่ของหนังสือบนชั้น
     'เตือนก่อนสาย + รหัสที่ตั้งให้' => 'test_due_soon_and_reset.php', // แทนอีเมลที่ตั้งใจไม่ทำ
+    'เอกสารตรงกับโค้ด'           => 'test_docs_match_code.php',    // กันเอกสารสอนลูกค้าผิด
     'โครงสร้าง DB 3 แหล่ง'       => 'test_schema_sources_match.php',  // install.php / schema.sql / migration ต้องตรงกัน // ค่าปรับที่ขอบเขต + atomic rollback
     'Logical Consistency'        => 'logical_consistency_test.php',   // กันทำซ้ำ (ยืม/คืน/จ่าย/จองซ้ำ)
     'Search API (HTTP)'          => 'test_search_api.php',            // 405, คำค้น 1000 ตัว

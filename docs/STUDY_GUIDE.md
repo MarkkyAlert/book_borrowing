@@ -54,7 +54,7 @@ book_borrowing/
 │   ├── member_form.php      เพิ่ม/แก้ไขผู้ใช้ + เปลี่ยน role
 │   ├── categories.php       หมวดหมู่ (inline CRUD)
 │   ├── payments.php         ค้างชำระ + ประวัติชำระ
-│   ├── reports.php          รายงาน 6 ประเภท + CSV [admin only]
+│   ├── reports.php          รายงาน 8 แบบ + CSV [admin only]
 │   ├── export_pdf.php       Print-friendly → PDF [admin only]
 │   ├── settings.php         ตั้งค่าระบบ [admin only]
 │   ├── import_books.php     นำเข้าหนังสือ CSV
@@ -1072,9 +1072,10 @@ curl "http://localhost/book_borrowing/api/member_history.php?id=1" \
 
 | ต้องการ | แก้ที่ | ตัวอย่าง |
 |---------|-------|---------|
-| จำนวนวันยืม | `.env` | `DEFAULT_BORROW_DAYS=14` |
-| จำนวนยืมสูงสุด | `.env` | `MAX_BORROW_BOOKS=5` |
-| ค่าปรับต่อวัน | `.env` | `FINE_PER_DAY=20` |
+| จำนวนวันยืม | **หน้าตั้งค่าระบบ** | Admin → ตั้งค่าระบบ → กฎการยืม-คืน |
+| จำนวนยืมสูงสุด | **หน้าตั้งค่าระบบ** | ตั้งแยกสมาชิกทั่วไป / เจ้าหน้าที่ได้ |
+| ค่าปรับต่อวัน | **หน้าตั้งค่าระบบ** | มีผลทันทีที่กดบันทึก |
+| ทะเบียนกฎทั้งหมด | `includes/rules.php` | `ruleDefinitions()` — เพิ่มกฎใหม่ที่นี่ที่เดียว |
 | สูตรค่าปรับ | `BorrowService.php` | แก้ `calculateFine()` |
 | อายุการจอง | `ReservationService.php` | param `$expireDays` default 2 |
 

@@ -3,7 +3,7 @@
  * Admin: Advanced Reports - รายงานเชิงลึก
  * 
  * ⭐ สำหรับคนมาใหม่:
- * - หน้านี้แสดงรายงาน 6 ประเภท: books, members, revenue, overdue, borrows, unpaid
+ * - หน้านี้แสดงรายงาน 8 แบบ: books, dormant, members, revenue, overdue, due_soon, borrows, unpaid
  * - รองรับ CSV export (GET ?export=csv)
  * - สิทธิ์: admin เท่านั้น (requireAdmin)
  * 
