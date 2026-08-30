@@ -295,6 +295,12 @@ function setDateRange(range) {
         <a href="reports.php?report=unpaid" class="<?= $reportType === 'unpaid' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-cash-coin mr-2 text-red-500"></i>สมาชิกค้างชำระ
         </a>
+        <?php // 🔴 รายงานนี้มีมาตั้งแต่แรกและใช้งานได้ครบ แต่ **ไม่เคยมีแท็บให้กด**
+              //    เข้าถึงได้ทางเดียวคือพิมพ์ ?report=borrows เอง = ไม่มีใครเจอ
+              //    เจอตอนทดสอบ clone สด · DOC-C3 กันไม่ให้เกิดกับรายงานอื่นอีก ?>
+        <a href="reports.php?report=borrows" class="<?= $reportType === 'borrows' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
+            <i class="bi bi-arrow-left-right mr-2"></i>การยืม-คืน
+        </a>
     </nav>
 </div>
 
