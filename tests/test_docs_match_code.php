@@ -94,7 +94,11 @@ $ruleKeys = array_keys(ruleDefinitions());
  * 🔴 ถ้าเขียนเป็น "ห้ามมีคำว่า .env ใกล้คีย์กฎ" จะกลายเป็นบังคับให้เอกสาร
  *    ปกปิดความจริงอีกด้าน = แก้ปัญหาหนึ่งแล้วสร้างอีกปัญหา
  */
-$contextMarkers = ['หน้าตั้งค่า', 'ตั้งค่าระบบ', 'ชั้นสำรอง', '3 ชั้น', 'สามชั้น', 'ไม่มีผลอีก', 'ค่าตั้งต้น'];
+// 🧠 คำที่ถือว่า "อธิบายลำดับชั้นไว้แล้ว" — เขียนได้หลายสำนวน ต้องรับให้ครบ
+//    เคยตกสำนวน "หน้า Settings ... ค่าอ่านเรียง settings → .env → default"
+//    ซึ่งอธิบายถูกต้องครบถ้วน แต่ไม่มีคำว่า "หน้าตั้งค่า" เลยโดนจับผิด
+$contextMarkers = ['หน้าตั้งค่า', 'ตั้งค่าระบบ', 'หน้า Settings', 'settings →',
+                   'ชั้นสำรอง', '3 ชั้น', 'สามชั้น', 'ไม่มีผลอีก', 'ค่าตั้งต้น'];
 $lookBehind = 8;   // บรรทัดก่อนหน้าที่นับเป็นบริบทเดียวกัน
 
 $offenders = [];
@@ -273,6 +277,125 @@ check('DOC-E1', !$missing,
     'README ลิสต์กฎครบทั้ง ' . count($ruleKeys) . ' ข้อ ตามป้ายกำกับที่ผู้ดูแลเห็นจริง',
     "🔴 README ยังไม่ได้พูดถึง " . count($missing) . " กฎ:\n       " . implode("\n       ", $missing));
 
+// ============================================================
+// F. เอกสารภายใน (docs/ai-context/) — ส่วน "สถานะปัจจุบัน"
+// ============================================================
+echo "\n── F. เอกสารส่งต่อต้องไม่ขัดกันเอง ──\n";
+
+/**
+ * 🧠 ทำไมแยกจากข้อ A–E: `docs/ai-context/` เป็น **บันทึกอดีต** ที่ต้องอ้าง
+ *    ข้อความผิดที่เคยมีได้ (เช่น "เอกสารเคยเขียนว่า ... ซึ่งผิด")
+ *    ถ้าเอากฎของข้อ A ไปครอบทั้งโฟลเดอร์ จะบังคับให้ลบประวัติทิ้ง — ผิดวัตถุประสงค์
+ *
+ * 🔴 แต่ "สถานะปัจจุบัน" ในไฟล์ส่งต่อต้องเชื่อถือได้ เพราะเป็นไฟล์แรกที่คนมาต่ออ่าน
+ *    เคยเจอจริง: AI_HANDOFF บอก "F-35 … F-52 ยังไม่ได้แก้" ที่บรรทัด 332
+ *    แล้วบอก "F-35…F-54 ปิดครบทุกข้อแล้ว" ที่บรรทัด 410 — ห่างกัน 78 บรรทัดในไฟล์เดียว
+ *    คนที่เชื่อบรรทัดแรกจะไปนั่งไล่แก้ของที่แก้ไปแล้ว 18 ข้อ
+ */
+$ctxDir   = $ROOT . '/docs/ai-context';
+$ctxFiles = glob($ctxDir . '/*.md') ?: [];
+
+// F1 — ลิงก์ไปไฟล์เอกสารต้องมีอยู่จริง (เทียบแบบ path สัมพัทธ์กับไฟล์ที่ลิงก์)
+$brokenLinks = [];
+foreach (array_merge($docFiles, $ctxFiles) as $file) {
+    $dir = dirname($file);
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        // 🔴 ตัดสิ่งที่อยู่ใน `backtick` ออกก่อน — เอกสารมีการ **ยกตัวอย่างรูปแบบลิงก์**
+        //    เช่นประโยคที่เล่าว่า "ตรวจด้วยสคริปต์ไล่ทุก `[...](....md)`"
+        //    ถ้าไม่ตัด จะจับตัวอย่างมาเป็นลิงก์เสีย แล้วบังคับให้ลบคำอธิบายที่ถูกต้องทิ้ง
+        $line = preg_replace('/`[^`]*`/u', ' ', $line);
+        if (!preg_match_all('/\[[^\]]*\]\(([^)#\s]+\.md)\)/u', $line, $m)) continue;
+        foreach ($m[1] as $target) {
+            if (preg_match('#^https?://#', $target)) continue;
+            if (!file_exists($dir . '/' . $target)) {
+                $brokenLinks[] = sprintf('%s:%d → %s', $rel($file), $i + 1, $target);
+            }
+        }
+    }
+}
+check('DOC-F1', !$brokenLinks,
+    'ลิงก์ไปเอกสารอื่นชี้ไปไฟล์ที่มีอยู่จริงทุกอัน',
+    "🔴 ลิงก์เสีย " . count($brokenLinks) . " จุด:\n       " . implode("\n       ", $brokenLinks));
+
+/**
+ * F2 — ห้ามบอกว่าช่วง F-xx "ยังไม่ได้แก้" ถ้าอีกบรรทัดในไฟล์เดียวกันบอกว่าปิดแล้ว
+ *
+ * 🧠 เทียบเป็น **ช่วงตัวเลข** ไม่ใช่ข้อความ เพราะสองประโยคเขียนคนละแบบ
+ *    ("F-35 … F-52" กับ "F-35…F-54") แต่พูดถึงของกองเดียวกัน
+ */
+$contradictions = [];
+foreach ($ctxFiles as $file) {
+    $text = (string) file_get_contents($file);
+
+    /**
+     * 🔴 ตัด "ข้อความที่ยกมาอ้าง" ออกก่อน — ทั้งใน `backtick` และในเครื่องหมายคำพูด
+     *    บันทึกอดีตต้อง **อ้างข้อความผิดที่เคยมี** ได้ เช่นตารางที่เล่าว่า
+     *    บรรทัด 332 เคยเขียนว่า "F-35 … F-52 ยังไม่ได้แก้"
+     *    ถ้าไม่ตัด ตัวตรวจจะจับคำพูดที่ยกมาเป็นคำกล่าวอ้างของเอกสารเอง
+     *    แล้วบังคับให้ลบหลักฐานทิ้ง = ทำลายเหตุผลว่าทำไมถึงแก้
+     *
+     * 🧠 คำพูดที่ยกมา = การอ้างอิง ไม่ใช่การประกาศสถานะ
+     */
+    $text = preg_replace('/`[^`]*`/u', ' ', $text);
+    $text = preg_replace('/"[^"]{0,200}"/u', ' ', $text);
+
+    $ranges = function (string $pattern) use ($text): array {
+        $out = [];
+        if (preg_match_all($pattern, $text, $m, PREG_SET_ORDER)) {
+            foreach ($m as $hit) $out[] = [(int) $hit[1], (int) $hit[2]];
+        }
+        return $out;
+    };
+    // "F-35 … F-52 ยังไม่ได้แก้"  /  "F-35…F-54 ปิดครบ"
+    $open   = $ranges('/F-(\d+)\s*(?:…|\.\.\.|-)\s*F-(\d+)[^\n]{0,40}?ยังไม่ได้แก้/u');
+    $closed = $ranges('/F-(\d+)\s*(?:…|\.\.\.|-)\s*F-(\d+)[^\n]{0,40}?ปิดครบ/u');
+
+    foreach ($open as [$oa, $ob]) {
+        foreach ($closed as [$ca, $cb]) {
+            if ($oa <= $cb && $ca <= $ob) {   // ช่วงซ้อนกัน
+                $contradictions[] = sprintf('%s → บอกว่า F-%d…F-%d ยังไม่ได้แก้ แต่ก็บอกว่า F-%d…F-%d ปิดครบ',
+                    $rel($file), $oa, $ob, $ca, $cb);
+            }
+        }
+    }
+}
+check('DOC-F2', !$contradictions,
+    'ไม่มีไฟล์ส่งต่อไหนบอกสถานะช่วง F-xx ขัดกันเอง',
+    "🔴 ขัดกันเอง " . count($contradictions) . " จุด — คนมาต่อจะไล่แก้ของที่แก้ไปแล้ว:\n       "
+        . implode("\n       ", $contradictions));
+
+/**
+ * F3 — ไฟล์ "อ่านก่อนเพื่อน" ต้องไม่สอนให้ตั้งกฎการยืมในไฟล์ `.env`
+ *    ใช้กฎเดียวกับข้อ A แต่จำกัดเฉพาะ 2 ไฟล์ที่เป็นจุดตั้งหลัก
+ *    ไม่ครอบ FINDINGS/ROADMAP ซึ่งเป็นบันทึกอดีตล้วน
+ */
+$entryDocs = array_values(array_filter($ctxFiles,
+    fn($f) => in_array(basename($f), ['00_INDEX.md', 'AI_HANDOFF.md'], true)));
+$entryOffenders = [];
+foreach ($entryDocs as $file) {
+    $lines = explode("\n", (string) file_get_contents($file));
+    foreach ($lines as $i => $line) {
+        if (!str_contains($line, '.env')) continue;
+        $hitKey = false;
+        foreach ($ruleKeys as $k) if (str_contains($line, $k)) { $hitKey = true; break; }
+        foreach ($conceptWords as $w) if (str_contains($line, $w)) { $hitKey = true; break; }
+        if (!$hitKey) continue;
+        $context = implode("\n", array_slice($lines, max(0, $i - $lookBehind), $lookBehind + 1));
+        $explained = false;
+        foreach (array_merge($contextMarkers, ['บันทึกอดีต', '📜']) as $m) {
+            if (str_contains($context, $m)) { $explained = true; break; }
+        }
+        if (!$explained) {
+            $entryOffenders[] = sprintf('%s:%d → %s', $rel($file), $i + 1,
+                mb_substr(trim(preg_replace('/\s+/', ' ', $line)), 0, 70));
+        }
+    }
+}
+check('DOC-F3', !$entryOffenders,
+    'ไฟล์ตั้งหลัก (00_INDEX, AI_HANDOFF) ไม่ได้สอนให้ตั้งกฎการยืมในไฟล์',
+    "🔴 พบ " . count($entryOffenders) . " จุด:\n       " . implode("\n       ", $entryOffenders));
+
+// ============================================================
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
