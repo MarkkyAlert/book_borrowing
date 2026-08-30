@@ -42,7 +42,7 @@ $pagination = $data['pagination']; // array ข้อมูลแบ่งหน
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วผลค้นหาหาย
 $paginationParams = ['search' => $search, 'category' => $categoryId ?: '', 'status' => $status];
 $paginationAjax = true;  // 📝 JS ดักคลิกแล้วโหลดผ่าน fetch แทน (ดูสคริปต์ท้ายหน้า)
-$paginationUnit = 'เล่ม';
+$paginationUnit = 'ชื่อเรื่อง';   // 📚 นับแถว = ชื่อเรื่อง · จำนวนเล่มจริงอยู่ที่การ์ดด้านบน (SUM(quantity))
 
 // 📊 ดึงสถิติสำหรับ Hero Section (total, available, members)
 $stats = $homeService->getStats();
@@ -209,7 +209,7 @@ require_once __DIR__ . '/includes/header.php';
             </span>
             รายการหนังสือ
             <span id="result-count" class="ml-3 px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full font-medium border border-gray-200">
-                <?= number_format($pagination['total']) ?> เล่ม
+                <?= number_format($pagination['total']) ?> ชื่อเรื่อง
             </span>
         </h2>
 
@@ -351,7 +351,7 @@ require_once __DIR__ . '/includes/header.php';
                     const total = totalEl ?
                         parseInt(totalEl.dataset.total, 10) :
                         gridContainer.querySelectorAll('.group').length;
-                    resultCount.textContent = `${total.toLocaleString()} เล่ม`;
+                    resultCount.textContent = `${total.toLocaleString()} ชื่อเรื่อง`;
 
                     // 📄 เปลี่ยนหน้าแล้วเลื่อนขึ้นไปบนสุดของ grid — ไม่งั้นจะค้างอยู่ตรงแถบเลือกหน้า
                     if (page > 1) {

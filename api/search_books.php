@@ -89,7 +89,7 @@ $pagination = $data['pagination'];   // 📄 book_grid.php ใช้วาดแ
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า (ใช้ชื่อ key เดียวกับที่หน้าเว็บส่งมา)
 $paginationParams = ['search' => $search, 'category' => $categoryId ?: '', 'status' => $status];
 $paginationAjax = true;   // 📝 ลิงก์จะมี data-page ให้ JS ดักคลิกแทนการโหลดหน้าใหม่
-$paginationUnit = 'เล่ม';
+$paginationUnit = 'ชื่อเรื่อง';   // 📚 ต้องตรงกับ index.php — API นี้ป้อนตัวเลขให้หน้าเดียวกัน
 
 // 📤 ส่ง Response เป็น HTML partial (ไม่ใช่ JSON)
 //    AJAX รับ HTML ไปแทรกใน DOM โดยตรง (innerHTML)

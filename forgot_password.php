@@ -90,7 +90,7 @@ require_once __DIR__ . '/includes/header.php';
                     ลืมรหัสผ่าน
                 </h2>
                 <p class="mt-2 text-sm text-gray-600">
-                    กรอกอีเมลที่ใช้สมัครสมาชิก เพื่อแจ้งคำขอตั้งรหัสผ่านใหม่
+                    กรอกอีเมลที่ใช้สมัครสมาชิก แล้วนำบัตรสมาชิกไปติดต่อเคาน์เตอร์ห้องสมุด เจ้าหน้าที่จะตั้งรหัสผ่านใหม่ให้
                 </p>
             </div>
 
@@ -185,9 +185,14 @@ require_once __DIR__ . '/includes/header.php';
                     <div>
                         <button type="submit" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-amber-500 hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 shadow-lg shadow-amber-500/30 transition-all hover:-translate-y-0.5">
                             <span class="absolute left-0 inset-y-0 flex items-center pl-3">
-                                <i class="bi bi-send text-amber-400 group-hover:text-amber-300 transition-colors"></i>
+                                <?php // 🔴 ไม่ใช้ไอคอน "ส่ง" (bi-send) เพราะไม่มีการส่งอะไรออกไปจริง ?>
+                                <i class="bi bi-person-badge text-amber-400 group-hover:text-amber-300 transition-colors"></i>
                             </span>
-                            ส่งลิงก์รีเซ็ตรหัสผ่าน
+                            <?php // 🔴 ห้ามเขียนว่า "ส่งลิงก์" — ระบบนี้ไม่ส่งอีเมลเลย และตั้งใจไม่ทำ
+                                  //    (เหตุผลอยู่ใน docs/LIMITATIONS.md หัวข้อ 6)
+                                  //    ปุ่มที่สัญญาว่าจะส่งเมล = สมาชิกนั่งรอเมลที่ไม่มีวันมา
+                                  //    แล้วหน้าผลลัพธ์ต้องมาแก้ต่างทีหลังว่า "ไปที่เคาน์เตอร์" ?>
+                            แจ้งคำขอตั้งรหัสผ่านใหม่
                         </button>
                     </div>
                 </form>

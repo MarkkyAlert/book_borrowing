@@ -89,7 +89,7 @@ $books = $bookService->getBooks($bookFilters);
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
 // 📄 ทุกตัวกรองต้องอยู่ในลิงก์เลขหน้า ไม่งั้นกดหน้า 2 แล้วตัวกรองหลุด
 $paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'no_isbn' => $noIsbn, 'sort' => $sort];
-$paginationUnit = 'เล่ม';
+$paginationUnit = 'ชื่อเรื่อง';   // 📚 นับแถว = ชื่อเรื่อง (ให้ตรงกับข้อความด้านบนและหน้าแรก)
 
 // ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
 $categories = $categoryRepo->findAll();
@@ -102,7 +102,9 @@ require_once __DIR__ . '/header.php';
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
     <div>
         <h3 class="text-lg font-bold text-gray-800">รายการหนังสือทั้งหมด</h3>
-        <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> เล่ม</p>
+        <?php // 📚 นับจำนวน **ชื่อเรื่อง** (จำนวนแถว) ไม่ใช่จำนวนเล่ม
+              //    จำนวนเล่มจริงคือ SUM(quantity) ซึ่งอยู่บนการ์ดหน้าภาพรวม ?>
+        <p class="text-sm text-gray-500">ทั้งหมด <?= number_format($pagination['total']) ?> ชื่อเรื่อง</p>
     </div>
     <div class="flex gap-2">
         <a href="import_books.php" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors shadow-sm">
@@ -129,7 +131,11 @@ require_once __DIR__ . '/header.php';
             <select class="w-full border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500" name="category">
                 <option value="">ทั้งหมด</option>
                 <?php foreach ($categories as $cat): ?>
-                    <option value="<?= $cat['id'] ?>" <?= $categoryId == $cat['id'] ? 'selected' : '' ?>>
+                    <?php // 🔴 ตัวแปรชื่อ $category ไม่ใช่ $categoryId — เคยพิมพ์ผิดแล้วเกิด 2 อาการ:
+                          //    APP_DEBUG=true → Warning โผล่กลางดรอปดาวน์ 12 บรรทัด (เปิด path เซิร์ฟเวอร์)
+                          //    APP_DEBUG=false → เงียบ แต่ค่าที่เลือกไม่ถูกจำ กรองแล้วเด้งกลับ "ทั้งหมด"
+                          //    เทียบแบบ (string) ทั้งสองฝั่ง เพราะค่าจาก $_GET เป็น string เสมอ ?>
+                    <option value="<?= $cat['id'] ?>" <?= (string) $category === (string) $cat['id'] ? 'selected' : '' ?>>
                         <?= e($cat['name']) ?>
                     </option>
                 <?php endforeach; ?>
