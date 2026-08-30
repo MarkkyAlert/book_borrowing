@@ -225,6 +225,15 @@ require_once __DIR__ . '/header.php';
                                         <i class="bi bi-signpost-split"></i><?= e($book['call_number']) ?>
                                     </span>
                                 <?php endif; ?>
+                                <?php // 📓 หมายเหตุรายเล่ม — แสดงเป็นป้ายเล็ก ๆ ให้รู้ว่ามีบันทึกอยู่
+                                      //    ไม่แสดงข้อความเต็มในตาราง เพราะเป็นหลายบรรทัดและเป็นบันทึกภายใน
+                                      //    🛡️ หน้านี้เข้าได้เฉพาะเจ้าหน้าที่อยู่แล้ว (requireStaff) ?>
+                                <?php if (!empty($book['copy_notes'])): ?>
+                                    <span class="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-1"
+                                          title="<?= e($book['copy_notes']) ?>">
+                                        <i class="bi bi-journal-text"></i>มีหมายเหตุรายเล่ม
+                                    </span>
+                                <?php endif; ?>
                                 <?php if ($book['isbn']): ?>
                                     <span class="text-xs text-gray-400 font-mono mt-1 block">ISBN: <?= e($book['isbn']) ?></span>
                                 <?php endif; ?>

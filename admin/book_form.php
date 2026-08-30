@@ -44,6 +44,7 @@ $book = [
     'call_number' => '',
     'category_id' => '',
     'description' => '',
+    'copy_notes' => '',
     'cover_image' => '',
     'quantity' => 1,
     'price' => null,      // 💰 null = ยังไม่ระบุราคาปก (ไม่ใช่ 0 = ฟรี)
@@ -87,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $book['call_number'] = trim($_POST['call_number'] ?? '');
     $book['category_id'] = (int) ($_POST['category_id'] ?? 0) ?: null;
     $book['description'] = trim($_POST['description'] ?? '');
+    $book['copy_notes'] = trim($_POST['copy_notes'] ?? '');
     $book['quantity'] = max(0, (int) ($_POST['quantity'] ?? 1)); // ขั้นต่ำ 0 เล่ม (สำหรับซ่อนหนังสือที่หาย/ชำรุด)
     // 💰 ราคาปก — เว้นว่างได้ แปลว่า "ยังไม่ระบุ" ไม่ใช่ "ฟรี"
     //    🔴 ห้ามแปลงค่าว่างเป็น 0 เพราะตอนแจ้งหนังสือหายระบบใช้ค่านี้คิดค่าชดใช้
@@ -234,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'call_number' => $book['call_number'] ?: null,
             'category_id' => $book['category_id'],
             'description' => $book['description'] ?: null,
+            'copy_notes' => $book['copy_notes'] ?: null,
             'cover_image' => $coverImage,
             'quantity' => $book['quantity'],
             'price' => $book['price'],          // 💰 null = ยังไม่ระบุ
@@ -493,6 +496,27 @@ require_once __DIR__ . '/header.php';
                     <textarea id="description" name="description" rows="4"
                         class="w-full rounded-xl border-gray-300 focus:border-primary-500 focus:ring-primary-500 shadow-sm"
                         placeholder="รายละเอียดหนังสือ (ถ้ามี)"><?= e($book['description']) ?></textarea>
+                </div>
+
+                <?php // 📓 หมายเหตุรายเล่ม — สมุดจดของเจ้าหน้าที่
+                      //    🔴 ต้องบอกบนหน้าจอให้ชัดว่า **ระบบไม่ได้ตามรายเล่มให้**
+                      //       ไม่งั้นบรรณารักษ์จะจดแล้วคิดว่าระบบรู้ แล้วเลิกนับเล่มเอง
+                      //    🛡️ เป็นบันทึกภายใน — ช่องนี้มีเฉพาะฝั่งผู้ดูแล ไม่โผล่หน้าสาธารณะ ?>
+                <div class="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                    <label for="copy_notes" class="flex items-center text-sm font-medium text-amber-900 mb-1">
+                        <i class="bi bi-journal-text mr-2"></i>หมายเหตุรายเล่ม
+                        <span class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">เจ้าหน้าที่เห็นเท่านั้น</span>
+                    </label>
+                    <textarea id="copy_notes" name="copy_notes" rows="3"
+                        class="w-full rounded-xl border-amber-300 focus:border-amber-500 focus:ring-amber-500 shadow-sm bg-white"
+                        placeholder="เช่น&#10;เล่ม 2 ปกขาด&#10;เล่ม 3 หาย 12 ส.ค. 2569"><?= e($book['copy_notes']) ?></textarea>
+                    <p class="text-xs text-amber-800 mt-2 leading-relaxed">
+                        <i class="bi bi-exclamation-triangle mr-1"></i>
+                        <strong>นี่คือสมุดจด ไม่ใช่ระบบตามรายเล่ม</strong> —
+                        ระบบนับหนังสือเป็น "จำนวนเล่ม" ไม่ได้แยกทีละเล่ม
+                        ข้อความตรงนี้ระบบไม่ได้เอาไปคิดอะไรต่อ และ<strong>ไม่ได้หักออกจากจำนวนที่ว่าง</strong>
+                        ถ้าเล่มไหนหายจริงต้องแก้ "จำนวนทั้งหมด" ด้วย
+                    </p>
                 </div>
 
                 <div class="bg-gray-50 rounded-xl p-4 border border-gray-200 border-dashed">

@@ -599,8 +599,8 @@ class BookRepository
         // 📝 SQL: INSERT หนังสือใหม่ทุก field
         // available = quantity เพราะตอนสร้างยังไม่มีคนยืม
         $stmt = $this->pdo->prepare("
-            INSERT INTO books (title, author, isbn, call_number, search_tokens, category_id, description, cover_image, price, quantity, available, is_visible, is_reference)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (title, author, isbn, call_number, search_tokens, category_id, description, copy_notes, cover_image, price, quantity, available, is_visible, is_reference)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 📌 ถ้าไม่ส่ง quantity มา → default = 1 (หนังสือ 1 เล่ม)
@@ -620,6 +620,9 @@ class BookRepository
             $this->makeSearchTokens($data),
             $data['category_id'] ?? null, // หมวดหมู่ (ไม่บังคับ)
             $data['description'] ?? null, // รายละเอียด (ไม่บังคับ)
+            // 📓 หมายเหตุรายเล่ม — **สมุดจดภายในของเจ้าหน้าที่** ไม่ใช่ข้อมูลสาธารณะ
+            //    🔴 ห้ามนำไปแสดงที่ index.php / book.php (ดูเคส CN2-C1 ในชุดทดสอบ)
+            $data['copy_notes'] ?? null,
             $data['cover_image'] ?? null, // ชื่อไฟล์รูปปก (ไม่บังคับ)
             // 💰 ราคาปก — null = ยังไม่ระบุ ห้ามแปลงเป็น 0
             //    เพราะ 0 แปลว่า "ฟรี" ส่วน null แปลว่า "ไม่รู้ราคา"
@@ -663,7 +666,7 @@ class BookRepository
         $stmt = $this->pdo->prepare("
             UPDATE books SET 
                 title = ?, author = ?, isbn = ?, call_number = ?, search_tokens = ?, category_id = ?, 
-                description = ?, cover_image = COALESCE(?, cover_image), 
+                description = ?, copy_notes = ?, cover_image = COALESCE(?, cover_image), 
                 price = ?, quantity = ?, available = ?, is_visible = ?, is_reference = ?
             WHERE id = ?
         ");
@@ -679,13 +682,15 @@ class BookRepository
             $this->makeSearchTokens($data),
             $data['category_id'] ?? null, // 6. หมวดหมู่
             $data['description'] ?? null, // 7. รายละเอียด
-            $data['cover_image'] ?? null, // 8. รูปปก (null = เก็บรูปเดิม)
-            $data['price'] ?? null,      // 9. 💰 ราคาปก (null = ยังไม่ระบุ ไม่ใช่ 0)
-            $data['quantity'],           // 10. จำนวนทั้งหมด
-            $data['available'],          // 11. จำนวนที่ว่าง
-            $data['is_visible'] ?? 1,    // 12. 👁️ การมองเห็น
-            $data['is_reference'] ?? 0,  // 13. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
-            $id                          // 14. WHERE id = ?
+            // 📓 8. หมายเหตุรายเล่ม — บันทึกภายใน ห้ามโผล่หน้าสาธารณะ
+            $data['copy_notes'] ?? null,  // 8. หมายเหตุรายเล่ม
+            $data['cover_image'] ?? null, // 9. รูปปก (null = เก็บรูปเดิม)
+            $data['price'] ?? null,      // 10. 💰 ราคาปก (null = ยังไม่ระบุ ไม่ใช่ 0)
+            $data['quantity'],           // 11. จำนวนทั้งหมด
+            $data['available'],          // 12. จำนวนที่ว่าง
+            $data['is_visible'] ?? 1,    // 13. 👁️ การมองเห็น
+            $data['is_reference'] ?? 0,  // 14. 📚 หนังสืออ้างอิง (ยืม/จองไม่ได้)
+            $id                          // 15. WHERE id = ?
         ]);
     }
 

@@ -169,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
                 `category_id` INT DEFAULT NULL COMMENT 'หมวดหมู่',
                 `description` TEXT DEFAULT NULL COMMENT 'รายละเอียด',
+                `copy_notes` TEXT DEFAULT NULL COMMENT 'บันทึกภายในของเจ้าหน้าที่เกี่ยวกับเล่มแต่ละเล่ม (ข้อความอิสระ ระบบไม่ได้ตามรายเล่มให้)',
                 `cover_image` VARCHAR(255) DEFAULT NULL COMMENT 'ชื่อไฟล์รูปปก',
                 `quantity` INT NOT NULL DEFAULT 1 COMMENT 'จำนวนทั้งหมด',
                 `price` DECIMAL(10,2) NULL DEFAULT NULL COMMENT 'ราคาปก — ใช้ตั้งต้นค่าชดใช้ตอนแจ้งหาย (NULL = ยังไม่ระบุ)',

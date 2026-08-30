@@ -205,6 +205,8 @@ class BookService
                 'call_number' => $data['call_number'] ?? null,
                 'category_id' => $data['category_id'] ?? null,
                 'description' => $data['description'] ?? null,
+                // 📓 หมายเหตุรายเล่ม — ต้องส่งต่อด้วยเหตุผลเดียวกับ call_number
+                'copy_notes' => $data['copy_notes'] ?? null,
                 'cover_image' => $data['cover_image'] ?? null,
                 'quantity' => $newQuantity,
                 'available' => $newAvailable,
