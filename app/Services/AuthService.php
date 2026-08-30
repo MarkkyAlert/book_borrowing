@@ -239,7 +239,9 @@ class AuthService
         
         // 📝 Step 5: hash + update
         //    hashPassword() = password_hash() wrapper จาก functions.php
-        $this->userRepo->updatePassword($userId, hashPassword($newPassword));
+        // 🔑 false = **เจ้าตัวเป็นคนตั้งเอง** จบธง "ต้องเปลี่ยนรหัส" ตรงนี้
+        //    ห้ามส่ง true ที่นี่เด็ดขาด — ผู้ใช้จะติดอยู่ในหน้าบังคับเปลี่ยนรหัสวนไม่จบ
+        $this->userRepo->updatePassword($userId, hashPassword($newPassword), false);
         
         return ['success' => true];
     }
@@ -360,7 +362,9 @@ class AuthService
             $this->pdo->beginTransaction();
             
             // 🔒 [WRITE] เปลี่ยนรหัสผ่าน
-            $this->userRepo->updatePassword($resetRequest['user_id'], hashPassword($newPassword));
+            // 🔑 false = เจ้าตัวกดลิงก์รีเซ็ตในเมล/ที่ผู้ดูแลส่งให้ แล้วตั้งรหัสเอง
+            //    ผู้ดูแลไม่รู้รหัสใหม่ → ไม่ต้องบังคับเปลี่ยนซ้ำ
+            $this->userRepo->updatePassword($resetRequest['user_id'], hashPassword($newPassword), false);
             
             // 🛡️ [SECURITY] Mark token ว่าใช้แล้ว — ป้องกันใช้ token ซ้ำ
             //    ⚠️ ต้องเรียกเสมอ! ถ้าไม่ mark → token ใช้ซ้ำได้ (security hole)

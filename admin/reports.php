@@ -287,6 +287,11 @@ function setDateRange(range) {
         <a href="reports.php?report=overdue" class="<?= $reportType === 'overdue' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-exclamation-triangle mr-2"></i>หนังสือค้างส่ง
         </a>
+        <?php // 🔴 คู่กับ "หนังสือค้างส่ง" — ตัวนั้นตามหลัง ตัวนี้ตามก่อน
+              //    ระบบไม่ส่งอีเมล ใบนี้จึงมีไว้พิมพ์แล้วโทรตามเอง วางติดกันให้เห็นว่าเป็นคู่ ?>
+        <a href="reports.php?report=due_soon" class="<?= $reportType === 'due_soon' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
+            <i class="bi bi-telephone mr-2"></i>ใกล้ครบกำหนด (โทรตาม)
+        </a>
         <a href="reports.php?report=unpaid" class="<?= $reportType === 'unpaid' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' ?> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center">
             <i class="bi bi-cash-coin mr-2 text-red-500"></i>สมาชิกค้างชำระ
         </a>

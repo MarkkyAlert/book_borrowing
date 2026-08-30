@@ -625,6 +625,52 @@ class ReportRepository
      * 🧠 เหตุผล: $formatDate เปลี่ยน format ใน SQL เลย (ไม่ต้อง format ใน PHP)
      * ✅ Use case: admin/reports.php, export_pdf.php (รายงานหนังสือเกินกำหนด)
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ใบรายชื่อ "โทรตามก่อนครบกำหนด" — คู่กับ getOverdueReport()
+     * ==========================================================================
+     *
+     * 🧠 ระบบนี้ไม่ส่งอีเมล (ดู docs/LIMITATIONS.md หัวข้อ 6) การเตือนจึงต้องเป็น
+     *    "พิมพ์รายชื่อออกมาแล้วบรรณารักษ์โทร/LINE เอง" ไม่ใช่ส่งอัตโนมัติ
+     *    รายงานนี้จึงเอา **เบอร์โทร** ขึ้นเป็นคอลัมน์ที่ 2 เหมือนรายงานค้างส่ง
+     *
+     * 📥 @param int $days มองไปข้างหน้ากี่วัน (กฎ DUE_SOON_DAYS)
+     *
+     * 📝 จัดรูปแบบวันที่ใน SQL เป็น dd/mm/yyyy — เหมือนรายงานอื่นทุกตัว
+     *    ให้หน้าเว็บ / CSV / หน้าพิมพ์ ตรงกันหมด
+     *
+     * 🔴 ORDER BY ต้องจบด้วย b.id — ชื่อคนซ้ำกันได้ ถ้าไม่มีตัวตัดสินที่ยูนีค
+     *    ลำดับแถวจะสลับไปมาระหว่างการโหลดแต่ละครั้ง (F-39) · ตัวกันใน
+     *    tests/test_unpaid_list.php จับข้อนี้ได้ตอนเพิ่มรายงานนี้เข้ามาจริง ๆ
+     *
+     * 🔴 เงื่อนไขต้องตรงกับ BorrowRepository::findDueSoon() เป๊ะ
+     *    ไม่งั้นตัวเลขบนหน้าภาพรวมกับจำนวนแถวในรายงานจะไม่ตรงกัน
+     *    แล้วบรรณารักษ์จะไม่เชื่อทั้งสองตัว
+     *
+     * 📤 @return array [{name, phone, title, borrow_date, due_date, days_left}, ...]
+     * ⚠️ phone = ข้อมูลส่วนบุคคล ต้อง escape ก่อนแสดง และใบที่พิมพ์ออกมามีเบอร์โทร
+     */
+    public function getDueSoonReport(int $days): array
+    {
+        $borrowDateCol = "DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date";
+        $dueDateCol    = "DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date";
+
+        $stmt = $this->pdo->prepare("
+            SELECT u.name, u.phone, bk.title, {$borrowDateCol}, {$dueDateCol},
+                   DATEDIFF(b.due_date, CURDATE()) as days_left
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.status = 'borrowing'
+              AND b.due_date >= CURDATE()
+              AND b.due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+            ORDER BY b.due_date ASC, u.name ASC, b.id ASC
+        ");
+        $stmt->bindValue(1, $days, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function getOverdueReport(): array
     {
         // 🔄 Flow: admin/reports.php + export_pdf.php → ReportService

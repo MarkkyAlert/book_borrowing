@@ -318,27 +318,41 @@ class UserRepository
      *
      * 📤 Output: @return bool true = สำเร็จ
      *
+     * @param bool   $mustChangePassword ธง "ต้องเปลี่ยนรหัสก่อนใช้งาน" หลังคำสั่งนี้
+     *
      * 🛡️ Security: รับเฉพาะ hash — Service layer ต้อง hashPassword() ก่อนเรียก
+     *
+     * 🔴 [สำคัญ] $mustChangePassword **ไม่มีค่า default โดยตั้งใจ**
+     *    เพราะการเปลี่ยนรหัสมี 2 แบบที่ต้องการผล **ตรงข้ามกัน**:
+     *
+     *    | ใครเป็นคนตั้ง | ตัวอย่าง | ต้องส่ง | เหตุผล |
+     *    |---|---|---|---|
+     *    | เจ้าตัวตั้งเอง | profile.php · ลิงก์รีเซ็ต | `false` | รู้รหัสอยู่คนเดียว จบแล้ว |
+     *    | คนอื่นตั้งให้ | admin ตั้งให้สมาชิกที่ลืมรหัส | `true` | **ผู้ดูแลรู้รหัสนั้นด้วย** |
+     *
+     *    ถ้าใส่ default ไว้ จุดเรียกใหม่ที่ลืมคิดจะได้พฤติกรรมของอีกแบบเงียบ ๆ
+     *    ทางนี้บังคับให้ทุกจุดเรียก "ตัดสินใจ" ตอนเขียนโค้ด
+     *
+     * ⚠️ ส่ง `false` ผิดที่ = ผู้ใช้ติดอยู่ในหน้าบังคับเปลี่ยนรหัสวนไม่จบ (ดู F-53)
+     *    ส่ง `true` ผิดที่ = รหัสที่คนอื่นรู้ถูกใช้ต่อได้ตลอด
+     *
      * ✅ Use case:
-     * 1) reset_password.php → AuthService::resetPassword() → updatePassword()
-     * 2) profile.php → AuthService::changePassword() → updatePassword()
-     * 3) admin/member_form.php → MemberService → updatePassword()
+     * 1) reset_password.php → AuthService::resetPassword() → false (เจ้าตัวตั้งเอง)
+     * 2) profile.php → AuthService::changePassword() → false (เจ้าตัวตั้งเอง)
+     * 3) admin/member_form.php → MemberService::updatePassword() → true (ผู้ดูแลตั้งให้)
      */
-    public function updatePassword(int $id, string $hashedPassword): bool
+    public function updatePassword(int $id, string $hashedPassword, bool $mustChangePassword): bool
     {
-        // 📝 SQL: เปลี่ยนเฉพาะ password (ไม่แตะข้อมูลอื่น)
+        // 📝 SQL: เปลี่ยนเฉพาะ password + ธง (ไม่แตะข้อมูลอื่น)
         // 🔴 $hashedPassword ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
         //    Service layer ต้อง password_hash() ก่อนเรียก
-        // 🔑 [F-53] เคลียร์ธง "ต้องเปลี่ยนรหัส" พร้อมกันในคำสั่งเดียว
-        //    🧠 ทำที่นี่จุดเดียว เพราะเมธอดนี้เป็นทางผ่าน **เดียว** ของการเปลี่ยนรหัสทุกทาง:
-        //       AuthService::changePassword() (หน้าโปรไฟล์ + หน้าบังคับเปลี่ยน)
-        //       AuthService::resetPassword()  (ลิงก์ลืมรหัสผ่าน)
-        //    ถ้าไปเคลียร์ที่ชั้น Service จะต้องจำให้ครบทุกทาง — ลืมทางใดทางหนึ่งแล้ว
-        //    ผู้ใช้จะติดอยู่ในหน้าบังคับเปลี่ยนรหัสวนไม่จบ ทั้งที่เปลี่ยนสำเร็จแล้ว
+        // 🔑 [F-53] ตั้ง/เคลียร์ธง "ต้องเปลี่ยนรหัส" พร้อมกันในคำสั่งเดียว
+        //    🧠 ทำที่นี่จุดเดียว เพราะเมธอดนี้เป็นทางผ่าน **เดียว** ของการเปลี่ยนรหัสทุกทาง
+        //       ถ้าไปตั้งที่ชั้น Service จะต้องจำให้ครบทุกทาง — ลืมทางใดทางหนึ่งแล้วพังเงียบ
         $stmt = $this->pdo->prepare("
-            UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?
+            UPDATE users SET password = ?, must_change_password = ? WHERE id = ?
         ");
-        return $stmt->execute([$hashedPassword, $id]);
+        return $stmt->execute([$hashedPassword, $mustChangePassword ? 1 : 0, $id]);
     }
 
     /**

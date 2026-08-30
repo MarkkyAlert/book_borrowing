@@ -77,7 +77,8 @@ class DashboardService
      * ==========================================================================
      *
      * 📤 Output: @return array {total_books, total_titles, available_books, borrowed_books,
-     *          total_members, active_borrows, overdue_borrows, pending_reservations}
+     *          total_members, active_borrows, overdue_borrows, due_soon_borrows,
+     *          pending_reservations}
      * ✅ Use case: admin/index.php → stat cards ด้านบน
      */
     public function getCardStats(): array
@@ -96,6 +97,9 @@ class DashboardService
             'total_members' => $this->userRepo->countMembers(),             // สมาชิกทั้งหมด
             'active_borrows' => $this->borrowRepo->countActive(),           // ยืมค้างอยู่
             'overdue_borrows' => $this->borrowRepo->countOverdue(),         // เกินกำหนด
+            // 📞 ใกล้ครบกำหนด — ยังตามทันก่อนจะกลายเป็น overdue
+            //    จำนวนวันมาจากกฎ DUE_SOON_DAYS ที่ผู้ดูแลตั้งได้ในหน้าตั้งค่า
+            'due_soon_borrows' => $this->borrowRepo->countDueSoon(DUE_SOON_DAYS),
             'pending_reservations' => $this->reservationRepo->countPending() // จองรอรับ
         ];
     }
@@ -131,6 +135,20 @@ class DashboardService
     {
         // 📝 Pass-through → borrows ที่ due_date < today
         return $this->borrowRepo->findOverdue($limit);
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการ "ใกล้ครบกำหนด" สำหรับโทรตามก่อนจะสาย
+     * ==========================================================================
+     * 🧠 คู่กับ getOverdueList() — ตัวนั้นตามหลัง ตัวนี้ตามก่อน
+     *    ระบบไม่ส่งอีเมล การเตือนจึงเป็นรายชื่อให้บรรณารักษ์โทร/LINE เอง
+     * 📝 ใช้กฎ DUE_SOON_DAYS เป็นค่าตั้งต้น ไม่รับจาก URL — กันไม่ให้ตัวเลขบนการ์ด
+     *    ต่างจากในรายงานที่ใช้กฎเดียวกัน
+     */
+    public function getDueSoonList(int $limit = 10): array
+    {
+        return $this->borrowRepo->findDueSoon(DUE_SOON_DAYS, $limit);
     }
     
     /**

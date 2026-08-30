@@ -46,12 +46,17 @@ $borrowedBooks = $stats['borrowed_books'];
 $totalMembers = $stats['total_members'];
 $activeBorrows = $stats['active_borrows'];
 $overdueBorrows = $stats['overdue_borrows'];
+$dueSoonBorrows = $stats['due_soon_borrows'];   // 📞 ใกล้ครบกำหนด (กฎ DUE_SOON_DAYS)
 $pendingReservations = $stats['pending_reservations'];
 
 // 📋 ดึงรายการล่าสุด + alerts (จำกัดจำนวนเพื่อ performance)
 $recentBorrows = $dashboardService->getRecentBorrows(5);       // 5 รายการยืมล่าสุด
 $recentReservations = $dashboardService->getRecentReservations(5); // 5 การจองล่าสุด
 $overdueList = $dashboardService->getOverdueList(10);           // 10 รายการเกินกำหนด
+// 📞 ใกล้ครบกำหนด — ยังโทรตามทันก่อนจะกลายเป็นเกินกำหนด
+//    ระบบไม่ส่งอีเมล (ดู docs/LIMITATIONS.md) การเตือนจึงเป็นรายชื่อให้โทร/LINE เอง
+//    เอามา 12 รายการพอดีกับ 4 คอลัมน์ × 3 แถว ที่เหลือให้กดไปดูใบเต็มในหน้ารายงาน
+$dueSoonList = $dashboardService->getDueSoonList(12);
 
 // 📦 หนังสือ stock ใกล้หมด (available <= threshold) — แจ้งเตือนให้สั่งซื้อเพิ่ม
 $lowStockBooks = $dashboardService->getLowStockBooks(2, 5);
@@ -460,6 +465,49 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 </div>
+
+<!-- 📞 ใกล้ครบกำหนด — ใบรายชื่อโทรตาม -->
+<?php // 🧠 วางเป็นแถบเต็มความกว้างแบบเดียวกับ "หนังสือที่ถูกยืมหมด" ข้างล่าง
+      //    ไม่ทำเป็นการ์ดสถิติใบที่ 7 เพราะแถวการ์ดเป็น grid 6 ช่อง ใบที่ 7 จะตกไปอยู่แถวใหม่ตัวเดียว
+      //    และตัวเลขเฉย ๆ กดต่อไม่ได้ — สิ่งที่บรรณารักษ์ต้องการคือ "เบอร์โทร" ไม่ใช่ "จำนวน"
+      // 🔴 ขึ้นเฉพาะตอนมีรายการจริง ไม่งั้นหน้าภาพรวมจะมีกล่องว่างถาวร ?>
+<?php if (!empty($dueSoonList)): ?>
+<div class="bg-gradient-to-r from-sky-50 to-blue-50 rounded-2xl shadow-sm border border-sky-200 p-6 mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h5 class="font-bold text-sky-800 flex items-center">
+            <i class="bi bi-telephone text-sky-500 mr-2"></i>
+            ใกล้ครบกำหนด — โทรเตือนได้เลย
+            <span class="ml-2 px-2 py-0.5 bg-sky-500 text-white text-xs rounded-full"><?= number_format($dueSoonBorrows) ?></span>
+        </h5>
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-sky-700">ภายใน <?= DUE_SOON_DAYS ?> วัน</span>
+            <a href="reports.php?report=due_soon" class="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:bg-sky-100 px-3 py-1 rounded-full transition-colors">
+                <i class="bi bi-printer mr-1"></i>ใบรายชื่อทั้งหมด
+            </a>
+        </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <?php foreach ($dueSoonList as $item): ?>
+            <?php $daysLeft = (int) $item['days_left']; ?>
+            <div class="bg-white rounded-xl p-3 border border-sky-100 hover:shadow-md transition-shadow">
+                <div class="font-medium text-gray-900 text-sm line-clamp-1"><?= e($item['user_name']) ?></div>
+                <?php // 📞 เบอร์โทรคือของที่ต้องใช้จริง ทำเป็นลิงก์กดโทรจากมือถือได้เลย ?>
+                <?php if (!empty($item['phone'])): ?>
+                    <a href="tel:<?= e($item['phone']) ?>" class="text-xs text-sky-600 hover:underline"><?= e($item['phone']) ?></a>
+                <?php else: ?>
+                    <span class="text-xs text-gray-400">ไม่มีเบอร์โทร</span>
+                <?php endif; ?>
+                <div class="text-xs text-gray-500 line-clamp-1 mt-1"><?= e($item['book_title']) ?></div>
+                <div class="mt-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold <?= $daysLeft === 0 ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-700' ?>">
+                        <?= $daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'อีก ' . $daysLeft . ' วัน' ?>
+                    </span>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Low Stock Alert -->
 <?php if (!empty($lowStockBooks)): ?>

@@ -760,6 +760,64 @@ class BorrowRepository
      *         เรียง: due_date ASC (เกินนานสุดขึ้นก่อน)
      * ✅ Use case: admin/index.php → DashboardService → "รายการเกินกำหนด"
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: รายการที่ **กำลังจะครบกำหนด** ในอีก N วัน (ยังไม่เกิน)
+     * ==========================================================================
+     *
+     * 🧠 ทำไมต้องมี ทั้งที่มี findOverdue() อยู่แล้ว
+     *    findOverdue() ตอบว่า "ใครสายแล้ว" = **สายไปแล้ว** ทำได้แค่ตามทวง
+     *    ตัวนี้ตอบว่า "ใครกำลังจะสาย" = ยังโทรเตือนให้มาคืนทันได้
+     *    ระบบนี้ไม่ส่งอีเมล บรรณารักษ์จึงต้องโทร/LINE เอง — ต้องมีรายชื่อให้ก่อน
+     *
+     * 📥 @param int $days  มองไปข้างหน้ากี่วัน (มาจากกฎ DUE_SOON_DAYS ที่ตั้งได้ในหน้าตั้งค่า)
+     * @param int $limit จำกัดจำนวนแถว (สำหรับการ์ดบน dashboard)
+     *
+     * 🔴 ช่วงเป็น [วันนี้, วันนี้+N] — **รวมวันนี้** เพราะเล่มที่ครบกำหนดวันนี้
+     *    ยังไม่สาย (ค่าปรับนับจากวันที่เลยกำหนด ดู calculateFine())
+     *    และ **ไม่ทับกับ findOverdue()** ซึ่งเอา due_date < CURDATE() เท่านั้น
+     *    ถ้าเผลอใช้ >= CURDATE() - 1 จะมีรายการโผล่ทั้งสองการ์ด แล้วยอดรวมจะเพี้ยน
+     *
+     * 📤 @return array [{...borrows, user_name, phone, book_title, days_left}, ...]
+     * ⚠️ phone อยู่ในผลลัพธ์ → ต้อง escape ก่อนแสดงผล
+     */
+    public function findDueSoon(int $days, int $limit = 10): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT b.*, u.name as user_name, u.phone, bk.title as book_title,
+                   DATEDIFF(b.due_date, CURDATE()) as days_left
+            FROM borrows b
+            JOIN users u ON b.user_id = u.id
+            JOIN books bk ON b.book_id = bk.id
+            WHERE b.status = 'borrowing'
+              AND b.due_date >= CURDATE()
+              AND b.due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+            ORDER BY b.due_date ASC, b.id ASC
+            LIMIT ?
+        ");
+        $stmt->bindValue(1, $days, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * 🎯 นับจำนวนที่ใกล้ครบกำหนด — ใช้กับตัวเลขบนการ์ด
+     * ⚠️ เงื่อนไขต้องตรงกับ findDueSoon() เป๊ะ ไม่งั้นตัวเลขบนการ์ดกับรายการข้างล่างจะไม่ตรงกัน
+     */
+    public function countDueSoon(int $days): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*) FROM borrows
+            WHERE status = 'borrowing'
+              AND due_date >= CURDATE()
+              AND due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+        ");
+        $stmt->bindValue(1, $days, PDO::PARAM_INT);
+        $stmt->execute();
+        return (int) $stmt->fetchColumn();
+    }
+
     public function findOverdue(int $limit = 10): array
     {
         // 🔄 Flow: admin/index.php → DashboardService → findOverdue()

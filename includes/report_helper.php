@@ -86,6 +86,17 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
                 'title' => 'รายงานหนังสือค้างส่ง',
             ];
 
+        case 'due_soon':
+            // 📝 ใบรายชื่อโทรตามก่อนครบกำหนด (ไม่ใช้ date range เพราะดูไปข้างหน้าจาก "วันนี้")
+            //    🧠 คู่กับ 'overdue' — ตัวนั้นตามหลัง ตัวนี้ตามก่อน
+            //    ระบบไม่ส่งอีเมล บรรณารักษ์จึงพิมพ์ใบนี้ออกมาแล้วโทรเอง
+            return [
+                'data' => $repo->getDueSoonReport(DUE_SOON_DAYS),
+                'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เหลืออีก (วัน)'],
+                'filename' => "due_soon_" . date('Y-m-d'),
+                'title' => 'ใบรายชื่อโทรตาม — ครบกำหนดภายใน ' . DUE_SOON_DAYS . ' วัน',
+            ];
+
         case 'borrows':
             // 📝 รายการยืม-คืนทั้งหมดตามช่วงวัน
             return [
@@ -205,7 +216,7 @@ const REPORT_TEXT_CODE_COLUMNS = ['phone', 'user_phone', 'isbn', 'member_code', 
  *
  * ⚙️ เพิ่มคอลัมน์ที่เป็น "อายุ/ระยะเวลา/ค่าเฉลี่ย/เปอร์เซ็นต์" ในลิสต์นี้
  */
-const REPORT_NO_TOTAL_COLUMNS = ['days_overdue', 'days_unpaid'];
+const REPORT_NO_TOTAL_COLUMNS = ['days_overdue', 'days_unpaid', 'days_left'];
 
 /**
  * ==========================================================================

@@ -115,6 +115,16 @@ function ruleDefinitions(): array
             'unit'    => 'บาท',
             'help'    => 'เกินจำนวนนี้ต้องให้ผู้ดูแลระบบเป็นคนยกเว้น · ตั้ง 0 = เจ้าหน้าที่ยกเว้นไม่ได้เลย',
         ],
+        'DUE_SOON_DAYS' => [
+            'setting' => 'rule_due_soon_days',
+            'env'     => 'DUE_SOON_DAYS',
+            'default' => 3,
+            'min'     => 1,
+            'max'     => 30,
+            'label'   => 'เตือน "ใกล้ครบกำหนด" ล่วงหน้า',
+            'unit'    => 'วัน',
+            'help'    => 'ใช้กับการ์ดบนหน้าภาพรวมและรายงานใบรายชื่อโทรตาม · ตั้งสั้นไปจะโทรไม่ทัน ตั้งยาวไปรายชื่อจะเยอะจนไม่มีใครโทร',
+        ],
         'RESERVATION_EXPIRE_DAYS' => [
             'setting' => 'rule_reservation_days',
             'env'     => 'RESERVATION_EXPIRE_DAYS',
