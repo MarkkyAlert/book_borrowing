@@ -44,10 +44,29 @@ if (isLoggedIn()) {
             'unit' => 'เล่ม', 'icon' => 'bi-exclamation-triangle', 'tone' => 'red',
             'url' => APP_URL . '/my_borrows.php'];
     }
+    // 🔴 "ต้องคืนวันนี้" เป็นส่วนย่อยของ "ใกล้ครบกำหนด" — total ไม่นับซ้ำ
+    //    เดิมสมาชิกเห็นแค่ "ใกล้ครบกำหนดคืน 3" ซึ่งวันนี้กับอีก 3 วันหน้าตาเหมือนกันหมด
+    if ($memberAlerts['due_today'] > 0) {
+        $memberAlertItems[] = ['label' => 'ต้องคืนวันนี้', 'count' => $memberAlerts['due_today'],
+            'unit' => 'เล่ม', 'icon' => 'bi-calendar-check', 'tone' => 'orange',
+            'url' => APP_URL . '/my_borrows.php'];
+    }
     if ($memberAlerts['due_soon'] > 0) {
         $memberAlertItems[] = ['label' => 'ใกล้ครบกำหนดคืน', 'count' => $memberAlerts['due_soon'],
             'unit' => 'เล่ม', 'icon' => 'bi-clock-history', 'tone' => 'amber',
             'url' => APP_URL . '/my_borrows.php'];
+    }
+    /**
+     * 🔴 ช่องโหว่เดิมฝั่งสมาชิก: "จองไว้ รอมารับ 1" ไม่บอกว่าเหลือเวลาเท่าไหร่
+     *    ค่าเริ่มต้นให้เวลามารับแค่ 2 วัน (RESERVATION_EXPIRE_DAYS)
+     *    พรุ่งนี้หมดอายุ กับ อีก 2 วันหมด หน้าตาเหมือนกันเป๊ะ → เสียคิวโดยไม่รู้ตัว
+     * 🧠 ใช้เกณฑ์เดียวกับป้ายแดง "ใกล้หมดอายุ!" ใน my_reservations.php
+     *    (ReservationRepository::EXPIRING_SOON_CONDITION) กระดิ่งกับหน้าจึงพูดตรงกัน
+     */
+    if ($memberAlerts['expiring_reservations'] > 0) {
+        $memberAlertItems[] = ['label' => 'จองใกล้หมดอายุ', 'count' => $memberAlerts['expiring_reservations'],
+            'unit' => 'รายการ', 'icon' => 'bi-hourglass-split', 'tone' => 'rose',
+            'url' => APP_URL . '/my_reservations.php'];
     }
     if ($memberAlerts['ready_pickup'] > 0) {
         $memberAlertItems[] = ['label' => 'จองไว้ รอมารับ', 'count' => $memberAlerts['ready_pickup'],

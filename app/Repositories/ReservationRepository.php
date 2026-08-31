@@ -48,6 +48,24 @@ use PDO;
 
 class ReservationRepository
 {
+    /**
+     * 🔴 นิยาม "การจองที่ใกล้หมดอายุ" — แหล่งความจริงเดียวของทั้งระบบ
+     *
+     * 🧠 ยกเกณฑ์มาจาก my_reservations.php ที่ติดป้ายแดง "ใกล้หมดอายุ!" อยู่แล้ว:
+     *        strtotime($r['expires_at']) < strtotime('+1 day')
+     *    ถ้ากระดิ่งใช้เกณฑ์ต่างออกไป จะเกิดอาการกระดิ่งขึ้น 1
+     *    แต่เปิดหน้าไปแล้วไม่มีรายการไหนติดป้ายอะไรเลย — แย่กว่าไม่เตือน
+     *
+     * ⚠️ ต้องเช็ค expires_at IS NOT NULL ด้วย
+     *    คิวรอ (status = 'waiting') ไม่มีวันหมดอายุ เก็บเป็น NULL
+     *    ถ้าไม่กรอง MySQL จะเทียบ NULL แล้วได้ NULL (ไม่ใช่ TRUE/FALSE) — เงียบ ๆ นับหาย
+     *
+     * 📌 ใช้ที่: buildListConditions() · countExpiringSoon()
+     *           DashboardService::getAlertCounts() · BorrowRepository::getMemberAlertCounts()
+     */
+    public const EXPIRING_SOON_CONDITION =
+        "r.status = 'pending' AND r.expires_at IS NOT NULL AND r.expires_at < NOW() + INTERVAL 1 DAY";
+
     // 🗄️ PDO connection — inject ผ่าน constructor ใช้ร่วมกันทุกเมธอด
     private PDO $pdo;
 
@@ -193,16 +211,22 @@ class ReservationRepository
             $params[] = max(0, (int) ($filters['offset'] ?? 0));
         }
 
-        // 📝 SQL: ดึงการจอง + ข้อมูล user + book
-        // 🧠 `, r.id DESC` คือตัวตัดสินเมื่อ created_at เท่ากัน — ถ้าไม่มี การเรียงจะไม่คงที่
+        // ⏰ กรองเฉพาะที่ใกล้หมดอายุ → เรียงตามวันหมดอายุ ด่วนสุดอยู่บนสุด
+        //    เรียงตามวันที่จองเหมือนเดิมจะทำให้คนที่เหลือ 2 ชั่วโมงไปอยู่ท้ายรายการ
+        // 🧠 `, r.id ASC/DESC` คือตัวตัดสินเมื่อค่าเท่ากัน — ถ้าไม่มี การเรียงจะไม่คงที่
         //    ทำให้กดหน้า 2 เจอรายการซ้ำจากหน้า 1 หรือบางรายการหายไปเลย
+        $orderSQL = !empty($filters['expiring'])
+            ? 'ORDER BY r.expires_at ASC, r.id ASC'
+            : 'ORDER BY r.created_at DESC, r.id DESC';
+
+        // 📝 SQL: ดึงการจอง + ข้อมูล user + book
         $stmt = $this->pdo->prepare("
             SELECT r.*, u.name as user_name, u.email, b.title as book_title, b.cover_image
             FROM reservations r
             JOIN users u ON r.user_id = u.id
             JOIN books b ON r.book_id = b.id
             {$whereSQL}
-            ORDER BY r.created_at DESC, r.id DESC
+            {$orderSQL}
             {$limitSQL}
         ");
         $stmt->execute($params);
@@ -265,6 +289,28 @@ class ReservationRepository
 
     /**
      * ==========================================================================
+     * 🎯 จุดประสงค์: นับการจองที่กันเล่มไว้และกำลังจะหมดอายุ (สำหรับกระดิ่ง)
+     * ==========================================================================
+     *
+     * 📥 @param int|null $userId  null = ทั้งระบบ (ฝั่งเจ้าหน้าที่) · มีค่า = เฉพาะคนนั้น
+     * 📤 @return int
+     *
+     * ⚠️ ไม่เรียก markExpiredReservations() เพราะถูกเรียกทุกครั้งที่โหลดแดชบอร์ดอยู่แล้ว
+     *    (admin/index.php:37) การเรียกซ้ำที่นี่จะกลายเป็นเขียน DB ทุกการโหลดหน้า
+     */
+    public function countExpiringSoon(?int $userId = null): int
+    {
+        $sql = "SELECT COUNT(*) FROM reservations r WHERE " . self::EXPIRING_SOON_CONDITION;
+        if ($userId !== null) {
+            $stmt = $this->pdo->prepare($sql . " AND r.user_id = ?");
+            $stmt->execute([$userId]);
+            return (int) $stmt->fetchColumn();
+        }
+        return (int) $this->pdo->query($sql)->fetchColumn();
+    }
+
+    /**
+     * ==========================================================================
      * 🎯 จุดประสงค์: แปลง $filters → WHERE clause + params
      * ==========================================================================
      * 🧠 ทำไมแยกออกมา: findAll() กับ countAll() ต้องกรองเหมือนกันเป๊ะ
@@ -294,6 +340,13 @@ class ReservationRepository
         if (!empty($filters['book_id'])) {
             $where[] = "r.book_id = ?";
             $params[] = $filters['book_id'];
+        }
+
+        // ⏰ Filter: เฉพาะที่ใกล้หมดอายุ — ปลายทางของกระดิ่ง "จองหมดอายุวันนี้"
+        // 🛡️ whitelist: รับเฉพาะ '1' ค่าอื่นถือว่าไม่กรอง
+        // 🧠 ใช้ const ตัวเดียวกับตัวนับ เลขในกระดิ่งกับจำนวนแถวในหน้าจึงตรงกันเสมอ
+        if (!empty($filters['expiring'])) {
+            $where[] = '(' . self::EXPIRING_SOON_CONDITION . ')';
         }
 
         // 🔗 ประกอบ WHERE clause

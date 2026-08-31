@@ -98,7 +98,9 @@ class DashboardService
      *    ถ้าใส่ของที่ไม่ต้องทำอะไรเข้าไป กระดิ่งจะแดงตลอดจนคนเลิกสนใจ
      *    ซึ่งเป็นปัญหาเดิมของกระดิ่งหลอกที่มีจุดแดงตายตัวอยู่ก่อนหน้านี้
      *
-     * 📤 @return array{overdue:int, due_soon:int, pending_reservations:int, unpaid_people:int, total:int}
+     * 📤 @return array{overdue:int, due_soon:int, pending_reservations:int, unpaid_people:int, total:int,
+     *                 due_today:int, expiring_reservations:int}
+     *    🔴 due_today/expiring_reservations ไม่ถูกนับใน total (เป็นส่วนย่อยของตัวอื่น)
      */
     public function getAlertCounts(): array
     {
@@ -121,6 +123,10 @@ class DashboardService
                   WHERE status = 'borrowing' AND due_date >= CURDATE()
                     AND due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY))                    AS due_soon,
                 (SELECT COUNT(*) FROM reservations WHERE status = 'pending')                AS pending_reservations,
+                (SELECT COUNT(*) FROM borrows
+                  WHERE status = 'borrowing' AND due_date = CURDATE())                      AS due_today,
+                (SELECT COUNT(*) FROM reservations r
+                  WHERE " . \App\Repositories\ReservationRepository::EXPIRING_SOON_CONDITION . ")     AS expiring_reservations,
                 (SELECT COUNT(DISTINCT b.user_id) FROM borrows b
                    LEFT JOIN payments p ON p.borrow_id = b.id
                   WHERE b.fine_amount > 0 AND p.id IS NULL AND b.fine_waived_at IS NULL)    AS unpaid_people
@@ -135,7 +141,23 @@ class DashboardService
             'pending_reservations' => (int) ($row['pending_reservations'] ?? 0),
             'unpaid_people'        => (int) ($row['unpaid_people'] ?? 0),
         ];
+
+        /**
+         * 🔴 due_today และ expiring_reservations เป็น "ส่วนย่อย" ของสองตัวข้างบน
+         *    ครบกำหนดวันนี้ 20 รายการ อยู่ในกลุ่มใกล้ครบกำหนด 74 รายการด้วย
+         *    จองที่ใกล้หมดอายุ ก็อยู่ในกลุ่มจองรอมารับด้วย
+         *
+         * 🧠 จึงเก็บแยกไว้ "หลัง" คำนวณ total — ป้ายแดงต้องนับ 74 ไม่ใช่ 94
+         *    การยืมรายการเดียวถูกนับสองรอบ = ตัวเลขโกหก
+         *
+         * 🧠 ทำไมไม่แยก due_soon ให้ไม่รวมวันนี้แทน: รายงาน "ใบรายชื่อโทรตาม"
+         *    (report_helper.php → getDueSoonReport) ใช้ due_date >= CURDATE() รวมวันนี้
+         *    ถ้าตัดวันนี้ออก เลขในกระดิ่งจะไม่ตรงกับรายงานที่มันลิงก์ไป
+         *    และการตัดคนที่ครบกำหนดวันนี้ออกจากใบโทรตามก็ผิดเจตนาของใบนั้น
+         */
         $counts['total'] = array_sum($counts);
+        $counts['due_today']             = (int) ($row['due_today'] ?? 0);
+        $counts['expiring_reservations'] = (int) ($row['expiring_reservations'] ?? 0);
 
         return $cache = $counts;
     }

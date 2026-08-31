@@ -263,15 +263,19 @@ $script = <<<SUB
 <?php
 \$_SERVER["REQUEST_METHOD"]="GET"; \$_SERVER["PHP_SELF"]="sub.php"; \$_SERVER["REMOTE_ADDR"]="127.0.0.1";
 define('PROBE_ROOT', '{$root}');
-require PROBE_ROOT . "/includes/config.php";
-require PROBE_ROOT . "/includes/db.php";
-require PROBE_ROOT . "/includes/functions.php";
-require PROBE_ROOT . "/app/Repositories/BookRepository.php";
-require PROBE_ROOT . "/app/Repositories/BorrowRepository.php";
-require PROBE_ROOT . "/app/Repositories/PaymentRepository.php";
-require PROBE_ROOT . "/app/Repositories/ReservationRepository.php";
-require PROBE_ROOT . "/app/Repositories/UserRepository.php";
-require PROBE_ROOT . "/app/Services/BorrowService.php";
+// 🔴 ต้องเป็น require_once ไม่ใช่ require — Repository เรียกกันเองได้
+//    (BorrowRepository ใช้ ReservationRepository::EXPIRING_SOON_CONDITION)
+//    ถ้าใช้ require เฉย ๆ ไฟล์เดียวกันจะถูกโหลดสองรอบ → "Cannot declare class ... already in use"
+//    แล้วโพรบตายเงียบ ๆ เทสต์จะฟ้องเป็นบั๊กของ business logic ทั้งที่เป็นเรื่อง include
+require_once PROBE_ROOT . "/includes/config.php";
+require_once PROBE_ROOT . "/includes/db.php";
+require_once PROBE_ROOT . "/includes/functions.php";
+require_once PROBE_ROOT . "/app/Repositories/BookRepository.php";
+require_once PROBE_ROOT . "/app/Repositories/BorrowRepository.php";
+require_once PROBE_ROOT . "/app/Repositories/PaymentRepository.php";
+require_once PROBE_ROOT . "/app/Repositories/ReservationRepository.php";
+require_once PROBE_ROOT . "/app/Repositories/UserRepository.php";
+require_once PROBE_ROOT . "/app/Services/BorrowService.php";
 \$svc = new App\Services\BorrowService(getDB());
 echo "MAX=" . MAX_RENEW_COUNT . "|";
 try { \$svc->renewBorrow((int) \$argv[1]); echo "RENEWED"; }

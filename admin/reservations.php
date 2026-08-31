@@ -76,11 +76,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── GET: ดึงรายการจองตาม filter ──
 // 📥 default แสดงเฉพาะ "pending" — staff สนใจรายการที่รอดำเนินการเป็นหลัก
 $statusFilter = $_GET['status'] ?? 'pending';
+// ⏰ [กระดิ่ง] '1' = เฉพาะที่ใกล้หมดอายุ — 🛡️ whitelist รับเฉพาะ '1'
+$expiring = ($_GET['expiring'] ?? '') === '1' ? '1' : '';
 $page = (int) ($_GET['page'] ?? 1);
 
 $filters = [];
 if ($statusFilter !== 'all') {
     $filters['status'] = $statusFilter;
+}
+// 🧠 เงื่อนไขใน const กำหนด status = 'pending' อยู่แล้ว จึงไม่ต้องพึ่ง $statusFilter
+//    เข้ามาจากกระดิ่งด้วย ?expiring=1 ตรง ๆ ก็ได้ผลถูกต้องโดยไม่ต้องส่ง status มาด้วย
+if ($expiring === '1') {
+    $filters['expiring'] = '1';
 }
 
 // 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
@@ -96,11 +103,31 @@ $expiredCount = $reservationRepo->countAll(['status' => 'expired']);
 $expiredThisMonth = $reservationRepo->countExpiredThisMonth();
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วเด้งกลับไปดูแท็บแรก
-$paginationParams = ['status' => $statusFilter];
+$paginationParams = ['status' => $statusFilter, 'expiring' => $expiring];
 
 $pageTitle = 'จัดการการจอง';
 require_once __DIR__ . '/header.php';
 ?>
+
+<?php if ($expiring === '1'): ?>
+    <?php // ⏰ ต้องบอกให้ชัดว่ากำลังดูรายการที่ถูกกรองอยู่
+          //    ไม่งั้นเห็น 2 รายการแล้วนึกว่าทั้งห้องสมุดมีคนจองอยู่แค่ 2 คน ?>
+    <div class="mb-4 bg-rose-50 border border-rose-200 rounded-xl p-4">
+        <div class="flex items-start gap-3">
+            <i class="bi bi-hourglass-split text-rose-600 text-xl mt-0.5"></i>
+            <div class="flex-1">
+                <p class="font-bold text-rose-800 text-sm">เฉพาะการจองที่ใกล้หมดอายุ (ภายใน 24 ชั่วโมง)</p>
+                <p class="text-sm text-rose-700 mt-1">
+                    เรียงจากด่วนที่สุดก่อน · เกินกำหนดแล้วหนังสือจะกลับขึ้นชั้นอัตโนมัติ
+                    และสมาชิกจะเสียคิวไป — โทรตามได้จากเบอร์ในรายการ
+                </p>
+                <a href="reservations.php?status=pending" class="inline-block mt-3 text-sm text-rose-700 underline hover:text-rose-900">
+                    ดูรายการรอมารับทั้งหมด
+                </a>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
     <div class="p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">

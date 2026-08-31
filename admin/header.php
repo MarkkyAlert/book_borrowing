@@ -73,10 +73,31 @@ if ($alertCounts['overdue'] > 0) {
                      'icon' => 'bi-exclamation-triangle', 'tone' => 'red',
                      'url' => 'borrows.php?filter=overdue'];
 }
+/**
+ * 🔴 "ครบกำหนดวันนี้" เป็นส่วนย่อยของ "ใกล้ครบกำหนด" (20 อยู่ใน 74)
+ *    วางติดกันเพื่อให้อ่านออกว่าเป็นชุดเดียวกัน ไม่ใช่คนละกลุ่ม
+ *    และ $alertCounts['total'] ไม่ได้นับตัวนี้ ป้ายแดงจึงไม่บวกซ้ำ
+ *    ปลายทาง borrows.php?filter=due_today ใช้เงื่อนไข due_date = CURDATE() เหมือนกันเป๊ะ
+ */
+if ($alertCounts['due_today'] > 0) {
+    $alertItems[] = ['label' => 'ครบกำหนดคืนวันนี้', 'count' => $alertCounts['due_today'], 'unit' => 'รายการ',
+                     'icon' => 'bi-calendar-check', 'tone' => 'orange',
+                     'url' => 'borrows.php?filter=due_today'];
+}
 if ($alertCounts['due_soon'] > 0) {
     $alertItems[] = ['label' => 'ใกล้ครบกำหนด', 'count' => $alertCounts['due_soon'], 'unit' => 'รายการ',
                      'icon' => 'bi-telephone', 'tone' => 'sky',
                      'url' => isAdmin() ? 'reports.php?report=due_soon' : 'borrows.php?filter=due_today'];
+}
+/**
+ * 🔴 จองที่ใกล้หมดอายุ — ค่าเริ่มต้นให้เวลามารับแค่ 2 วัน (RESERVATION_EXPIRE_DAYS)
+ *    ถ้าไม่โทรตาม เล่มจะกลับขึ้นชั้นแล้วสมาชิกเสียคิวโดยไม่รู้ตัว
+ *    ปลายทางเรียงตามวันหมดอายุ ด่วนสุดอยู่บนสุด
+ */
+if ($alertCounts['expiring_reservations'] > 0) {
+    $alertItems[] = ['label' => 'จองใกล้หมดอายุ', 'count' => $alertCounts['expiring_reservations'], 'unit' => 'รายการ',
+                     'icon' => 'bi-hourglass-split', 'tone' => 'rose',
+                     'url' => 'reservations.php?expiring=1'];
 }
 if ($alertCounts['pending_reservations'] > 0) {
     $alertItems[] = ['label' => 'จองรอมารับ', 'count' => $alertCounts['pending_reservations'], 'unit' => 'รายการ',

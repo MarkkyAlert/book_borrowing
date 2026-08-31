@@ -119,6 +119,9 @@ namespace App\Repositories;
 
 use PDO;
 
+// 📌 ใช้ ReservationRepository::EXPIRING_SOON_CONDITION — นิยาม "จองใกล้หมดอายุ" ที่เดียวทั้งระบบ
+require_once __DIR__ . '/ReservationRepository.php';
+
 class BorrowRepository
 {
     // 🗄️ PDO connection — ใช้ร่วมกันทุกเมธอด (inject ผ่าน constructor)
@@ -686,7 +689,9 @@ class BorrowRepository
      * 🧠 นับเฉพาะเรื่องที่ **สมาชิกต้องลงมือทำ** ไม่ใช่สถิติ
      *    "ยืมไปแล้วทั้งหมด 14 เล่ม" ไม่ใช่การแจ้งเตือน — ใส่แล้วกระดิ่งจะแดงตลอด
      *
-     * 📤 @return array{overdue:int, due_soon:int, ready_pickup:int, unpaid:int, total:int}
+     * 📤 @return array{overdue:int, due_soon:int, ready_pickup:int, unpaid:int, total:int,
+     *                 due_today:int, expiring_reservations:int}
+     *    🔴 due_today/expiring_reservations ไม่ถูกนับใน total (เป็นส่วนย่อยของตัวอื่น)
      */
     public function getMemberAlertCounts(int $userId, int $dueSoonDays): array
     {
@@ -701,6 +706,12 @@ class BorrowRepository
                     AND due_date <= DATE_ADD(CURDATE(), INTERVAL :days DAY))     AS due_soon,
                 (SELECT COUNT(*) FROM reservations
                   WHERE user_id = :uid3 AND status = 'pending')                  AS ready_pickup,
+                (SELECT COUNT(*) FROM borrows
+                  WHERE user_id = :uid5 AND status = 'borrowing'
+                    AND due_date = CURDATE())                                    AS due_today,
+                (SELECT COUNT(*) FROM reservations r
+                  WHERE r.user_id = :uid6
+                    AND " . \App\Repositories\ReservationRepository::EXPIRING_SOON_CONDITION . ") AS expiring_reservations,
                 (SELECT COUNT(*) FROM borrows b
                    LEFT JOIN payments p ON p.borrow_id = b.id
                   WHERE b.user_id = :uid4 AND b.fine_amount > 0
@@ -711,6 +722,8 @@ class BorrowRepository
         $stmt->bindValue(':uid2', $userId, PDO::PARAM_INT);
         $stmt->bindValue(':uid3', $userId, PDO::PARAM_INT);
         $stmt->bindValue(':uid4', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':uid5', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':uid6', $userId, PDO::PARAM_INT);
         $stmt->bindValue(':days', $dueSoonDays, PDO::PARAM_INT);
         $stmt->execute();
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -721,7 +734,13 @@ class BorrowRepository
             'ready_pickup' => (int) ($row['ready_pickup'] ?? 0),
             'unpaid'       => (int) ($row['unpaid'] ?? 0),
         ];
+
+        // 🔴 due_today อยู่ใน due_soon อยู่แล้ว · expiring_reservations อยู่ใน ready_pickup อยู่แล้ว
+        //    เก็บแยกไว้หลังคำนวณ total เพื่อไม่ให้ป้ายแดงนับรายการเดียวสองรอบ
+        //    (เหตุผลเต็มอยู่ที่ DashboardService::getAlertCounts())
         $counts['total'] = array_sum($counts);
+        $counts['due_today']             = (int) ($row['due_today'] ?? 0);
+        $counts['expiring_reservations'] = (int) ($row['expiring_reservations'] ?? 0);
         return $counts;
     }
 
