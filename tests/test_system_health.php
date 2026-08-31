@@ -40,7 +40,6 @@ require_once __DIR__ . '/../app/Services/DashboardService.php';
 
 $BASE_URL       = rtrim(APP_URL, '/');
 $ADMIN_EMAIL    = 'admin@library.com';
-$STAFF_EMAIL    = 'staff@library.com';
 $ADMIN_PASSWORD = $argv[1] ?? '123456';
 $ROOT           = dirname(__DIR__);
 
@@ -468,12 +467,44 @@ echo "\n── G. ใครเห็นอะไร / ไม่มี path ห�
 // ============================================================
 
 $adminHtml = http('GET', "{$BASE_URL}/admin/index.php");
+
+/**
+ * 🔴 สร้างบัญชีเจ้าหน้าที่ขึ้นเองแทนการพึ่ง staff@library.com
+ *
+ * 🧠 เจอตอนรันบน clone สด: staff@library.com มีเฉพาะใน database/sample_data.sql
+ *    ซึ่งเป็นไฟล์เดโมที่ลูกค้าไม่ได้นำเข้า (install.php ไม่มีปุ่มให้นำเข้าด้วยซ้ำ)
+ *    เทสต์เดิมจึงล็อกอินไม่ได้บนเครื่องที่ติดตั้งสด แล้วรายงานว่า "กระดิ่งของ staff หายไป"
+ *    ทั้งที่กระดิ่งปกติดี — เป็นบั๊กของเทสต์ ไม่ใช่ของระบบ
+ *    (แนวเดียวกับ test_alert_bell.php ซึ่งสร้างบัญชีเองอยู่แล้ว)
+ */
+$staffEmail = "syshealth{$uniq}@test.local";
+$staffPass  = 'StaffPass' . $uniq;
+$madeStaff  = null;
+try {
+    $st = $pdo->prepare("INSERT INTO users (name, email, password, phone, role, must_change_password)
+                         VALUES (?, ?, ?, ?, 'staff', 0)");
+    $st->execute(["[SYSTEST] เจ้าหน้าที่ {$uniq}", $staffEmail, hashPassword($staffPass), '0800000000']);
+    $madeStaff = (int) $pdo->lastInsertId();
+} catch (Throwable $e) {
+    fail('SYS-G0', '🔴 สร้างบัญชีเจ้าหน้าที่ไม่ได้: ' . $e->getMessage());
+}
+// 🧹 ลบทิ้งเสมอแม้สคริปต์ตายกลางคัน
+register_shutdown_function(function () use ($pdo, &$madeStaff) {
+    if ($madeStaff) {
+        try { $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$madeStaff]); } catch (Throwable $e) {}
+    }
+});
+
 $staffJar  = tempnam(sys_get_temp_dir(), 'bbst');
 $sLogin    = http('GET', "{$BASE_URL}/login.php", [], $staffJar);
 http('POST', "{$BASE_URL}/login.php",
-    ['csrf_token' => csrfFrom($sLogin), 'email' => $STAFF_EMAIL, 'password' => $ADMIN_PASSWORD], $staffJar);
+    ['csrf_token' => csrfFrom($sLogin), 'email' => $staffEmail, 'password' => $staffPass], $staffJar);
 $staffHtml = http('GET', "{$BASE_URL}/admin/index.php", [], $staffJar);
 @unlink($staffJar);
+
+check('SYS-G0', $madeStaff && strpos($staffHtml, 'ออกจากระบบ') !== false,
+    'สร้างบัญชีเจ้าหน้าที่ชั่วคราวและล็อกอินได้ — ข้อ G ต่อจากนี้จึงเทียบสิทธิ์ได้จริง',
+    '🔴 ล็อกอินเป็นเจ้าหน้าที่ไม่ได้ — ข้อ G เชื่อไม่ได้');
 
 $adminOnlyLabels = ['ยังไม่ได้ลบไฟล์ติดตั้ง', 'เปิดโหมดพัฒนาอยู่'];
 $adminSees = false; $staffSees = false;
@@ -536,6 +567,15 @@ check('SYS-H3', ($timed['ms_second'] ?? 99) < 1.0 && ($timed['ms_first'] ?? 0) >
         $timed['ms_first'] ?? 0, $timed['ms_second'] ?? 0),
     sprintf('🔴 ครั้งแรก %.1f ms · เรียกซ้ำ %.3f ms — ไม่ได้ cache ทุกหน้าแอดมินจะช้าตาม',
         $timed['ms_first'] ?? 0, $timed['ms_second'] ?? 0));
+
+if ($madeStaff) {
+    $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$madeStaff]);
+    $madeStaff = null;
+}
+$leftover = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE name LIKE '%[SYSTEST]%'")->fetchColumn();
+check('SYS-G4', $leftover === 0,
+    'ลบบัญชีเจ้าหน้าที่ที่สร้างขึ้นเรียบร้อย — ไม่ทิ้งข้อมูลไว้ในระบบลูกค้า',
+    "🔴 เหลือบัญชีทดสอบ {$leftover} บัญชี");
 
 @unlink($COOKIE);
 
