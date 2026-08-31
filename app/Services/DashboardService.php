@@ -81,6 +81,65 @@ class DashboardService
      *          pending_reservations}
      * ✅ Use case: admin/index.php → stat cards ด้านบน
      */
+    /**
+     * ==========================================================================
+     * 🔔 จุดประสงค์: ตัวเลขสำหรับ "กระดิ่งแจ้งเตือน" บนหัวหน้าแอดมิน
+     * ==========================================================================
+     *
+     * 🔴 [PERFORMANCE] เมธอดนี้ถูกเรียกจาก `admin/header.php` ซึ่ง **ทุกหน้าแอดมิน
+     *    include** (16 หน้า) — จะช้าไม่ได้
+     *    - `getCardStats()` ใช้ ~22 ms และดึงของที่กระดิ่งไม่ต้องใช้
+     *      (จำนวนหนังสือ/สมาชิก/ยืมทั้งหมด) จึง **ห้ามเอามาใช้ซ้ำที่นี่**
+     *    - ตัวนี้รวม 4 ตัวเลขไว้ใน **round-trip เดียว** วัดได้ ~10 ms
+     *    - cache ระดับ request เพราะบางหน้าอาจเรียกซ้ำ
+     *
+     * 🧠 เลือกเฉพาะเรื่องที่ **ต้องลงมือทำ** ไม่ใช่ทุกตัวเลขที่มี
+     *    "หนังสือทั้งหมด 1,187 เล่ม" ไม่ใช่การแจ้งเตือน มันคือสถิติ
+     *    ถ้าใส่ของที่ไม่ต้องทำอะไรเข้าไป กระดิ่งจะแดงตลอดจนคนเลิกสนใจ
+     *    ซึ่งเป็นปัญหาเดิมของกระดิ่งหลอกที่มีจุดแดงตายตัวอยู่ก่อนหน้านี้
+     *
+     * 📤 @return array{overdue:int, due_soon:int, pending_reservations:int, unpaid_people:int, total:int}
+     */
+    public function getAlertCounts(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        // 📝 เงื่อนไขแต่ละตัวต้องตรงกับหน้าที่กระดิ่งพาไป ไม่งั้นกดแล้วเจอคนละจำนวน
+        //    overdue        → admin/borrows.php?filter=overdue
+        //    due_soon       → reports.php?report=due_soon (admin) / borrows.php?filter=due_today (staff)
+        //    pending        → admin/reservations.php
+        //    unpaid_people  → admin/payments.php  (นับเป็น "คน" ให้ตรงกับหน้านั้นซึ่งแบ่งหน้าเป็นคน)
+        $days = (int) DUE_SOON_DAYS;
+        $stmt = $this->pdo->prepare("
+            SELECT
+                (SELECT COUNT(*) FROM borrows
+                  WHERE status = 'borrowing' AND due_date < CURDATE())                      AS overdue,
+                (SELECT COUNT(*) FROM borrows
+                  WHERE status = 'borrowing' AND due_date >= CURDATE()
+                    AND due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY))                    AS due_soon,
+                (SELECT COUNT(*) FROM reservations WHERE status = 'pending')                AS pending_reservations,
+                (SELECT COUNT(DISTINCT b.user_id) FROM borrows b
+                   LEFT JOIN payments p ON p.borrow_id = b.id
+                  WHERE b.fine_amount > 0 AND p.id IS NULL AND b.fine_waived_at IS NULL)    AS unpaid_people
+        ");
+        $stmt->bindValue(1, $days, \PDO::PARAM_INT);
+        $stmt->execute();
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        $counts = [
+            'overdue'              => (int) ($row['overdue'] ?? 0),
+            'due_soon'             => (int) ($row['due_soon'] ?? 0),
+            'pending_reservations' => (int) ($row['pending_reservations'] ?? 0),
+            'unpaid_people'        => (int) ($row['unpaid_people'] ?? 0),
+        ];
+        $counts['total'] = array_sum($counts);
+
+        return $cache = $counts;
+    }
+
     public function getCardStats(): array
     {
         // 📝 รวมสถิติจากหลาย repo เป็น 1 array

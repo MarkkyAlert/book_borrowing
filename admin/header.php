@@ -22,6 +22,48 @@ require_once __DIR__ . '/../includes/functions.php';
 //    header.php จะเป็น safety net ให้
 requireStaff();
 
+// 🔔 ตัวเลขสำหรับกระดิ่งแจ้งเตือน
+//    🔴 [PERFORMANCE] ไฟล์นี้ถูก include ทุกหน้าแอดมิน (16 หน้า)
+//       getAlertCounts() จึงรวมทุกอย่างไว้ใน query เดียว (~10 ms) และ cache ต่อ request
+//       **ห้ามเปลี่ยนไปเรียก getCardStats()** ซึ่งใช้ ~22 ms และดึงของที่กระดิ่งไม่ใช้
+//    🛡️ ถ้าดึงไม่ได้ (DB มีปัญหา) ให้กระดิ่งเงียบ ไม่ใช่ทำให้ทั้งหน้าพัง
+require_once __DIR__ . '/../app/Services/DashboardService.php';
+try {
+    $alertCounts = (new \App\Services\DashboardService(getDB()))->getAlertCounts();
+} catch (\Throwable $e) {
+    $alertCounts = ['overdue' => 0, 'due_soon' => 0, 'pending_reservations' => 0, 'unpaid_people' => 0, 'total' => 0];
+}
+
+/**
+ * 🔗 รายการในกระดิ่ง — เฉพาะเรื่องที่ **ต้องลงมือทำ**
+ *
+ * 🔴 ปลายทางต้องเปิดได้ด้วยสิทธิ์ของคนที่เห็น
+ *    `reports.php` เป็น **admin เท่านั้น** ส่วนหน้าอื่นเป็น staff ได้
+ *    เจ้าหน้าที่จึงถูกพาไป `borrows.php?filter=due_today` แทน
+ *    (กระดิ่งที่พาไปหน้าที่กดแล้วเด้งออก แย่กว่าไม่มีกระดิ่ง)
+ */
+$alertItems = [];
+if ($alertCounts['overdue'] > 0) {
+    $alertItems[] = ['label' => 'เกินกำหนดคืน', 'count' => $alertCounts['overdue'], 'unit' => 'รายการ',
+                     'icon' => 'bi-exclamation-triangle', 'tone' => 'red',
+                     'url' => 'borrows.php?filter=overdue'];
+}
+if ($alertCounts['due_soon'] > 0) {
+    $alertItems[] = ['label' => 'ใกล้ครบกำหนด', 'count' => $alertCounts['due_soon'], 'unit' => 'รายการ',
+                     'icon' => 'bi-telephone', 'tone' => 'sky',
+                     'url' => isAdmin() ? 'reports.php?report=due_soon' : 'borrows.php?filter=due_today'];
+}
+if ($alertCounts['pending_reservations'] > 0) {
+    $alertItems[] = ['label' => 'จองรอมารับ', 'count' => $alertCounts['pending_reservations'], 'unit' => 'รายการ',
+                     'icon' => 'bi-bookmark-star', 'tone' => 'indigo',
+                     'url' => 'reservations.php'];
+}
+if ($alertCounts['unpaid_people'] > 0) {
+    $alertItems[] = ['label' => 'ค้างชำระค่าปรับ', 'count' => $alertCounts['unpaid_people'], 'unit' => 'คน',
+                     'icon' => 'bi-cash-coin', 'tone' => 'amber',
+                     'url' => 'payments.php'];
+}
+
 // 📍 ระบุหน้าปัจจุบัน — ใช้ highlight active menu item ใน sidebar
 $currentPage = basename($_SERVER['PHP_SELF']);
 // 👤 ดึงข้อมูล user จาก session → DB (ชื่อ, role, ฯลฯ)
@@ -369,10 +411,60 @@ if (!$user) {
         <header class="bg-white shadow-sm h-16 flex items-center justify-between px-8 z-10 hidden md:flex">
             <h2 class="text-xl font-bold text-gray-800"><?= $pageTitle ?? 'Admin Panel' ?></h2>
             <div class="flex items-center gap-4">
-                <button class="text-gray-400 hover:text-primary-600 transition-colors relative">
-                    <i class="bi bi-bell text-xl"></i>
-                    <span class="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-500"></span>
-                </button>
+                <?php // 🔔 กระดิ่งแจ้งเตือน
+                      //    🔴 เดิมเป็นปุ่มหลอก — ไม่มี onclick ไม่มีลิงก์ และจุดแดงเป็น HTML ตายตัว
+                      //       แดงตลอดแม้ไม่มีอะไรค้าง ผู้ดูแลเห็นทุกวันจนชิน วันที่ด่วนจริงเลยไม่สังเกต
+                      //    ตอนนี้จุดแดงขึ้น **เฉพาะตอนมีของจริง** และกดแล้วไปหน้าที่ต้องทำงานได้ ?>
+                <?php // 🧠 ใช้ vanilla JS แบบเดียวกับเมนูมือถือด้านบน (classList.toggle)
+                      //    โปรเจกต์นี้ไม่มี Alpine.js และ **ห้ามเพิ่มไลบรารีใหม่** — ทั้งระบบต้องใช้ได้ออฟไลน์
+                      //    ไฟล์ทุกตัวอยู่ใน assets/vendor/ ไม่มีการดึงจาก CDN ?>
+                <div class="relative">
+                    <button type="button"
+                            onclick="event.stopPropagation(); document.getElementById('alert-dropdown').classList.toggle('hidden')"
+                            class="text-gray-400 hover:text-primary-600 transition-colors relative"
+                            aria-label="การแจ้งเตือน">
+                        <i class="bi bi-bell text-xl"></i>
+                        <?php if ($alertCounts['total'] > 0): ?>
+                            <span class="absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 flex items-center justify-center
+                                         rounded-full ring-2 ring-white bg-red-500 text-white text-[10px] font-bold">
+                                <?= $alertCounts['total'] > 99 ? '99+' : $alertCounts['total'] ?>
+                            </span>
+                        <?php endif; ?>
+                    </button>
+
+                    <div id="alert-dropdown"
+                         class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+                            <p class="text-sm font-bold text-gray-800">สิ่งที่ต้องจัดการ</p>
+                        </div>
+                        <?php if (!$alertItems): ?>
+                            <div class="px-4 py-6 text-center text-gray-400">
+                                <i class="bi bi-check-circle text-2xl text-green-500 block mb-1"></i>
+                                <p class="text-sm">ไม่มีอะไรค้าง</p>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($alertItems as $item): ?>
+                                <a href="<?= e($item['url']) ?>"
+                                   class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                                    <span class="flex items-center gap-2 text-sm text-gray-700">
+                                        <i class="bi <?= e($item['icon']) ?> text-<?= e($item['tone']) ?>-500"></i>
+                                        <?= e($item['label']) ?>
+                                    </span>
+                                    <span class="text-sm font-bold text-<?= e($item['tone']) ?>-600">
+                                        <?= number_format($item['count']) ?> <span class="font-normal text-gray-400 text-xs"><?= e($item['unit']) ?></span>
+                                    </span>
+                                </a>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php // 📌 คลิกที่อื่นแล้วปิดเมนู — ผูกครั้งเดียวตอนโหลดหน้า ?>
+                <script>
+                    document.addEventListener('click', function () {
+                        var d = document.getElementById('alert-dropdown');
+                        if (d) d.classList.add('hidden');
+                    });
+                </script>
             </div>
         </header>
 
