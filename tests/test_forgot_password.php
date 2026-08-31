@@ -182,6 +182,23 @@ check('FORGOT-A4',
 $pageSrc   = (string) file_get_contents(__DIR__ . '/../forgot_password.php');
 $srcLines  = explode("\n", $pageSrc);
 
+/**
+ * 🔴 ปรับกฎ 2026-08-31 — เดิมห้ามใช้ token **นอกบล็อก APP_DEBUG โดยสิ้นเชิง**
+ *
+ * ตอนต่อระบบส่งอีเมลรีเซ็ตรหัสผ่าน มีการใช้ token อีกที่หนึ่งที่ **ถูกต้อง**:
+ * เอาไปประกอบลิงก์ในเมลที่ส่งออกไป ซึ่ง **ไม่ได้เปลี่ยนสิ่งที่แสดงบนหน้าจอเลย**
+ *
+ * 🧠 เจตนาเดิมของกฎคือ "หน้าเว็บต้องไม่ต่างกันตามว่าอีเมลมีจริงไหม" (F-40)
+ *    ไม่ใช่ "ห้ามแตะ token" · จึงอนุญาตบล็อกส่งเมลเพิ่ม แล้วให้เคส **MAIL-C1**
+ *    ใน tests/test_mail_reset.php เป็นตัวรับประกันเชิงพฤติกรรม —
+ *    มันเทียบ **ข้อความที่ render จริง** ระหว่างอีเมลที่มีและไม่มีในระบบ
+ *    ซึ่งแข็งแรงกว่าการสแกนซอร์ส
+ *
+ * ⚠️ ถ้าจะเพิ่มบล็อกที่ใช้ token อีก ต้องมั่นใจว่ามันไม่แตะการแสดงผล
+ *    และต้องมีเคสเชิงพฤติกรรมคุมเสมอ
+ */
+$allowedRanges = [];  // ช่วงบรรทัดที่อนุญาตให้ใช้ token ได้
+
 $debugRange = null;   // [บรรทัดเริ่ม, บรรทัดจบ] ของบล็อก if (... APP_DEBUG ...)
 $depth = 0;
 foreach ($srcLines as $i => $line) {
@@ -197,6 +214,22 @@ foreach ($srcLines as $i => $line) {
     if ($depth <= 0) $debugRange[1] = $i;
 }
 
+// 📧 บล็อกส่งอีเมล — หาแบบเดียวกับบล็อก debug (นับวงเล็บปีกกา)
+$mailRange = null;
+$depth = 0;
+foreach ($srcLines as $i => $line) {
+    if ($mailRange === null) {
+        if (preg_match('/^\s*if\s*\(.*mailEnabled\(\)/', $line)) {
+            $mailRange = [$i, null];
+            $depth = substr_count($line, '{') - substr_count($line, '}');
+        }
+        continue;
+    }
+    if ($mailRange[1] !== null) continue;
+    $depth += substr_count($line, '{') - substr_count($line, '}');
+    if ($depth <= 0) $mailRange[1] = $i;
+}
+
 $outside = [];
 foreach ($srcLines as $i => $line) {
     $t = trim($line);
@@ -204,14 +237,18 @@ foreach ($srcLines as $i => $line) {
     if (!str_contains($t, "\$result['token']")) continue;
     $inDebug = $debugRange !== null && $debugRange[1] !== null
         && $i >= $debugRange[0] && $i <= $debugRange[1];
-    if (!$inDebug) {
+    $inMail  = $mailRange !== null && $mailRange[1] !== null
+        && $i >= $mailRange[0] && $i <= $mailRange[1];
+    if (!$inDebug && !$inMail) {
         $outside[] = 'บรรทัด ' . ($i + 1) . ': ' . mb_substr($t, 0, 55);
     }
 }
 
 check('FORGOT-A5',
     $debugRange !== null && $debugRange[1] !== null && $outside === [],
-    'ทุกการใช้ token อยู่ในบล็อก APP_DEBUG (บรรทัด ' . (($debugRange[0] ?? -1) + 1) . '–' . (($debugRange[1] ?? -1) + 1) . ') เท่านั้น',
+    'token ถูกใช้เฉพาะในบล็อกโหมดพัฒนา (บรรทัด ' . (($debugRange[0] ?? -1) + 1) . '–' . (($debugRange[1] ?? -1) + 1)
+        . ') และบล็อกส่งอีเมล (' . (($mailRange[0] ?? -1) + 1) . '–' . (($mailRange[1] ?? -1) + 1)
+        . ') ซึ่งไม่แตะการแสดงผล — พฤติกรรมจริงคุมด้วย MAIL-C1',
     $debugRange === null || $debugRange[1] === null
         ? '🔴 หาบล็อก APP_DEBUG ไม่เจอ — โครงสร้างไฟล์เปลี่ยนไป ต้องตรวจด้วยมือ'
         : "🔴 มีการใช้ token นอกบล็อกโหมดพัฒนา — จะทำให้หน้าต่างกันตามว่าอีเมลมีจริงไหม:\n       "

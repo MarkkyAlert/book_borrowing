@@ -2,7 +2,7 @@
 
 > เอกสารชุดนี้สร้างจากการอ่าน **Source Code + Database Schema จริง** (ไม่ใช่จากเอกสารเดิม)
 > วันที่ตรวจ: 2026-08-26 | Commit ฐาน: `1453c01`
-> อัปเดตล่าสุด: 2026-08-30 — ปิด **F-01…F-54 ครบทุกข้อ** + **ROADMAP ข้อ 0–5 ครบ** + 8 งานประจำของห้องสมุด + เลขเรียกหนังสือ + ใบรายชื่อโทรตาม (ชุดทดสอบ 930/930 · 59 ชุด)
+> อัปเดตล่าสุด: 2026-08-30 — ปิด **F-01…F-54 ครบทุกข้อ** + **ROADMAP ข้อ 0–5 ครบ** + 8 งานประจำของห้องสมุด + เลขเรียกหนังสือ + ใบรายชื่อโทรตาม (ชุดทดสอบ 946/946 · 60 ชุด)
 > · **F-53 แก้แล้ว** — บังคับเปลี่ยนรหัสตอนล็อกอินครั้งแรก + backfill ให้ลูกค้าเดิม
 > · **F-35…F-54 ปิดครบทุกข้อแล้ว** — เจอจากการทดสอบสวมบทบาทบรรณารักษ์บนข้อมูลขนาดจริง
 > ✅ ผ่านการทดสอบ **ติดตั้งจาก clone สด** แล้ว — ทั้งติดตั้งใหม่, import ข้อมูลตัวอย่าง และอัปเกรดจากเวอร์ชันเก่า
@@ -29,7 +29,7 @@
 - Layered: `Page/API → Service → Repository → PDO → MySQL` + autoloader ใน `bootstrap.php`
 - 8 Service / 10 Repository / 10 ตาราง / 3 role (admin, staff, member)
 - ทุก write flow สำคัญใช้ **Transaction + `SELECT ... FOR UPDATE`** จริง (ไม่ใช่แค่เคลม)
-- 18,500 บรรทัด PHP + ชุดทดสอบ 930 เคส ใน 59 ชุด (**ผ่าน 930/930**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
+- 18,500 บรรทัด PHP + ชุดทดสอบ 946 เคส ใน 60 ชุด (**ผ่าน 946/946**) + ชุดทดสอบ concurrency แยกอีก 12 เคส
 
 ## ชุดข้อมูลสำหรับทดสอบ
 
@@ -53,7 +53,7 @@ L2 รวมหมวดเก่าของ L0 เข้ากับ 12 หม
 | รายการ | ผล |
 |--------|-----|
 | ติดตั้ง (`install.php`) | ✅ สำเร็จ — 10 ตาราง, admin, ตัวอย่าง 5 เล่ม/5 หมวด |
-| Test suite (`php tests/run_all_tests.php 123456`) | **930/930 ผ่าน (100%)** — 59 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~22 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
+| Test suite (`php tests/run_all_tests.php 123456`) | **946/946 ผ่าน (100%)** — 60 ชุด (service, DB constraint, deadlock, pagination, search index, offline assets, security/data-integrity/concurrency gap analysis, HTTP, upload security ฯลฯ) ใช้เวลา ~22 วินาที + ล้างข้อมูลให้อัตโนมัติเมื่อจบ |
 | `.htaccess` ป้องกันไฟล์สำคัญ | ✅ `.env`, `app/`, `includes/*.php`, `tests/`, `database/`, `*.sql`, `*.md`, `.installed` → 403 ทั้งหมด |
 | XSS escaping (probe จริง) | ✅ `?search=<script>` ถูก escape เป็น `&lt;script&gt;` |
 | Rate limit login (probe จริง) | ✅ บล็อกตามค่าใน `.env` (ตอนนี้ = 5 ครั้ง / 15 นาที) |
