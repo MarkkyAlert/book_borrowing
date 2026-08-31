@@ -213,7 +213,11 @@ if (isLoggedIn()) {
                             <div id="member-alerts"
                                  class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
                                 <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
-                                    <p class="text-sm font-bold text-gray-800">การแจ้งเตือนของฉัน</p>
+                                    <?php // 🕐 กระดิ่งคำนวณตอนโหลดหน้า ไม่ได้อัปเดตเอง — บอกเวลาไว้ให้ตรงไปตรงมา ?>
+                                    <div class="flex items-baseline justify-between gap-2">
+                                        <p class="text-sm font-bold text-gray-800">การแจ้งเตือนของฉัน</p>
+                                        <p class="text-xs text-gray-400 shrink-0">ข้อมูล ณ <?= date('H:i') ?></p>
+                                    </div>
                                 </div>
                                 <?php if (!$memberAlertItems): ?>
                                     <div class="px-4 py-6 text-center text-gray-400">

@@ -140,7 +140,12 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../app/Services/DashboardService.php';
 
-if ($action === 'health' || $action === 'health_debug') {
+if ($action === 'health_stale') {
+    // 🕐 จำลองว่า cache ถูกตรวจไว้เมื่อ N วินาทีก่อน (ยังไม่หมดอายุ)
+    $_SESSION['sys_health_cache']    = [];
+    $_SESSION['sys_health_cache_at'] = time() - (int) $arg;
+}
+if ($action === 'health' || $action === 'health_debug' || $action === 'health_stale') {
     $svc = new \App\Services\DashboardService(getDB());
     $t1 = microtime(true); $h = $svc->getSystemHealth(); $first = (microtime(true) - $t1) * 1000;
     $t2 = microtime(true); $svc->getSystemHealth();       $second = (microtime(true) - $t2) * 1000;
@@ -578,6 +583,33 @@ check('SYS-G4', $leftover === 0,
     "🔴 เหลือบัญชีทดสอบ {$leftover} บัญชี");
 
 @unlink($COOKIE);
+
+// ============================================================
+echo "\n── I. บอกเวลาที่ตรวจ ──\n";
+// ============================================================
+
+/**
+ * 🔴 กระดิ่งคำนวณตอนโหลดหน้า ไม่ได้อัปเดตเอง
+ *    คนที่เปิดแท็บทิ้งไว้ทั้งวันต้องรู้ว่าเลขที่เห็นเก่าแค่ไหน
+ *    และเวลาของ "สุขภาพระบบ" ต้องเป็นเวลาที่ตรวจจริง ไม่ใช่เวลาที่โหลดหน้า
+ *    เพราะตัวตรวจที่แพงถูก cache ไว้ 5 นาที
+ */
+$stale = probe('health_stale', '240');   // แกล้งว่าตรวจไว้เมื่อ 4 นาทีก่อน
+$age   = time() - (int) ($stale['checked_at'] ?? time());
+check('SYS-I1', $age >= 200 && $age <= 300,
+    sprintf('cache อายุ 4 นาที → checked_at ตามเวลาที่ตรวจจริง (%d วินาทีก่อน) ไม่ใช่เวลาโหลดหน้า', $age),
+    sprintf('🔴 checked_at ห่างจากปัจจุบัน %d วินาที — รายงานว่าเพิ่งตรวจทั้งที่ค้างมา 4 นาที', $age));
+
+// 🧠 ใช้ HTML ที่ดึงไว้ตอนข้อ G — ตรงนั้นยังล็อกอินอยู่
+//    ยิงใหม่ตรงนี้ไม่ได้ เพราะไฟล์ cookie ถูกลบไปแล้วก่อนหน้า (จะได้หน้าล็อกอินแทน)
+$adminHtml2 = $adminHtml;
+check('SYS-I2', (bool) preg_match('/ข้อมูล ณ \s*\d{2}:\d{2}/u', $adminHtml2),
+    'กระดิ่งบอก "ข้อมูล ณ HH:MM" — ไม่อ้างว่าตัวเลขสดตลอดเวลา',
+    '🔴 ไม่บอกเวลา — คนเปิดแท็บทิ้งไว้จะเข้าใจว่าเลขนี้อัปเดตเอง');
+
+check('SYS-I3', !$h['admin_total'] || (bool) preg_match('/ตรวจเมื่อ\s*\d{2}:\d{2}/u', $adminHtml2),
+    $h['admin_total'] ? 'หมวดสุขภาพระบบบอกเวลาที่ตรวจแยกของตัวเอง' : 'ไม่มีข้อเตือน จึงไม่ต้องบอกเวลา',
+    '🔴 หมวดสุขภาพระบบไม่บอกเวลา ทั้งที่ถูก cache ได้ถึง 5 นาที');
 
 // ============================================================
 echo "\n══════════════════════════════════════\n";

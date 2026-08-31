@@ -253,7 +253,11 @@ class DashboardService
             foreach ($this->expensiveHealthChecks() as $item) {
                 $items[] = $item;
             }
+            // 🕐 เวลาที่ "ตรวจจริง" ของกลุ่มที่ถูก cache — ไม่ใช่เวลาที่โหลดหน้า
+            //    ต้องแยกกัน ไม่งั้นหน้าเว็บจะอ้างว่าข้อมูลสดทั้งที่ค้างมาได้ถึง 5 นาที
+            $checkedAt = (int) ($_SESSION['sys_health_cache_at'] ?? time());
         } catch (\Throwable $e) {
+            $checkedAt = time();
             // 🛡️ ห้ามล้มทั้งหน้าแอดมินเพราะตัวตรวจสุขภาพพัง
             //    เจตนาเดียวกับ try/catch รอบ getAlertCounts() ใน admin/header.php
             //    กระดิ่ง 4 ข้อเดิมต้องยังขึ้นได้ตามปกติ
@@ -262,6 +266,8 @@ class DashboardService
 
         return $cache = [
             'items'       => $items,
+            // 🕐 ใช้แสดง "ตรวจเมื่อ HH:MM" ในกระดิ่ง — ดู expensiveHealthChecks()
+            'checked_at'  => $checkedAt ?? time(),
             // 📊 total = ทุกคนเห็นกี่ข้อ · admin_total = admin เห็นกี่ข้อ (รวม admin_only)
             'total'       => count(array_filter($items, fn($i) => !$i['admin_only'])),
             'admin_total' => count($items),

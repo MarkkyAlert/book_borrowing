@@ -485,7 +485,14 @@ if (!$user) {
                     <div id="alert-dropdown"
                          class="hidden absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
                         <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
-                            <p class="text-sm font-bold text-gray-800">สิ่งที่ต้องจัดการ</p>
+                            <?php // 🕐 บอกเวลาที่คำนวณตัวเลขชุดนี้
+                                  //    กระดิ่งไม่ได้อัปเดตเอง — คำนวณตอนโหลดหน้าเท่านั้น
+                                  //    คนที่เปิดแท็บทิ้งไว้ทั้งวันจะได้รู้ว่าเลขนี้เก่าแค่ไหน
+                                  //    แทนที่จะเดาว่ามันสดอยู่ตลอด (ซึ่งเป็นการอ้างเกินจริง) ?>
+                            <div class="flex items-baseline justify-between gap-2">
+                                <p class="text-sm font-bold text-gray-800">สิ่งที่ต้องจัดการ</p>
+                                <p class="text-xs text-gray-400 shrink-0">ข้อมูล ณ <?= date('H:i') ?></p>
+                            </div>
                         </div>
                         <?php if (!$alertItems && !$healthItems): ?>
                             <div class="px-4 py-6 text-center text-gray-400">
@@ -510,9 +517,16 @@ if (!$user) {
 
                         <?php if ($healthItems): ?>
                             <div class="px-4 py-2 border-t border-b border-gray-100 bg-rose-50/60">
-                                <p class="text-xs font-bold text-rose-700 flex items-center gap-1.5">
-                                    <i class="bi bi-shield-exclamation"></i> สุขภาพระบบ
-                                </p>
+                                <?php // 🕐 เวลาของกลุ่มนี้ต่างจากด้านบน — ตัวตรวจที่แพง (สต็อก/โฟลเดอร์ปก)
+                                      //    ถูก cache ไว้ 5 นาที ถ้าใช้เวลาโหลดหน้าเหมือนกัน จะกลายเป็นโกหก ?>
+                                <div class="flex items-baseline justify-between gap-2">
+                                    <p class="text-xs font-bold text-rose-700 flex items-center gap-1.5">
+                                        <i class="bi bi-shield-exclamation"></i> สุขภาพระบบ
+                                    </p>
+                                    <?php if (!empty($systemHealth['checked_at'])): ?>
+                                        <p class="text-xs text-rose-400 shrink-0">ตรวจเมื่อ <?= date('H:i', (int) $systemHealth['checked_at']) ?></p>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                             <?php foreach ($healthItems as $h): ?>
                                 <?php
