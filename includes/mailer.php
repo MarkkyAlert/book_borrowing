@@ -105,6 +105,65 @@ function mailEncodeHeader(string $text): string
 
 /**
  * ==========================================================================
+ * 🎯 จุดประสงค์: [H2] ส่งเมล + บันทึกไว้ว่าครั้งล่าสุดสำเร็จหรือไม่
+ * ==========================================================================
+ *
+ * 🧠 ทำไมต้องมีชั้นนี้ ไม่แก้ใน sendMailRaw() ตรง ๆ:
+ *    sendMailRaw() มีจุด return 12 จุด (แต่ละขั้นของ SMTP ล้มได้คนละแบบ)
+ *    การไปแทรกโค้ดบันทึกทุกจุด = โอกาสตกหล่นสูงและอ่านยาก
+ *    ห่อชั้นเดียวจบ ครอบคลุมทุกทางออกโดยอัตโนมัติ
+ *
+ * 🔴 บันทึกเฉพาะตอนใช้ค่าที่บันทึกไว้จริง ($cfg === null) เท่านั้น
+ *    ปุ่ม "ทดสอบส่ง" ในหน้าตั้งค่าส่ง $cfg ที่ยังไม่ได้บันทึกเข้ามา
+ *    ถ้าเอาผลนั้นมาบันทึกด้วย = ผู้ดูแลกำลังลองค่าผิด ๆ อยู่ แต่ระบบขึ้นเตือน
+ *    ว่า "อีเมลของระบบพัง" ทั้งที่ค่าที่ใช้จริงยังทำงานปกติ (ผลการทดสอบโชว์บนหน้าอยู่แล้ว)
+ *
+ * 🛡️ ห้ามให้รหัสผ่าน SMTP หลุดลง settings — ข้อความ error มาจากเซิร์ฟเวอร์ปลายทาง
+ *    ปกติไม่มีรหัสผ่านติดมา แต่ "ปกติ" ไม่ใช่หลักประกัน จึงกรองออกตรง ๆ (เคส SYS-C2)
+ */
+function sendMail(string $to, string $subject, string $body, ?array $cfg = null): array
+{
+    $usingSavedConfig = ($cfg === null);
+    $result = sendMailRaw($to, $subject, $body, $cfg);
+
+    if (!$usingSavedConfig) {
+        return $result;
+    }
+
+    require_once __DIR__ . '/functions.php';
+
+    try {
+        if ($result['success']) {
+            // 🧠 เขียนก็ต่อเมื่อเคยมีค่าค้างอยู่ — ไม่งั้นจะยิง UPDATE ทุกครั้งที่ส่งเมลสำเร็จ
+            if (getSetting('mail_last_error', '') !== '') {
+                updateSetting('mail_last_error', '');
+                updateSetting('mail_last_error_at', '');
+            }
+        } else {
+            $saved  = mailSettings();
+            $reason = (string) $result['error'];
+
+            // 🛡️ ตัดรหัสผ่านออกก่อนเก็บ (ถ้าเซิร์ฟเวอร์สะท้อนกลับมาด้วยเหตุใดก็ตาม)
+            $password = (string) ($saved['password'] ?? '');
+            if ($password !== '') {
+                $reason = str_replace($password, '***', $reason);
+            }
+
+            // ✂️ ตัดความยาว — ข้อความจากเซิร์ฟเวอร์ยาวได้ไม่จำกัด
+            //    mb_substr เพราะข้อความเป็นภาษาไทย ตัดด้วย substr จะได้ตัวอักษรพัง
+            updateSetting('mail_last_error', mb_substr($reason, 0, 200));
+            updateSetting('mail_last_error_at', date('d/m/Y H:i'));
+        }
+    } catch (Throwable $e) {
+        // 🛡️ บันทึกไม่ได้ ต้องไม่ทำให้การส่งเมลล้มตาม — ผลการส่งจริงสำคัญกว่าการจดบันทึก
+        error_log('[sendMail] บันทึกสถานะไม่สำเร็จ: ' . $e->getMessage());
+    }
+
+    return $result;
+}
+
+/**
+ * ==========================================================================
  * 🎯 จุดประสงค์: ส่งอีเมลข้อความล้วน 1 ฉบับผ่าน SMTP
  * ==========================================================================
  *
@@ -121,7 +180,7 @@ function mailEncodeHeader(string $text): string
  * 🔴 timeout สั้น (8 วินาที) — SMTP ที่ตั้งค่าผิดจะรอจนหมดเวลา
  *    ผู้ใช้ยืนรออยู่หน้าจอ ปล่อยให้ค้าง 60 วินาทีคือทำหน้าเว็บพัง
  */
-function sendMail(string $to, string $subject, string $body, ?array $cfg = null): array
+function sendMailRaw(string $to, string $subject, string $body, ?array $cfg = null): array
 {
     $cfg = $cfg ?? mailSettings();
 

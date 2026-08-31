@@ -62,6 +62,7 @@ $category = $_GET['category'] ?? '';
 $status = $_GET['status'] ?? '';
 $isReference = $_GET['is_reference'] ?? '';   // 📚 '' = ทั้งหมด, '1' = เฉพาะอ้างอิง, '0' = เฉพาะที่ยืมออกได้
 $noIsbn = $_GET['no_isbn'] ?? '';            // 🏷️ [F-48] '1' = เฉพาะเล่มที่ยังไม่ได้ลง ISBN
+$stockAnomaly = $_GET['stock_anomaly'] ?? ''; // 🔴 [H1] '1' = เฉพาะเล่มที่สต็อกไม่ตรงกับการยืมจริง (ปลายทางกระดิ่ง)
 $sort = $_GET['sort'] ?? 'newest';
 $page = (int) ($_GET['page'] ?? 1);
 
@@ -75,6 +76,8 @@ $bookFilters = [
     'is_reference' => in_array($isReference, ['0', '1'], true) ? $isReference : '',
     // 🛡️ whitelist — รับเฉพาะ '1' ค่าอื่นถือว่าไม่กรอง
     'no_isbn' => $noIsbn === '1' ? '1' : '',
+    // 🛡️ whitelist — รับเฉพาะ '1' ค่าอื่นถือว่าไม่กรอง
+    'stock_anomaly' => $stockAnomaly === '1' ? '1' : '',
     'sort' => $sort
 ];
 
@@ -88,7 +91,7 @@ $books = $bookService->getBooks($bookFilters);
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
 // 📄 ทุกตัวกรองต้องอยู่ในลิงก์เลขหน้า ไม่งั้นกดหน้า 2 แล้วตัวกรองหลุด
-$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'no_isbn' => $noIsbn, 'sort' => $sort];
+$paginationParams = ['search' => $search, 'category' => $category, 'status' => $status, 'is_reference' => $isReference, 'no_isbn' => $noIsbn, 'stock_anomaly' => $stockAnomaly, 'sort' => $sort];
 $paginationUnit = 'ชื่อเรื่อง';   // 📚 นับแถว = ชื่อเรื่อง (ให้ตรงกับข้อความด้านบนและหน้าแรก)
 
 // ดึงหมวดหมู่ทั้งหมดสำหรับ filter dropdown
@@ -176,6 +179,12 @@ require_once __DIR__ . '/header.php';
                 ยังไม่ได้ลง ISBN
             </label>
         </div>
+        <?php // 🔴 [H1] พามาจากกระดิ่ง — ไม่ทำเป็น checkbox ให้เลือกเอง
+              //    เป็นตัวกรองวินิจฉัย ไม่ใช่งานประจำวัน ใส่ในแถบกรองจะรกเปล่า ๆ
+              //    แต่ต้องพกติดฟอร์มไว้ ไม่งั้นกดค้นหาซ้ำแล้วหลุดกลับไปทั้งหมดโดยไม่รู้ตัว ?>
+        <?php if ($stockAnomaly === '1'): ?>
+            <input type="hidden" name="stock_anomaly" value="1">
+        <?php endif; ?>
         <div class="md:col-span-2 flex gap-2">
             <button type="submit" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                 <i class="bi bi-search mr-1"></i>ค้นหา
@@ -184,6 +193,32 @@ require_once __DIR__ . '/header.php';
         </div>
     </form>
 </div>
+
+<?php if ($stockAnomaly === '1'): ?>
+    <?php // 🔴 [H1] ต้องบอกให้ชัดว่ากำลังดูรายการที่ถูกกรองอยู่
+          //    ไม่งั้นเห็น "3 ชื่อเรื่อง" แล้วนึกว่าห้องสมุดเหลือหนังสือ 3 เล่ม ?>
+    <div class="mb-4 bg-rose-50 border border-rose-200 rounded-2xl p-4">
+        <div class="flex items-start gap-3">
+            <i class="bi bi-exclamation-octagon text-rose-600 text-xl mt-0.5"></i>
+            <div class="flex-1">
+                <p class="font-bold text-rose-800 text-sm">เฉพาะเล่มที่สต็อกไม่ตรงกับการยืมจริง</p>
+                <p class="text-sm text-rose-700 mt-1">
+                    จำนวนที่ว่างของเล่มเหล่านี้ ไม่เท่ากับ
+                    <span class="font-medium">จำนวนทั้งหมด − ที่ยืมอยู่ − ที่จองกันเล่มไว้</span>
+                </p>
+                <p class="text-xs text-rose-600 mt-2">
+                    ระบบ<strong>ไม่แก้ตัวเลขให้อัตโนมัติ</strong>โดยเจตนา —
+                    เลขที่เพี้ยนเป็นอาการ ไม่ใช่ตัวโรค
+                    ถ้าไปแก้ให้สวยทันที จะกลบหลักฐานว่ามีรายการยืมหายไป
+                    กรุณาตรวจประวัติการยืมของเล่มนั้นก่อน
+                </p>
+                <a href="books.php" class="inline-block mt-3 text-sm text-rose-700 underline hover:text-rose-900">
+                    แสดงหนังสือทั้งหมด
+                </a>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <!-- Books Table -->
 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

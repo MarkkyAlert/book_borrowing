@@ -117,6 +117,32 @@ use PDO;
 
 class BookRepository
 {
+    /**
+     * 🔴 [H1] นิยาม "สต็อกไม่ตรงสูตร" — แหล่งความจริงเดียวของทั้งระบบ
+     *
+     * 🧠 ทำไมต้องเป็น const ไม่ใช่เขียนซ้ำสองที่:
+     *    กระดิ่งนับด้วยสูตรหนึ่ง แล้วหน้ารายการกรองด้วยอีกสูตรหนึ่ง = กดกระดิ่งเห็นเลข 3
+     *    แต่เปิดหน้าไปเจอ 5 เล่ม ซึ่งแย่กว่าไม่เตือนเลย เพราะทำให้เลิกเชื่อทั้งสองที่
+     *
+     * 🧠 ทำไมไม่ใช่ `available < 0 OR available > quantity`:
+     *    สองเงื่อนไขนั้นมี CHECK constraint กันไว้แล้วในฐานข้อมูล
+     *    (chk_books_available_non_negative / chk_books_quantity_gte_available)
+     *    → เขียนไปก็เป็นจริงไม่ได้เลยสักครั้ง = ฟีเจอร์ที่ไม่มีวันทำงาน
+     *    ของจริงที่เพี้ยนได้คือ "ความหมาย" ไม่ใช่ "ช่วงตัวเลข":
+     *    quantity=5 available=5 แต่มีคนยืมอยู่ 2 → ผ่าน CHECK ทั้งคู่ แต่ผิด
+     *
+     * ⚠️ นับเฉพาะ borrows.status = 'borrowing' เท่านั้น
+     *    'lost'/'damaged' ไม่นับ เพราะเส้นทางนั้นลด quantity ไปแล้ว (ดู test_lost_damaged.php)
+     *    ถ้านับด้วยจะกลายเป็นหักซ้ำสองรอบ
+     * ⚠️ นับเฉพาะ reservations.status = 'pending' เท่านั้น
+     *    'waiting' (คิวรอ) ไม่เคยกันสต็อกไว้ — ดู ReservationService::cancel()
+     */
+    private const STOCK_ANOMALY_CONDITION = "b.available <> b.quantity
+              - (SELECT COUNT(*) FROM borrows bo
+                  WHERE bo.book_id = b.id AND bo.status = 'borrowing')
+              - (SELECT COUNT(*) FROM reservations r
+                  WHERE r.book_id = b.id AND r.status = 'pending')";
+
     // 🗄️ PDO connection — ใช้ร่วมกันทุกเมธอด (inject ผ่าน constructor)
     private PDO $pdo;
 
@@ -404,6 +430,13 @@ class BookRepository
         //    ไม่ใช่ NULL เสมอไป เช็คแค่ IS NULL จะหาเจอไม่ครบ
         if (!empty($filters['no_isbn'])) {
             $where[] = "(b.isbn IS NULL OR b.isbn = '')";
+        }
+
+        // 🔴 [H1] Filter: เล่มที่สต็อกไม่ตรงสูตร — ปลายทางของกระดิ่ง "สุขภาพระบบ"
+        // 🧠 ใช้ const ตัวเดียวกับ countStockAnomalies() เพื่อให้เลขในกระดิ่ง
+        //    กับจำนวนแถวในหน้านี้ตรงกันเสมอ ไม่ว่าจะแก้สูตรตอนไหน
+        if (!empty($filters['stock_anomaly'])) {
+            $where[] = '(' . self::STOCK_ANOMALY_CONDITION . ')';
         }
 
         // 📚 Filter: หนังสืออ้างอิง — ใช้ในหน้าจัดการหนังสือเพื่อไล่ดูเฉพาะกลุ่ม
@@ -925,6 +958,36 @@ class BookRepository
         $stmt->execute([$threshold, $limit]);
         // 📤 คืน array ของหนังสือที่ใกล้หมด stock → ใช้แสดงใน Dashboard
         return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: [H1] นับเล่มที่สต็อกไม่ตรงสูตร (สำหรับกระดิ่ง "สุขภาพระบบ")
+     * ==========================================================================
+     *
+     * 📤 Output: @return int จำนวนเล่มที่ available ไม่เท่ากับที่ควรเป็น (ปกติ = 0)
+     *
+     * 🧠 ปกติต้องได้ 0 ตลอด จึงไม่สร้าง noise ให้กระดิ่ง
+     *    วันที่มันขึ้นมาคือวันที่ข้อมูลเริ่มพัง ควรรู้ทันที
+     *
+     * ⚠️ เมธอดนี้ "ไม่ซ่อมให้" โดยเจตนา — ดูเหตุผลใน DashboardService::getSystemHealth()
+     *
+     * ✅ Use case: admin/header.php → DashboardService::getSystemHealth()
+     */
+    public function countStockAnomalies(): int
+    {
+        // 🔴 ห้ามใส่เงื่อนไขคัดกรองใด ๆ เพิ่มตรงนี้ (เคยเขียน EXISTS ไว้แล้วถอดออก)
+        //    ตัวกรองในหน้ารายการ (filters['stock_anomaly']) ใช้ const ตัวนี้ตัวเดียวล้วน ๆ
+        //    ถ้าตัวนับกรองมากกว่า → กระดิ่งขึ้น 0 แต่เปิดหน้าไปเจอ 1 เล่ม
+        //    ซึ่งคือความไม่ตรงกันที่ const นี้ถูกสร้างมาเพื่อกันตั้งแต่แรก
+        //
+        // 🧠 เคยคิดตัดเล่มที่ "ไม่เคยถูกยืมและไม่เคยถูกจอง" ออกเพื่อความเร็ว
+        //    แต่เล่มแบบนั้นเพี้ยนได้จริง เช่น แก้ quantity แล้วไม่ได้ปรับ available
+        //    (ไม่มีแถวใน borrows/reservations เลย แต่ available ผิด) → จะมองไม่เห็น
+        return (int) $this->pdo->query("
+            SELECT COUNT(*) FROM books b
+            WHERE (" . self::STOCK_ANOMALY_CONDITION . ")
+        ")->fetchColumn();
     }
 
     /**

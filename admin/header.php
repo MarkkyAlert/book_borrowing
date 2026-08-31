@@ -35,6 +35,31 @@ try {
 }
 
 /**
+ * 🔴 [H1-H5] สุขภาพระบบ — สภาวะที่ตรวจได้แต่เดิมไม่มีที่ไหนบอกใครเลย
+ *
+ * 🧠 แยกกลุ่มจาก "สิ่งที่ต้องจัดการ" โดยเจตนา เพราะเป็นคนละชนิดของงาน:
+ *    ด้านบนคืองานประจำวัน (โทรตามคนคืนหนังสือ) ที่เกิดใหม่ทุกวันเป็นเรื่องปกติ
+ *    ด้านล่างคือของที่ "ไม่ควรเกิด" ปกติต้องว่างเปล่า ถ้ามีขึ้นมาคือมีอะไรผิดจริง
+ *
+ * 🧠 ที่ไม่เอาลงกระดิ่ง: หนังสือไม่มีเลขเรียก/ไม่มีปก — เป็นงานค้างถาวรหลักร้อยเล่ม
+ *    ใส่แล้วกระดิ่งจะแดงตลอดกาลจนทุกคนเลิกมอง ของพวกนั้นอยู่ที่ตัวกรองในหน้ารายการ
+ */
+try {
+    $systemHealth = (new \App\Services\DashboardService(getDB()))->getSystemHealth();
+} catch (\Throwable $e) {
+    $systemHealth = ['items' => [], 'total' => 0, 'admin_total' => 0];
+}
+
+// 🛡️ H3 (ไฟล์ติดตั้ง) และ H4 (โหมดพัฒนา) ให้เฉพาะ admin
+//    ไม่ใช่เพราะเป็นความลับ — เจ้าหน้าที่เข้าหลังบ้านได้อยู่แล้ว
+//    แต่เพราะ **เจ้าหน้าที่แก้ไม่ได้** ทั้งสองอย่างต้องแก้ไฟล์บนเซิร์ฟเวอร์/.env
+//    คำเตือนที่ผู้เห็นลงมือไม่ได้ = noise ที่ลบไม่ออก แล้วคนจะเลิกเชื่อกระดิ่งทั้งใบ
+$healthItems = array_values(array_filter(
+    $systemHealth['items'],
+    fn($h) => isAdmin() || !$h['admin_only']
+));
+
+/**
  * 🔗 รายการในกระดิ่ง — เฉพาะเรื่องที่ **ต้องลงมือทำ**
  *
  * 🔴 ปลายทางต้องเปิดได้ด้วยสิทธิ์ของคนที่เห็น
@@ -63,6 +88,10 @@ if ($alertCounts['unpaid_people'] > 0) {
                      'icon' => 'bi-cash-coin', 'tone' => 'amber',
                      'url' => 'payments.php'];
 }
+
+// 🔔 ตัวเลขบนกระดิ่ง = งานประจำวัน + สุขภาพระบบเท่าที่คนนี้เห็น
+//    ต้องบวกด้วย ไม่งั้นเปิดหน้ามาเจอกระดิ่งเงียบ ทั้งที่ข้างในมีเรื่องด่วน
+$bellTotal = (int) $alertCounts['total'] + count($healthItems);
 
 // 📍 ระบุหน้าปัจจุบัน — ใช้ highlight active menu item ใน sidebar
 $currentPage = basename($_SERVER['PHP_SELF']);
@@ -424,25 +453,26 @@ if (!$user) {
                             class="text-gray-400 hover:text-primary-600 transition-colors relative"
                             aria-label="การแจ้งเตือน">
                         <i class="bi bi-bell text-xl"></i>
-                        <?php if ($alertCounts['total'] > 0): ?>
+                        <?php if ($bellTotal > 0): ?>
                             <span class="absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 flex items-center justify-center
                                          rounded-full ring-2 ring-white bg-red-500 text-white text-[10px] font-bold">
-                                <?= $alertCounts['total'] > 99 ? '99+' : $alertCounts['total'] ?>
+                                <?= $bellTotal > 99 ? '99+' : $bellTotal ?>
                             </span>
                         <?php endif; ?>
                     </button>
 
                     <div id="alert-dropdown"
-                         class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                         class="hidden absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
                         <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
                             <p class="text-sm font-bold text-gray-800">สิ่งที่ต้องจัดการ</p>
                         </div>
-                        <?php if (!$alertItems): ?>
+                        <?php if (!$alertItems && !$healthItems): ?>
                             <div class="px-4 py-6 text-center text-gray-400">
                                 <i class="bi bi-check-circle text-2xl text-green-500 block mb-1"></i>
                                 <p class="text-sm">ไม่มีอะไรค้าง</p>
                             </div>
                         <?php else: ?>
+                            <?php // 📋 งานประจำวัน — ว่างได้ถ้ามีแต่เรื่องสุขภาพระบบ ?>
                             <?php foreach ($alertItems as $item): ?>
                                 <a href="<?= e($item['url']) ?>"
                                    class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
@@ -454,6 +484,33 @@ if (!$user) {
                                         <?= number_format($item['count']) ?> <span class="font-normal text-gray-400 text-xs"><?= e($item['unit']) ?></span>
                                     </span>
                                 </a>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if ($healthItems): ?>
+                            <div class="px-4 py-2 border-t border-b border-gray-100 bg-rose-50/60">
+                                <p class="text-xs font-bold text-rose-700 flex items-center gap-1.5">
+                                    <i class="bi bi-shield-exclamation"></i> สุขภาพระบบ
+                                </p>
+                            </div>
+                            <?php foreach ($healthItems as $h): ?>
+                                <?php
+                                    // 🧠 บางข้อแก้ที่หน้าเว็บไม่ได้ (ต้องแก้ไฟล์บนเซิร์ฟเวอร์) → ไม่มีลิงก์
+                                    //    ใช้ <div> แทน <a> ไปเลย ดีกว่าลิงก์ที่กดแล้วไม่ไปไหน
+                                    $tone = $h['severity'] === 'danger' ? 'rose' : 'amber';
+                                    $tag  = $h['url'] ? 'a' : 'div';
+                                ?>
+                                <<?= $tag ?> <?= $h['url'] ? 'href="' . e($h['url']) . '"' : '' ?>
+                                   class="block px-4 py-3 border-b border-gray-50 last:border-0 <?= $h['url'] ? 'hover:bg-gray-50' : '' ?>">
+                                    <?php // 🧠 เรียงลงเป็นบรรทัด ไม่วางรายละเอียดไว้ขวามือ
+                                          //    ป้ายภาษาไทยยาวกว่าอังกฤษมาก วางคู่กันแล้วป้ายโดนบีบจนตัดคำผิดกลางคำ
+                                          //    ("ยังไม่ได้ลบไฟล์ติด" ขึ้นบรรทัดใหม่เป็น "ตั้ง") ?>
+                                    <p class="text-sm font-medium text-<?= $tone ?>-700 flex items-start gap-2">
+                                        <i class="bi bi-exclamation-octagon mt-0.5 shrink-0"></i>
+                                        <span><?= e($h['label']) ?><?php if ($h['detail'] !== ''): ?><span class="font-normal text-gray-500"> · <?= e($h['detail']) ?></span><?php endif; ?></span>
+                                    </p>
+                                    <p class="text-xs text-gray-500 mt-1 pl-6"><?= e($h['how']) ?></p>
+                                </<?= $tag ?>>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
