@@ -56,6 +56,15 @@ class ReservationRepository
      *    ถ้ากระดิ่งใช้เกณฑ์ต่างออกไป จะเกิดอาการกระดิ่งขึ้น 1
      *    แต่เปิดหน้าไปแล้วไม่มีรายการไหนติดป้ายอะไรเลย — แย่กว่าไม่เตือน
      *
+     * ⚠️ ต้องมี expires_at > NOW() ด้วย — ตัดรายการที่ "หมดอายุไปแล้วแต่ยังไม่ถูกล้าง" ออก
+     *    เจอตอนทดสอบบน clone: กระดิ่งบอก 16 แต่กดเข้าไปเจอ 11
+     *    เพราะ countExpiringSoon() ตั้งใจไม่เรียก markExpiredReservations()
+     *    (ไม่อยากเขียน DB ทุกครั้งที่โหลดหน้าแอดมิน) แต่ countAll() เรียก
+     *    → ตอนนับยังเห็น 5 รายการที่เลยเวลาแล้ว พอกดเข้าไปหน้านั้น lazy expire ล้างทิ้ง
+     *    เงื่อนไขนี้ทำให้ทั้งสองฝั่งเห็นตรงกันโดยไม่ต้องเขียน DB เพิ่ม
+     *    และทำให้ป้ายพูดตรงความหมาย: "ใกล้หมดอายุ" ไม่ใช่ "หมดอายุไปแล้ว"
+     *    (รายการที่หมดอายุแล้วมีที่อยู่ของตัวเองคือแท็บ "ไม่มารับ" — F-42)
+     *
      * ⚠️ ต้องเช็ค expires_at IS NOT NULL ด้วย
      *    คิวรอ (status = 'waiting') ไม่มีวันหมดอายุ เก็บเป็น NULL
      *    ถ้าไม่กรอง MySQL จะเทียบ NULL แล้วได้ NULL (ไม่ใช่ TRUE/FALSE) — เงียบ ๆ นับหาย
@@ -64,7 +73,8 @@ class ReservationRepository
      *           DashboardService::getAlertCounts() · BorrowRepository::getMemberAlertCounts()
      */
     public const EXPIRING_SOON_CONDITION =
-        "r.status = 'pending' AND r.expires_at IS NOT NULL AND r.expires_at < NOW() + INTERVAL 1 DAY";
+        "r.status = 'pending' AND r.expires_at IS NOT NULL
+         AND r.expires_at > NOW() AND r.expires_at < NOW() + INTERVAL 1 DAY";
 
     // 🗄️ PDO connection — inject ผ่าน constructor ใช้ร่วมกันทุกเมธอด
     private PDO $pdo;

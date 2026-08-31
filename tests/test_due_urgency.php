@@ -191,6 +191,21 @@ $st->execute(["[DUETEST] สมาชิก {$uniq}", "due{$uniq}@test.local", h
 $memberId = (int) $pdo->lastInsertId();
 $madeUsers[] = $memberId;
 
+/**
+ * 🔴 จดค่าของ "สมาชิกคนอื่น" ไว้ก่อนสร้างการจอง — ใช้เทียบ before/after ในข้อ D1
+ *
+ * 🧠 เจอตอนรันบน clone ที่มีข้อมูลจริง: เดิมเทสต์ยืนยันว่าคนอื่นต้องเห็น 0
+ *    ซึ่งเป็นจริงเฉพาะบนเครื่องที่ไม่มีการจองอื่นเลย พอเป็นห้องสมุดที่ใช้งานจริง
+ *    สมาชิกคนอื่นก็มีการจองใกล้หมดอายุของตัวเองได้ตามปกติ → เทสต์ฟ้องผิด
+ *    สิ่งที่ต้องพิสูจน์จริง ๆ คือ "ของผมไม่ไปโผล่ในกระดิ่งของเขา" ไม่ใช่ "เขาต้องไม่มีอะไรเลย"
+ */
+$otherMemberId = (int) $pdo->query("SELECT id FROM users WHERE role='member' AND id <> {$memberId}
+                                    ORDER BY id LIMIT 1")->fetchColumn();
+$theirsBefore  = $otherMemberId
+    ? (new App\Repositories\BorrowRepository($pdo))
+        ->getMemberAlertCounts($otherMemberId, (int) DUE_SOON_DAYS)['expiring_reservations']
+    : 0;
+
 $made = $resSvc->createReservation($memberId, $bookId);
 $resId = (int) ($made['reservation_id'] ?? $made['id'] ?? 0);
 if ($resId <= 0) {
@@ -253,13 +268,34 @@ if ($resId <= 0) {
         'ตัวนับในกระดิ่ง = จำนวนแถวใน reservations.php?expiring=1',
         '🔴 ตัวนับกับตัวกรองให้คนละเลข');
 
-    // 👤 ฝั่งสมาชิก: เห็นเฉพาะของตัวเอง
-    $mine   = $borrowRepo->getMemberAlertCounts($memberId, (int) DUE_SOON_DAYS);
-    $other  = (int) $pdo->query("SELECT id FROM users WHERE role='member' AND id <> {$memberId} LIMIT 1")->fetchColumn();
-    $theirs = $borrowRepo->getMemberAlertCounts($other, (int) DUE_SOON_DAYS);
-    check('DUE-D1', $mine['expiring_reservations'] === 1 && $theirs['expiring_reservations'] === 0,
-        "สมาชิกที่จองเห็น 1 · สมาชิกคนอื่นเห็น 0 — ไม่รั่วข้ามคน",
-        "🔴 เจ้าตัวเห็น {$mine['expiring_reservations']} · คนอื่นเห็น {$theirs['expiring_reservations']}");
+    /**
+     * 🔴 รายการที่ "หมดอายุไปแล้วแต่ยังไม่ถูก lazy expire ล้าง" ต้องไม่ถูกนับ
+     *
+     * 🧠 เจอตอนทดสอบบน clone: กระดิ่งบอก 16 แต่กดเข้าไปเจอ 11
+     *    countExpiringSoon() ตั้งใจไม่เรียก markExpiredReservations() (เลี่ยงเขียน DB ทุกหน้า)
+     *    ส่วน countAll() เรียก → พอกดเข้าไปหน้านั้นล้างทิ้ง 5 รายการ เลขเลยไม่ตรง
+     *    เคสนี้ต้องเทียบ "ก่อน" ที่ countAll จะถูกเรียก ไม่งั้นจะจับไม่ได้
+     */
+    $pdo->prepare("UPDATE reservations SET expires_at = NOW() - INTERVAL 1 HOUR WHERE id = ?")
+        ->execute([$resId]);
+    $countedWhenExpired = $resRepo->countExpiringSoon();   // 🔴 ต้องอ่านก่อน countAll()
+    check('DUE-C6', $countedWhenExpired === $before,
+        'จองที่เลยเวลาไปแล้ว (รอ lazy expire ล้าง) ไม่ถูกนับว่า "ใกล้หมดอายุ" '
+            . '— กระดิ่งกับหน้าปลายทางจึงไม่บอกคนละเลข',
+        '🔴 ยังนับรายการที่หมดอายุไปแล้ว → กดเข้าไปแล้วรายการจะหายไปเพราะโดนล้าง');
+
+    // คืนค่าให้ยังใกล้หมดอายุ เพื่อให้ข้อ D ตรวจต่อได้
+    $pdo->prepare("UPDATE reservations SET expires_at = NOW() + INTERVAL 2 HOUR WHERE id = ?")
+        ->execute([$resId]);
+
+    // 👤 ฝั่งสมาชิก: การจองของผมต้องไม่ไปโผล่ในกระดิ่งของคนอื่น
+    $mine       = $borrowRepo->getMemberAlertCounts($memberId, (int) DUE_SOON_DAYS);
+    $theirsNow  = $otherMemberId
+        ? $borrowRepo->getMemberAlertCounts($otherMemberId, (int) DUE_SOON_DAYS)['expiring_reservations']
+        : 0;
+    check('DUE-D1', $mine['expiring_reservations'] === 1 && $theirsNow === $theirsBefore,
+        "เจ้าตัวเห็น 1 · ตัวเลขของสมาชิกคนอื่นไม่ขยับ ({$theirsBefore} → {$theirsNow}) — ไม่รั่วข้ามคน",
+        "🔴 เจ้าตัวเห็น {$mine['expiring_reservations']} · คนอื่นขยับจาก {$theirsBefore} เป็น {$theirsNow}");
 
     check('DUE-D2', $mine['total'] === $mine['overdue'] + $mine['due_soon'] + $mine['ready_pickup'] + $mine['unpaid'],
         'ป้ายแดงฝั่งสมาชิกก็ไม่นับซ้ำเหมือนกัน',
