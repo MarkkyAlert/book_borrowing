@@ -671,6 +671,60 @@ class BorrowRepository
      * 📤 Output: @return int จำนวนที่กำลังยืมอยู่
      * ✅ Use case: แสดงใน UI, profile page (ไม่ต้องการ lock)
      */
+    /**
+     * ==========================================================================
+     * 🔔 จุดประสงค์: ตัวเลขแจ้งเตือนของ **สมาชิกคนเดียว** สำหรับกระดิ่งฝั่งผู้ใช้
+     * ==========================================================================
+     *
+     * 🔴 [SECURITY] `$userId` ต้องมาจาก **session เท่านั้น** ห้ามรับจาก URL
+     *    ถ้ารับจากพารามิเตอร์ภายนอก สมาชิกจะสอดส่องตัวเลขของคนอื่นได้ (IDOR)
+     *    ผู้เรียกเดียวคือ `includes/header.php` ซึ่งอ่าน `$_SESSION['user_id']`
+     *
+     * 🔴 [PERFORMANCE] เรียกจาก header ที่ **ทุกหน้าฝั่งผู้ใช้ include**
+     *    จึงรวมทุกอย่างไว้ใน round-trip เดียว เหมือน getAlertCounts() ฝั่งแอดมิน
+     *
+     * 🧠 นับเฉพาะเรื่องที่ **สมาชิกต้องลงมือทำ** ไม่ใช่สถิติ
+     *    "ยืมไปแล้วทั้งหมด 14 เล่ม" ไม่ใช่การแจ้งเตือน — ใส่แล้วกระดิ่งจะแดงตลอด
+     *
+     * 📤 @return array{overdue:int, due_soon:int, ready_pickup:int, unpaid:int, total:int}
+     */
+    public function getMemberAlertCounts(int $userId, int $dueSoonDays): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT
+                (SELECT COUNT(*) FROM borrows
+                  WHERE user_id = :uid AND status = 'borrowing'
+                    AND due_date < CURDATE())                                    AS overdue,
+                (SELECT COUNT(*) FROM borrows
+                  WHERE user_id = :uid2 AND status = 'borrowing'
+                    AND due_date >= CURDATE()
+                    AND due_date <= DATE_ADD(CURDATE(), INTERVAL :days DAY))     AS due_soon,
+                (SELECT COUNT(*) FROM reservations
+                  WHERE user_id = :uid3 AND status = 'pending')                  AS ready_pickup,
+                (SELECT COUNT(*) FROM borrows b
+                   LEFT JOIN payments p ON p.borrow_id = b.id
+                  WHERE b.user_id = :uid4 AND b.fine_amount > 0
+                    AND p.id IS NULL AND b.fine_waived_at IS NULL)               AS unpaid
+        ");
+        // 📌 MariaDB ไม่ยอมให้ named parameter ซ้ำใน statement เดียว จึงตั้งชื่อแยก
+        $stmt->bindValue(':uid',  $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':uid2', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':uid3', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':uid4', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':days', $dueSoonDays, PDO::PARAM_INT);
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $counts = [
+            'overdue'      => (int) ($row['overdue'] ?? 0),
+            'due_soon'     => (int) ($row['due_soon'] ?? 0),
+            'ready_pickup' => (int) ($row['ready_pickup'] ?? 0),
+            'unpaid'       => (int) ($row['unpaid'] ?? 0),
+        ];
+        $counts['total'] = array_sum($counts);
+        return $counts;
+    }
+
     public function countActiveBorrows(int $userId): int
     {
         // 🔄 Flow: แสดงใน UI / profile page (ไม่ต้องการ lock)

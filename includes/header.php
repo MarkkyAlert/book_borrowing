@@ -15,6 +15,51 @@ require_once __DIR__ . '/functions.php';
 $currentPage = basename($_SERVER['PHP_SELF']);
 // 📝 ดึง user จาก DB (ถ้า login) สำหรับแสดงชื่อบน navbar
 $user = isLoggedIn() ? getCurrentUser() : null;
+
+/**
+ * 🔔 ตัวเลขแจ้งเตือนของ **สมาชิกคนที่ล็อกอินอยู่**
+ *
+ * 🔴 [SECURITY] ใช้ `$_SESSION['user_id']` เท่านั้น — **ห้ามรับ id จาก URL**
+ *    ไฟล์นี้ถูก include ทุกหน้าฝั่งผู้ใช้ ถ้าเผลอรับพารามิเตอร์ภายนอก
+ *    สมาชิกจะสอดส่องตัวเลขของคนอื่นได้ทันที
+ *
+ * 🔴 [PERFORMANCE] **ยิง query เฉพาะตอนล็อกอิน** — หน้าแรก/หน้า login/สมัครสมาชิก
+ *    เป็นหน้าที่คนทั่วไปเปิดบ่อยที่สุด ยิง query ตรงนั้นคือจ่ายฟรีโดยไม่ได้อะไร
+ *
+ * 🛡️ ถ้าดึงไม่ได้ให้กระดิ่งเงียบ ไม่ใช่ทำให้ทั้งหน้าพัง
+ */
+$memberAlerts = ['overdue' => 0, 'due_soon' => 0, 'ready_pickup' => 0, 'unpaid' => 0, 'total' => 0];
+$memberAlertItems = [];
+if (isLoggedIn()) {
+    try {
+        $memberAlerts = (new \App\Repositories\BorrowRepository(getDB()))
+            ->getMemberAlertCounts((int) $_SESSION['user_id'], (int) DUE_SOON_DAYS);
+    } catch (\Throwable $e) {
+        // เงียบไว้ — กระดิ่งไม่ใช่ของที่ควรทำให้หน้าเว็บล่ม
+    }
+
+    // 🧠 เรียงตามความเร่งด่วน: เกินกำหนดมาก่อนเสมอ
+    if ($memberAlerts['overdue'] > 0) {
+        $memberAlertItems[] = ['label' => 'เลยกำหนดคืนแล้ว', 'count' => $memberAlerts['overdue'],
+            'unit' => 'เล่ม', 'icon' => 'bi-exclamation-triangle', 'tone' => 'red',
+            'url' => APP_URL . '/my_borrows.php'];
+    }
+    if ($memberAlerts['due_soon'] > 0) {
+        $memberAlertItems[] = ['label' => 'ใกล้ครบกำหนดคืน', 'count' => $memberAlerts['due_soon'],
+            'unit' => 'เล่ม', 'icon' => 'bi-clock-history', 'tone' => 'amber',
+            'url' => APP_URL . '/my_borrows.php'];
+    }
+    if ($memberAlerts['ready_pickup'] > 0) {
+        $memberAlertItems[] = ['label' => 'จองไว้ รอมารับ', 'count' => $memberAlerts['ready_pickup'],
+            'unit' => 'รายการ', 'icon' => 'bi-bookmark-check', 'tone' => 'indigo',
+            'url' => APP_URL . '/my_reservations.php'];
+    }
+    if ($memberAlerts['unpaid'] > 0) {
+        $memberAlertItems[] = ['label' => 'ค่าปรับค้างชำระ', 'count' => $memberAlerts['unpaid'],
+            'unit' => 'รายการ', 'icon' => 'bi-cash-coin', 'tone' => 'orange',
+            'url' => APP_URL . '/profile.php'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -127,6 +172,57 @@ $user = isLoggedIn() ? getCurrentUser() : null;
                                 <i class="bi bi-gear mr-1.5"></i>จัดการระบบ
                             </a>
                         <?php endif; ?>
+
+                        <?php // 🔔 กระดิ่งของสมาชิก — คนละชุดตัวเลขกับกระดิ่งฝั่งแอดมิน
+                              //    อันนี้ตอบว่า "ฉันต้องทำอะไร" · ฝั่งแอดมินตอบว่า "ห้องสมุดต้องทำอะไร"
+                              //    เจ้าหน้าที่ที่มาดูหน้าเว็บฝั่งผู้ใช้จะเห็นอันนี้ ซึ่งถูกต้องแล้ว
+                              //    เพราะเขาก็ยืมหนังสือได้เหมือนกัน ?>
+                        <div class="relative">
+                            <button type="button"
+                                    onclick="event.stopPropagation(); document.getElementById('member-alerts').classList.toggle('hidden')"
+                                    class="text-gray-500 hover:text-primary-600 transition-colors relative p-1"
+                                    aria-label="การแจ้งเตือนของฉัน">
+                                <i class="bi bi-bell text-xl"></i>
+                                <?php if ($memberAlerts['total'] > 0): ?>
+                                    <span class="absolute -top-0.5 -right-0.5 min-w-[1.05rem] h-[1.05rem] px-1 flex items-center justify-center
+                                                 rounded-full ring-2 ring-white bg-red-500 text-white text-[10px] font-bold">
+                                        <?= $memberAlerts['total'] > 99 ? '99+' : $memberAlerts['total'] ?>
+                                    </span>
+                                <?php endif; ?>
+                            </button>
+
+                            <div id="member-alerts"
+                                 class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                                <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+                                    <p class="text-sm font-bold text-gray-800">การแจ้งเตือนของฉัน</p>
+                                </div>
+                                <?php if (!$memberAlertItems): ?>
+                                    <div class="px-4 py-6 text-center text-gray-400">
+                                        <i class="bi bi-check-circle text-2xl text-green-500 block mb-1"></i>
+                                        <p class="text-sm">ไม่มีอะไรต้องจัดการ</p>
+                                    </div>
+                                <?php else: ?>
+                                    <?php foreach ($memberAlertItems as $item): ?>
+                                        <a href="<?= e($item['url']) ?>"
+                                           class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                                            <span class="flex items-center gap-2 text-sm text-gray-700">
+                                                <i class="bi <?= e($item['icon']) ?> text-<?= e($item['tone']) ?>-500"></i>
+                                                <?= e($item['label']) ?>
+                                            </span>
+                                            <span class="text-sm font-bold text-<?= e($item['tone']) ?>-600">
+                                                <?= number_format($item['count']) ?> <span class="font-normal text-gray-400 text-xs"><?= e($item['unit']) ?></span>
+                                            </span>
+                                        </a>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+                            <script>
+                                document.addEventListener('click', function () {
+                                    var d = document.getElementById('member-alerts');
+                                    if (d) d.classList.add('hidden');
+                                });
+                            </script>
+                        </div>
 
                         <!-- Profile Dropdown -->
                         <div class="relative group ml-3">
