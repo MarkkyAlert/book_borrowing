@@ -559,6 +559,44 @@ check('DOC-H4', $depLine === '' || preg_match('/SMTP|ตั้งค่าระ
     'DEPLOYMENT.md ชี้ไปที่การตั้งค่า SMTP ก่อน ไม่ได้บอกให้ไปแก้ฐานข้อมูลเป็นทางเดียว',
     '🔴 DEPLOYMENT.md ยังบอกให้รีเซ็ตรหัสผ่านผ่าน DB โดยตรง ทั้งที่ไม่ต้องแล้ว');
 
+/**
+ * 🔴 ชื่อหัวข้อที่เอกสารบอกให้ไปกด ต้องมีอยู่จริงบนหน้าจอ
+ *
+ * 🧠 เจอตอนทดสอบบน clone: เอกสารเขียนว่า "ตั้งค่าระบบ → การส่งอีเมล"
+ *    แต่หัวข้อจริงคือ "อีเมล (สำหรับลิงก์รีเซ็ตรหัสผ่าน)" — ลูกค้าจะหาไม่เจอ
+ *    เป็นบั๊กที่เพิ่งสร้างขึ้นเองตอนแก้เอกสารรอบนี้ ไม่ใช่ของเก่า
+ * 🧠 ดึงหัวข้อจริงจาก settings.php ไม่ฝังรายชื่อไว้ — เปลี่ยนชื่อหัวข้อเมื่อไหร่
+ *    เทสต์จะชี้ไปที่เอกสารที่ยังใช้ชื่อเก่าให้เอง
+ */
+$settingsSrc = (string) file_get_contents($ROOT . '/admin/settings.php');
+preg_match_all('/><\/i>([^<]+)</u', $settingsSrc, $hm);
+$realHeadings = array_values(array_filter(array_map('trim', $hm[1] ?? []), fn($h) => mb_strlen($h) >= 4));
+check('DOC-J0', count($realHeadings) >= 3,
+    'ดึงหัวข้อจริงจากหน้าตั้งค่าได้ ' . count($realHeadings) . ' หัวข้อ: ' . implode(' · ', array_slice($realHeadings, 0, 5)),
+    '🔴 ดึงหัวข้อไม่ได้ — รูปแบบไฟล์เปลี่ยนไป ต้องแก้ตัวดึงในเทสต์นี้ ไม่ใช่แก้เอกสาร');
+
+$badLabels = [];
+foreach ($docFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        if (preg_match_all('/ตั้งค่าระบบ\s*→\s*([^|·<*\n]{2,40})/u', $line, $lm)) {
+            foreach ($lm[1] as $label) {
+                $label = trim(str_replace('**', '', $label));
+                $found = false;
+                foreach ($realHeadings as $h) {
+                    if ($h === $label || str_starts_with($h, $label)) { $found = true; break; }
+                }
+                if (!$found) {
+                    $badLabels[] = sprintf('%s:%d → "%s" ไม่มีบนหน้าจอ', $rel($file), $i + 1, $label);
+                }
+            }
+        }
+    }
+}
+check('DOC-J1', !$badLabels,
+    'ทุกชื่อหัวข้อที่เอกสารบอกให้ไปกด มีอยู่จริงในหน้าตั้งค่า',
+    "🔴 เอกสารบอกให้ไปกดหัวข้อที่ไม่มีอยู่จริง:\n       " . implode("\n       ", $badLabels)
+        . "\n       หัวข้อที่มีจริง: " . implode(' · ', $realHeadings));
+
 // ============================================================
 // I. กระดิ่งแจ้งเตือนในหน้าเว็บ
 // ============================================================
