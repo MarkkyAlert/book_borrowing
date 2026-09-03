@@ -650,6 +650,54 @@ check('DOC-I3', $hasPolling || !$claimsLive,
     "🔴 อ้างว่าอัปเดตเองที่:\n       " . implode("\n       ", $claimsLive));
 
 // ============================================================
+// K. บันทึกเก่าใน tests/ ต้องติดป้ายว่าเก่า
+// ============================================================
+echo "\n── K. บันทึกเก่าต้องไม่ถูกอ่านเป็นสถานะปัจจุบัน ──\n";
+
+/**
+ * 🔴 tests/report.md กับ tests/test_cases.md เป็นบันทึกจากเดือนกุมภาพันธ์
+ *    ตัวเลขในนั้น (56 เคส) หยุดอยู่กับที่ ส่วนชุดทดสอบจริงเดินหน้าไปแล้ว
+ *
+ * 🧠 ทำไมต้องมีเทสต์: เคยมีคนอ่านสองไฟล์นี้แล้วรายงานว่าระบบมีช่องโหว่
+ *    ทั้งที่ตัวเลขเก่าไปครึ่งปี — เอกสารที่ไม่บอกว่าตัวเองเก่า อันตรายกว่าไม่มีเอกสาร
+ * 🧠 ไม่ลบทิ้งเพราะเป็นที่มาของชุดทดสอบ มีประโยชน์ตอนย้อนดูว่าคิดอะไรไว้
+ */
+$legacyDocs = ['tests/report.md', 'tests/test_cases.md'];
+$unlabelled = [];
+foreach ($legacyDocs as $rel2) {
+    $f = $ROOT . '/' . $rel2;
+    if (!is_file($f)) { continue; }
+    $head = mb_substr((string) file_get_contents($f), 0, 1200);
+    if (!str_contains($head, 'บันทึกเก่า') || !str_contains($head, 'run_all_tests.php')) {
+        $unlabelled[] = $rel2;
+    }
+}
+check('DOC-K1', !$unlabelled,
+    'บันทึกเก่าใน tests/ ติดป้ายไว้แล้ว และชี้ไปที่ตัวรวมที่รันของจริงได้',
+    "🔴 ยังไม่ติดป้าย/ไม่ได้ชี้ทางไปของจริง:\n       " . implode("\n       ", $unlabelled));
+
+/**
+ * 🔴 รหัสเคสที่บันทึกเก่าอ้าง ต้องยังมีอยู่จริงใน qa_test_runner.php
+ *    ถ้าวันหนึ่งลบเคสไหนออก บันทึกเก่าจะกลายเป็นรายการผีทันที
+ *    เทสต์นี้จะชี้ให้เห็นก่อนที่จะมีคนไปอ่านแล้วเข้าใจผิด
+ */
+$runnerSrc = (string) @file_get_contents($ROOT . '/tests/qa_test_runner.php');
+preg_match_all('/\b(?:SC|HP|EC|UP|BV)-\d+/', $runnerSrc, $lm);
+$liveIds = array_unique($lm[0]);
+$ghostIds = [];
+foreach ($legacyDocs as $rel2) {
+    $f = $ROOT . '/' . $rel2;
+    if (!is_file($f)) { continue; }
+    preg_match_all('/\b(?:SC|HP|EC|UP|BV)-\d+/', (string) file_get_contents($f), $dm);
+    foreach (array_unique($dm[0]) as $id) {
+        if (!in_array($id, $liveIds, true)) { $ghostIds[] = "{$rel2} → {$id}"; }
+    }
+}
+check('DOC-K2', $liveIds && !$ghostIds,
+    'รหัสเคสทุกตัวที่บันทึกเก่าอ้าง ยังมีอยู่จริงใน qa_test_runner.php (' . count($liveIds) . ' เคส)',
+    "🔴 บันทึกเก่าอ้างเคสที่ไม่มีแล้ว:\n       " . implode("\n       ", $ghostIds));
+
+// ============================================================
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",

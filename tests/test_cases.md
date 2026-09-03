@@ -1,8 +1,20 @@
 # QA Test Cases - Book Borrowing System
 
+> ## 📜 บันทึกเก่า — ไม่ใช่สเปกปัจจุบัน
+>
+> ไฟล์นี้คือ **รายการเคสที่เขียนไว้ตอนออกแบบชุดทดสอบ** เก็บไว้ดูที่มาเท่านั้น
+> ของจริงที่รันได้อยู่ใน `tests/qa_test_runner.php` และไฟล์ `tests/test_*.php`
+> ซึ่งเดินหน้าไปไกลกว่ารายการในไฟล์นี้แล้ว
+>
+> 🔴 **อย่าใช้ไฟล์นี้เป็นแหล่งอ้างอิงว่าระบบทำอะไรได้** — ให้อ่านจากโค้ดเทสต์จริง
+> หรือรัน `php tests/run_all_tests.php <รหัสผ่าน admin>`
+
+---
+
 ## Test Configuration
 - **Base URL:** `http://localhost/book_borrowing`
-- **Auth Method:** Cookie session (PHPSESSID)
+- **Auth Method:** Cookie session — 🔴 **ชื่อ cookie ไม่ใช่ `PHPSESSID`** แต่ละที่ติดตั้งมีชื่อของตัวเอง (เช่น `BBSESS1e9e389a`) ดู `appSessionName()` ใน `includes/functions.php`
+  เทสต์ที่ hardcode `PHPSESSID` จะล้มโดยที่ระบบไม่ได้พัง
 - **CSRF:** Per-session token, required for all POST requests (`csrf_token`)
 - **Admin Account:** admin@library.com / (set during install)
 - **Test User:** Created during test run
