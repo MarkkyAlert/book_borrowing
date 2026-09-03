@@ -26,7 +26,7 @@
 |---------|------|
 | สมัครสมาชิกเอง / staff เพิ่มให้ | `register.php`, `admin/member_form.php`, `api/add_member.php` |
 | Login / Logout / Session timeout | `login.php`, `logout.php`, `functions.php::startSession()` |
-| ลืมรหัสผ่าน + รีเซ็ตด้วย token (ไม่ส่งอีเมลจริง) | `forgot_password.php`, `reset_password.php` |
+| ลืมรหัสผ่าน + รีเซ็ตด้วย token (ส่งลิงก์ทางอีเมลได้ ถ้าตั้ง SMTP · ปิดเป็นค่าเริ่มต้น) | `forgot_password.php`, `reset_password.php`, `includes/mailer.php` |
 | Profile + เปลี่ยนรหัสผ่าน + ดูประวัติ/ค่าปรับค้างของตัวเอง | `profile.php` |
 | จัดการสมาชิก + ค้นหา + สถิติการยืมรายคน | `admin/members.php` |
 | เปลี่ยน role member ⇄ staff | `admin/member_form.php` |
@@ -67,7 +67,7 @@
 
 | สิ่งที่ลูกค้ามักถาม | สถานะจริง | ต้องทำอะไร | ระดับงาน |
 |---------------------|-----------|------------|----------|
-| ส่งอีเมลแจ้งเตือน / อีเมลรีเซ็ตรหัสผ่าน | สร้าง token ได้ แต่ **ไม่ส่งอีเมล** | เพิ่ม `NotificationService` + PHPMailer/SMTP | กลาง |
+| ส่งอีเมล**แจ้งเตือน**ใกล้ครบกำหนด/เกินกำหนด | **ไม่มี และตั้งใจไม่ทำ** (อีเมลรีเซ็ตรหัสผ่านมีแล้ว ดูแถวด้านบน) | ต้องมี cron + โดเมน/SPF/DKIM ของลูกค้าเอง | กลาง |
 | แจ้งเตือน LINE / Web push | ไม่มี | `NotificationService` แยก (ห้ามยัด API call ใน Controller) | กลาง |
 | ต่ออายุการยืม (renew) | ไม่มี | เพิ่ม method ใน `BorrowService` + ปุ่ม + กติกาว่าต่อได้กี่ครั้ง | เล็ก–กลาง |
 | ค่าปรับสะสมของรายการที่ยังไม่คืน | คำนวณตอนคืนเท่านั้น | เพิ่ม query คำนวณ on-the-fly หรือ cron snapshot | เล็ก |

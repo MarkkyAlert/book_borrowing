@@ -481,6 +481,137 @@ check('DOC-G3', !$wrongNums,
     "🔴 ตัวเลขไม่ตรง " . count($wrongNums) . " จุด:\n       " . implode("\n       ", $wrongNums));
 
 // ============================================================
+// H. อีเมล — เอกสารต้องไม่พูดต่ำกว่าหรือสูงกว่าที่โค้ดทำได้
+// ============================================================
+echo "\n── H. เอกสารกับความสามารถเรื่องอีเมลตรงกัน ──\n";
+
+/**
+ * 🔴 ความจริงต้องมาจากโค้ด ไม่ใช่ฝังไว้ในเทสต์
+ *    sendMail() ถูกเรียกจากไฟล์ไหนบ้าง = ระบบส่งเมลในสถานการณ์ไหนได้บ้างจริง ๆ
+ */
+$mailerExists = is_file($ROOT . '/includes/mailer.php')
+    && str_contains((string) file_get_contents($ROOT . '/includes/mailer.php'), 'function sendMail');
+$mailCallers = [];
+foreach (['forgot_password.php', 'admin/settings.php', 'admin/borrows.php', 'admin/members.php',
+          'cron/expire_reservations.php', 'cron/cleanup_tokens.php'] as $cand) {
+    $f = $ROOT . '/' . $cand;
+    if (is_file($f) && preg_match('/(?<!function )\bsendMail\s*\(/', (string) file_get_contents($f))) {
+        $mailCallers[] = $cand;
+    }
+}
+check('DOC-H0', $mailerExists && $mailCallers,
+    'ดึงความจริงจากโค้ดได้: mailer.php มีจริง · ถูกเรียกจาก ' . implode(', ', $mailCallers),
+    '🔴 หา sendMail() ในโค้ดไม่เจอ — ต้องแก้ตัวดึงในเทสต์นี้ ไม่ใช่แก้เอกสาร');
+
+/**
+ * 🔴 ห้ามบอกว่า "ไม่มีอีเมลเลย" ในเมื่อส่งลิงก์รีเซ็ตรหัสผ่านได้แล้ว
+ *    เอกสารที่พูดต่ำกว่าความจริงทำให้คนขายพูดตามแล้วเสียของที่มีอยู่
+ * 🧠 ยกเว้นบรรทัดที่กำลัง "ห้ามพูด" ประโยคนั้นอยู่ — คือคำสั่งให้คนขาย ไม่ใช่ข้อความเท็จ
+ */
+$deniesMail = [];
+foreach ($docFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        if (preg_match('/ไม่ส่งอีเมลเลย|ไม่มีอีเมลเลย|ไม่มีระบบส่ง\s*email|ระบบนี้ไม่ส่งอีเมล/u', $line)
+            && !preg_match('/ห้ามพูด|ไม่จริงแล้ว|เคยเขียน/u', $line)) {
+            $deniesMail[] = sprintf('%s:%d', $rel($file), $i + 1);
+        }
+    }
+}
+check('DOC-H1', !$mailerExists || !$deniesMail,
+    'ไม่มีเอกสารไหนบอกว่า "ไม่มีอีเมลเลย" ทั้งที่ส่งลิงก์รีเซ็ตได้แล้ว',
+    "🔴 ยังเขียนว่าไม่มีอีเมลที่:\n       " . implode("\n       ", $deniesMail));
+
+/**
+ * 🔴 กลับกัน — ห้ามอ้างว่าส่งอีเมล "แจ้งเตือน" ได้ ตราบที่ยังไม่มีจริง
+ *    ตรวจว่าทุกครั้งที่พูดถึงอีเมลแจ้งเตือน ต้องมีคำปฏิเสธอยู่ในบรรทัดเดียวกัน
+ */
+$notifyClaims = [];
+foreach ($docFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        if (preg_match('/(อีเมล|เมล|email)[^\n]{0,12}(แจ้งเตือน|เตือน)|แจ้งเตือน[^\n]{0,12}(ทางอีเมล|ทางเมล)/u', $line)
+            && !preg_match('/ไม่|ห้าม|ยังไม่|ตั้งใจไม่/u', $line)) {
+            $notifyClaims[] = sprintf('%s:%d → %s', $rel($file), $i + 1, mb_substr(trim($line), 0, 70));
+        }
+    }
+}
+check('DOC-H2', !$notifyClaims,
+    'ไม่มีเอกสารไหนอ้างว่าส่งอีเมลแจ้งเตือนได้ — ของจริงส่งได้แค่ลิงก์รีเซ็ตรหัสผ่าน',
+    "🔴 อ้างเกินจริงที่:\n       " . implode("\n       ", $notifyClaims));
+
+// 🔴 ต้องบอกด้วยว่าปิดเป็นค่าเริ่มต้น ไม่งั้นลูกค้าติดตั้งแล้วรอเมลที่ไม่มีวันมา
+$saysDefaultOff = false;
+foreach ($docFiles as $file) {
+    if (preg_match('/ปิด(ไว้)?เป็นค่าเริ่มต้น|ค่าเริ่มต้น(คือ)?ปิด/u', (string) file_get_contents($file))) {
+        $saysDefaultOff = true;
+    }
+}
+check('DOC-H3', !$mailerExists || $saysDefaultOff,
+    'เอกสารบอกชัดว่าอีเมลปิดไว้เป็นค่าเริ่มต้น',
+    '🔴 ไม่มีที่ไหนบอกว่าปิดเป็นค่าเริ่มต้น — ลูกค้าจะติดตั้งแล้วรอเมลที่ไม่มีวันมา');
+
+// 🔴 DEPLOYMENT ห้ามเสนอการแก้ DB เป็นทางเดียวของการรีเซ็ตรหัสผ่าน
+$depFile = $ROOT . '/docs/DEPLOYMENT.md';
+$depLine = '';
+foreach (explode("\n", (string) @file_get_contents($depFile)) as $line) {
+    if (str_starts_with($line, '- **Password Reset:**')) { $depLine = $line; }
+}
+check('DOC-H4', $depLine === '' || preg_match('/SMTP|ตั้งค่าระบบ/u', $depLine),
+    'DEPLOYMENT.md ชี้ไปที่การตั้งค่า SMTP ก่อน ไม่ได้บอกให้ไปแก้ฐานข้อมูลเป็นทางเดียว',
+    '🔴 DEPLOYMENT.md ยังบอกให้รีเซ็ตรหัสผ่านผ่าน DB โดยตรง ทั้งที่ไม่ต้องแล้ว');
+
+// ============================================================
+// I. กระดิ่งแจ้งเตือนในหน้าเว็บ
+// ============================================================
+echo "\n── I. เอกสารรู้จักกระดิ่ง ──\n";
+
+// 🔢 นับแถวจริงจากโค้ด — ห้ามฝังตัวเลขไว้ในเทสต์ ไม่งั้นเพิ่มแถวใหม่แล้วเทสต์จะฟ้องเอกสารที่ถูกอยู่
+$adminBell  = substr_count((string) file_get_contents($ROOT . '/admin/header.php'), '$alertItems[] =');
+$memberBell = substr_count((string) file_get_contents($ROOT . '/includes/header.php'), '$memberAlertItems[] =');
+$healthRows = substr_count((string) file_get_contents($ROOT . '/app/Services/DashboardService.php'), "'severity'");
+check('DOC-I0', $adminBell > 0 && $memberBell > 0,
+    "ดึงจากโค้ดได้: กระดิ่งเจ้าหน้าที่ {$adminBell} แถว + สุขภาพระบบ {$healthRows} แถว · สมาชิก {$memberBell} แถว",
+    '🔴 นับแถวกระดิ่งจากโค้ดไม่ได้ — ต้องแก้ตัวดึงในเทสต์นี้');
+
+$mentionsBell = [];
+foreach ($docFiles as $file) {
+    if (preg_match('/กระดิ่ง/u', (string) file_get_contents($file))) { $mentionsBell[] = $rel($file); }
+}
+check('DOC-I1', !$adminBell || $mentionsBell,
+    'เอกสารพูดถึงกระดิ่งแล้วที่: ' . implode(', ', $mentionsBell),
+    "🔴 มีกระดิ่ง {$adminBell} แถวในโค้ด แต่ไม่มีเอกสารไหนพูดถึงเลย — ลูกค้าและคนขายไม่มีทางรู้ว่ามี");
+
+// 🔴 ห้ามบอกลอย ๆ ว่า "ไม่มีการแจ้งเตือน" — ต้องระบุว่าไม่มีทางไหน (อีเมล/LINE/push)
+$deniesAlerts = [];
+foreach ($docFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        if (preg_match('/ไม่มี(ระบบ)?(การ)?แจ้งเตือน/u', $line)
+            && !preg_match('/อีเมล|เมล|email|LINE|push|ทางไปรษณีย์|ห้ามพูด/u', $line)) {
+            $deniesAlerts[] = sprintf('%s:%d → %s', $rel($file), $i + 1, mb_substr(trim($line), 0, 70));
+        }
+    }
+}
+check('DOC-I2', !$deniesAlerts,
+    'ไม่มีที่ไหนบอกลอย ๆ ว่า "ไม่มีการแจ้งเตือน" — ระบุช่องทางเสมอ',
+    "🔴 บอกลอย ๆ ว่าไม่มีการแจ้งเตือน ทั้งที่มีกระดิ่ง:\n       " . implode("\n       ", $deniesAlerts));
+
+// 🔴 กระดิ่งคำนวณตอนโหลดหน้า ห้ามเขียนว่าอัปเดตเอง/เรียลไทม์
+$hasPolling = preg_match('/setInterval|EventSource|WebSocket/', 
+    (string) file_get_contents($ROOT . '/admin/header.php'));
+$claimsLive = [];
+foreach ($docFiles as $file) {
+    foreach (explode("\n", (string) file_get_contents($file)) as $i => $line) {
+        if (preg_match('/กระดิ่ง/u', $line)
+            && preg_match('/เรียลไทม์|real-?time|อัปเดต(ให้)?เอง|อัตโนมัติทุก/u', $line)
+            && !preg_match('/ไม่|ห้าม/u', $line)) {
+            $claimsLive[] = sprintf('%s:%d', $rel($file), $i + 1);
+        }
+    }
+}
+check('DOC-I3', $hasPolling || !$claimsLive,
+    'ไม่มีเอกสารไหนอ้างว่ากระดิ่งเรียลไทม์ — โค้ดคำนวณตอนโหลดหน้าเท่านั้น',
+    "🔴 อ้างว่าอัปเดตเองที่:\n       " . implode("\n       ", $claimsLive));
+
+// ============================================================
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
