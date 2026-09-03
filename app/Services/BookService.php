@@ -196,22 +196,30 @@ class BookService
             $newAvailable = max(0, $book['available'] + $quantityDiff);
 
             // 📝 Step 4: UPDATE ทั้งข้อมูล + quantity/available ที่คำนวณแล้ว
-            $result = $this->bookRepo->update($id, [
-                'title' => $data['title'],
-                'author' => $data['author'],
-                'isbn' => $data['isbn'] ?? null,
-                // 📍 เลขเรียกหนังสือ — ต้องส่งต่อ ไม่งั้นแก้ไขแล้วค่าหาย
-                //    (Service สร้าง array ใหม่ทีละ key คีย์ที่ไม่ได้ระบุจะตกหล่นเงียบ ๆ)
-                'call_number' => $data['call_number'] ?? null,
-                'category_id' => $data['category_id'] ?? null,
-                'description' => $data['description'] ?? null,
-                // 📓 หมายเหตุรายเล่ม — ต้องส่งต่อด้วยเหตุผลเดียวกับ call_number
-                'copy_notes' => $data['copy_notes'] ?? null,
-                'cover_image' => $data['cover_image'] ?? null,
-                'quantity' => $newQuantity,
-                'available' => $newAvailable,
-                'is_visible' => $data['is_visible'] ?? 1
-            ]);
+            //
+            // 🛡️ [ก.6 FIX] เดิมตรงนี้ประกอบ array ด้วยการไล่พิมพ์คีย์เองทีละตัว
+            //    คีย์ไหนลืมพิมพ์ = ตกหล่นเงียบ ๆ แล้วไปโดน `?? null` / `?? 0` ใน
+            //    BookRepository::update() ทับค่าเดิม → ข้อมูลผู้ใช้หายโดยไม่มี error
+            //    เกิดมาแล้ว 2 รอบ: call_number+copy_notes รอบก่อน, price+is_reference รอบนี้
+            //    (อาการ: ติ๊ก "หนังสืออ้างอิง" แล้วบันทึก ติ๊กหลุด · กรอกราคาปก แล้วค่าหาย
+            //     และ is_reference เป็นตัวบล็อกการยืม/จอง การถูกล้างจึงปลดการคุ้มครองไปด้วย)
+            //
+            //    เลิกพิมพ์เอง → คัดตามรายชื่อที่ประกาศไว้ที่เดียวข้าง SQL แทน
+            //    เพิ่มคอลัมน์ใหม่ใน EDITABLE_COLUMNS แล้วมันจะถูกส่งต่อเองอัตโนมัติ
+            $payload = [];
+            foreach (BookRepository::EDITABLE_COLUMNS as $column) {
+                // ?? null ให้ครบทุกคีย์ เพื่อให้ repo เห็นคีย์เสมอ แล้วไป fallback
+                // ตาม default ของแต่ละคอลัมน์เอง (is_visible→1, is_reference→0, price→null)
+                $payload[$column] = $data[$column] ?? null;
+            }
+
+            // ⚠️ quantity/available ต้องใช้ค่าที่คำนวณใน Step 2-3 เท่านั้น ห้ามใช้ค่าดิบจากฟอร์ม
+            //    (available ไม่มีในฟอร์ม · quantity ต้องผ่านการตรวจ currentlyOut ก่อน)
+            //    บรรทัดนี้ต้องอยู่ "หลัง" loop เสมอ ไม่งั้นจะถูกค่าดิบทับ
+            $payload['quantity'] = $newQuantity;
+            $payload['available'] = $newAvailable;
+
+            $result = $this->bookRepo->update($id, $payload);
 
             $this->pdo->commit();
             return $result;

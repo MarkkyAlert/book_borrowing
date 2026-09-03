@@ -45,6 +45,30 @@ use App\Repositories\CategoryRepository;
 
 $pdo = getDB();
 $bookService = new BookService($pdo);
+
+/**
+ * 🧹 เก็บกวาดแบบรับประกัน — ทำงานแม้เทสต์ตายกลางคัน
+ *
+ * 🧠 ทำไมต้อง register_shutdown_function ไม่ใช่เขียนไว้ท้ายไฟล์เฉย ๆ:
+ *    ถ้าเคสไหนโยน exception ที่ไม่ถูกจับ หรือเกิด fatal error โค้ดท้ายไฟล์
+ *    จะไม่ถูกรันเลย → เหลือหนังสือ/สมาชิกทดสอบค้างในระบบ
+ *    เจอมาแล้วจริงตอนทดสอบยาม BK-RT3 ว่ามันแดงได้ไหม — เทสต์ตายกลางคัน
+ *    3 รอบ ทิ้งหนังสือค้างไว้ 9 เล่ม (แบบเดียวกับ F-52 และ test_reference_books.php)
+ *
+ * ⚠️ ลบตามชื่อ ไม่ใช่ตาม id ที่จำไว้ จะได้เก็บของค้างจากรอบก่อน ๆ ไปด้วย
+ */
+$cleanupBk = function () use ($pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    // ลำดับ: ลูกก่อน (borrows, reservations) แล้วค่อยพ่อแม่ (books, users, categories)
+    $pdo->exec("DELETE FROM borrows WHERE book_id IN (SELECT id FROM books WHERE title LIKE 'Test Book%')");
+    $pdo->exec("DELETE FROM reservations WHERE book_id IN (SELECT id FROM books WHERE title LIKE 'Test Book%')");
+    $pdo->exec("DELETE FROM books WHERE title LIKE 'Test Book%'");
+    $pdo->exec("DELETE FROM users WHERE email LIKE 'tester_bk_%'");
+    $pdo->exec("DELETE FROM categories WHERE name LIKE 'Test Cat%'");
+};
+register_shutdown_function($cleanupBk);
 $borrowRepo = new BorrowRepository($pdo);
 $reservationRepo = new ReservationRepository($pdo);
 $categoryRepo = new CategoryRepository($pdo);
@@ -262,17 +286,129 @@ try {
 }
 
 
+
+// ============================================================
+// 🛡️ ยามกันบั๊ก ก.6 ซ้ำรอย — "ฟิลด์หายเงียบตอนแก้ไข"
+// ============================================================
+// 🧠 ที่มา: BookService::updateBook() เคยประกอบ array ส่ง Repository ด้วยการ
+//    ไล่พิมพ์คีย์เองทีละตัว คีย์ที่ลืมพิมพ์จะตกหล่นเงียบ ๆ แล้วไปโดน `?? null` /
+//    `?? 0` ใน Repository ทับค่าเดิมในฐานข้อมูล = ข้อมูลผู้ใช้หายโดยไม่มี error
+//    เกิดมาแล้ว 2 รอบ (call_number+copy_notes / price+is_reference)
+//    2 เคสข้างล่างนี้จับ "ประเภท" ของบั๊ก ไม่ใช่จับแค่ฟิลด์ที่เคยพัง
+
+echo "\n── ยามกันฟิลด์หายตอนแก้ไข (BK-RT) ──\n";
+
+// ── BK-RT1: รายชื่อคอลัมน์ที่ประกาศไว้ ต้องตรงกับตาราง books จริง ──
+//    ถ้ามีใครเพิ่มคอลัมน์ใหม่ในตารางแล้วลืมใส่ EDITABLE_COLUMNS → เคสนี้แดงทันที
+//    (ไม่ต้องรอให้ผู้ใช้มาเจอว่าข้อมูลที่กรอกหายไปเอง)
+$systemCols = ['id', 'created_at', 'updated_at', 'search_tokens'];
+$dbCols = $pdo->query("SHOW COLUMNS FROM books")->fetchAll(PDO::FETCH_COLUMN);
+$expectedCols = array_values(array_diff($dbCols, $systemCols));
+$declaredCols = \App\Repositories\BookRepository::EDITABLE_COLUMNS;
+$missingCols = array_values(array_diff($expectedCols, $declaredCols));
+$extraCols   = array_values(array_diff($declaredCols, $expectedCols));
+assertTest(
+    "BK-RT1: EDITABLE_COLUMNS ตรงกับคอลัมน์จริงในตาราง books",
+    !$missingCols && !$extraCols,
+    $missingCols || $extraCols
+        ? 'ขาด: [' . implode(', ', $missingCols) . '] · เกิน: [' . implode(', ', $extraCols) . ']'
+          . ' → แก้ที่ BookRepository::EDITABLE_COLUMNS และ SQL ใน update()'
+        : count($declaredCols) . ' คอลัมน์ตรงกันครบ'
+);
+
+// ── BK-RT2: ทุกคอลัมน์ที่แก้ได้ ต้องรอดจากการ updateBook() จริง ──
+//    ส่งค่าเข้าไปทีเดียวทุกฟิลด์ แล้วอ่านกลับมาเทียบทีละตัว
+//    ฟิลด์ไหนหายระหว่างทาง เคสนี้จะบอกชื่อฟิลด์นั้นออกมาตรง ๆ
+$rtTitle = 'Test Book RT ' . time();
+$rtBookId = $bookService->createBook([
+    'title' => $rtTitle, 'author' => 'RT Author', 'quantity' => 10, 'category_id' => $catId,
+]);
+
+// ค่าทดสอบของแต่ละคอลัมน์ — ต้องต่างจากค่าตอนสร้าง จะได้รู้ว่า "เขียนทับสำเร็จ" จริง
+$rtProbe = [
+    'title'        => $rtTitle,
+    'author'       => 'RT Author Edited',
+    'isbn'         => '978-RT-' . time(),
+    'call_number'  => 'อ 123 ท',
+    'category_id'  => $catId,
+    'description'  => 'RT description edited',
+    'copy_notes'   => 'RT copy notes',
+    'cover_image'  => 'rt_cover.jpg',
+    'price'        => 199.50,
+    'quantity'     => 7,
+    'is_visible'   => 0,
+    'is_reference' => 1,
+];
+// 🧠 available ไม่อยู่ในรายการทดสอบ เพราะ Service ตั้งใจคำนวณเองจาก quantity diff
+//    ห้ามรับค่าดิบจากฟอร์ม (ไม่งั้นแก้ไขหนังสือจะปลอม stock ได้)
+$rtComputed = ['available'];
+
+$noProbe = array_values(array_diff($declaredCols, array_keys($rtProbe), $rtComputed));
+assertTest(
+    "BK-RT2a: ทุกคอลัมน์ที่แก้ได้มีค่าทดสอบครบ",
+    !$noProbe,
+    $noProbe
+        ? 'ยังไม่มีค่าทดสอบให้: [' . implode(', ', $noProbe) . '] → เพิ่มใน $rtProbe ของไฟล์นี้'
+        : count($rtProbe) . ' คอลัมน์มีค่าทดสอบครบ'
+);
+
+$bookService->updateBook($rtBookId, $rtProbe);
+$rtAfter = $pdo->query("SELECT * FROM books WHERE id = $rtBookId")->fetch(PDO::FETCH_ASSOC);
+
+$rtLost = [];
+foreach ($rtProbe as $col => $want) {
+    $got = $rtAfter[$col];
+    $same = (is_numeric($want) && is_numeric($got))
+        ? abs((float) $want - (float) $got) < 0.001
+        : (string) $want === (string) $got;
+    if (!$same) $rtLost[] = "$col (ส่ง " . var_export($want, true) . " ได้ " . var_export($got, true) . ")";
+}
+assertTest(
+    "BK-RT2b: ทุกฟิลด์ที่ส่งเข้า updateBook() รอดออกมาครบ",
+    !$rtLost,
+    $rtLost
+        ? count($rtLost) . ' ฟิลด์หายระหว่างทาง: ' . implode(' · ', $rtLost)
+          . ' → เช็คว่า BookService::updateBook() ส่งต่อครบตาม EDITABLE_COLUMNS ไหม'
+        : count($rtProbe) . ' ฟิลด์รอดครบ'
+);
+
+// ── BK-RT3: available ต้องมาจากการคำนวณ ไม่ใช่ค่าที่ส่งมา ──
+//    กันการ "แก้" บั๊กข้างบนด้วยการส่ง $data ทั้งก้อนเข้า Repository
+//    ซึ่งจะเปิดช่องให้ปลอม stock ผ่านหน้าแก้ไขหนังสือได้
+//
+// 🧠 ทำไมส่ง available = 1 ไม่ใช่ 999:
+//    999 จะไปชน CHECK constraint chk_books_quantity_gte_available แล้วโยน exception
+//    = เทสต์ผ่านเพราะ "ฐานข้อมูลช่วยไว้" ไม่ใช่เพราะ Service ทำถูก (ลองแล้วเจอจริง)
+//    ส่ง 1 แทน — ต่ำกว่า quantity จึงไม่มี constraint ไหนกัน ถ้า Service รับค่าดิบ
+//    stock จะเพี้ยนเงียบ ๆ (หนังสือ 7 เล่มกลายเป็นว่างเล่มเดียว) ซึ่งคือของจริงที่ต้องจับ
+try {
+    $bookService->updateBook($rtBookId, $rtProbe + ['available' => 1]);
+    $rtStock = $pdo->query("SELECT quantity, available FROM books WHERE id = $rtBookId")->fetch(PDO::FETCH_ASSOC);
+    $rtStockOk = (int) $rtStock['available'] === 7 && (int) $rtStock['quantity'] === 7;
+    $rtStockMsg = "quantity={$rtStock['quantity']} available={$rtStock['available']} (ต้องเป็น 7/7)";
+} catch (\Throwable $e) {
+    // จับไว้เอง ไม่ปล่อยให้ fatal — ไม่งั้นเคสที่เหลือกับ CLEANUP จะไม่ได้รัน
+    $rtStockOk = false;
+    $rtStockMsg = 'updateBook() โยน exception: ' . $e->getMessage();
+}
+assertTest("BK-RT3: available ยังคำนวณเอง ไม่รับค่าดิบจากฟอร์ม", $rtStockOk, $rtStockMsg);
+
+// ── BK-P1: ราคาปกว่าง ต้องเก็บเป็น NULL ไม่ใช่ 0 ──
+//    🧠 NULL = "ยังไม่ได้ระบุราคา" · 0 = "หนังสือฟรี" คนละความหมายกัน
+//    ถ้าเก็บเป็น 0 ตอนแจ้งหนังสือหายจะคิดค่าปรับเป็น 0 บาทโดยไม่มีใครทัก
+$bookService->updateBook($rtBookId, ['title' => $rtTitle, 'author' => 'RT Author Edited',
+    'quantity' => 7, 'is_visible' => 0, 'price' => null]);
+$rtPrice = $pdo->query("SELECT price FROM books WHERE id = $rtBookId")->fetchColumn();
+assertTest(
+    "BK-P1: ราคาปกว่าง → NULL (ไม่ใช่ 0)",
+    $rtPrice === null,
+    'price = ' . var_export($rtPrice, true)
+);
+
 // ============================================================
 echo "\n── CLEANUP ──\n";
 // ============================================================
-// Cleanup Order: Children first (Borrows, Reservations) -> Parents (Books, Users, Categories)
-// Delete all dependencies for any test books (current or previous runs)
-$pdo->exec("DELETE FROM borrows WHERE book_id IN (SELECT id FROM books WHERE title LIKE 'Test Book%')");
-$pdo->exec("DELETE FROM reservations WHERE book_id IN (SELECT id FROM books WHERE title LIKE 'Test Book%')");
-$pdo->exec("DELETE FROM books WHERE title LIKE 'Test Book%'");
-$pdo->exec("DELETE FROM users WHERE email LIKE 'tester_bk_%'");
-$pdo->exec("DELETE FROM categories WHERE name LIKE 'Test Cat%'");
-
+$cleanupBk();
 echo "  Cleanup done\n";
 echo "\n════════════════════════════════════════\n";
 echo " RESULTS: $passed/$total passed";

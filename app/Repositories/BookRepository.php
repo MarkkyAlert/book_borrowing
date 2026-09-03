@@ -685,6 +685,28 @@ class BookRepository
     }
 
     /**
+     * 📋 คอลัมน์ทั้งหมดที่คำสั่ง UPDATE ใน update() เขียนลงตาราง books
+     *
+     * 🧠 ทำไมต้องมี: BookService::updateBook() เคยไล่พิมพ์คีย์เองทีละตัว
+     *    คีย์ที่ลืมพิมพ์จะตกหล่นเงียบ ๆ แล้วไปโดน `?? null` / `?? 0` ใน update()
+     *    ทับค่าเดิมในฐานข้อมูล = ข้อมูลที่ผู้ใช้กรอกไว้หายโดยไม่มี error สักบรรทัด
+     *    กับดักนี้กินฟิลด์ไปแล้ว 2 รอบ (call_number+copy_notes / price+is_reference)
+     *    จึงย้ายรายชื่อมาไว้ที่เดียวตรงนี้ ให้ Service คัดตามรายชื่อ แทนการพิมพ์เอง
+     *
+     * ⚠️ เพิ่มคอลัมน์ใหม่ในตาราง books ต้องแตะให้ครบ 3 ที่:
+     *    1) SQL ใน update() ข้างล่าง   2) รายชื่อนี้   3) create() ข้างบน
+     *    เทสต์ BK-RT1 (tests/test_book_management.php) เฝ้าอยู่ ลืมที่ไหนจะแดงทันที
+     *
+     * 🚫 ไม่รวม: id / created_at / updated_at (ระบบจัดการเอง)
+     *            search_tokens (repo สร้างเองจาก makeSearchTokens() ไม่รับจากผู้เรียก)
+     */
+    public const EDITABLE_COLUMNS = [
+        'title', 'author', 'isbn', 'call_number', 'category_id', 'description',
+        'copy_notes', 'cover_image', 'price', 'quantity', 'available',
+        'is_visible', 'is_reference'
+    ];
+
+    /**
      * ==========================================================================
      * 🎯 จุดประสงค์: อัปเดตข้อมูลหนังสือ
      * ==========================================================================

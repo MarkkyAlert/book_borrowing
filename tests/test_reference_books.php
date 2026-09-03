@@ -33,6 +33,7 @@ require_once __DIR__ . '/../app/Repositories/ReservationRepository.php';
 require_once __DIR__ . '/../app/Repositories/UserRepository.php';
 require_once __DIR__ . '/../app/Services/BorrowService.php';
 require_once __DIR__ . '/../app/Services/ReservationService.php';
+require_once __DIR__ . '/../app/Services/BookService.php';
 
 $BASE_URL       = rtrim(APP_URL, '/');
 $ADMIN_EMAIL    = 'admin@library.com';
@@ -98,6 +99,7 @@ $pdo = getDB();
 $bookRepo = new \App\Repositories\BookRepository($pdo);
 $borrowService = new \App\Services\BorrowService($pdo);
 $reservationService = new \App\Services\ReservationService($pdo);
+$bookService = new \App\Services\BookService($pdo);
 
 // ── สร้างของทดสอบของตัวเอง ──
 $refBookId = $bookRepo->create([
@@ -250,9 +252,43 @@ if ($form['code'] !== 200) {
         'ตัวกรอง "ยืมออกได้" แสดงเฉพาะเล่มปกติ', 'ตัวกรองยืมออกได้กรองไม่ถูก');
 
     // B6: ลิงก์เลขหน้าต้องพาตัวกรองไปด้วย (บทเรียนจาก F-37)
+    //
+    // 📚 ต้องมีหนังสือ "ยืมออกได้" มากกว่า 1 หน้า ไม่งั้นไม่มีลิงก์เปลี่ยนหน้าให้ตรวจ
+    //    🧠 เคสนี้เคยแดงบนเครื่องที่ติดตั้งสด (หนังสือตัวอย่าง 5 เล่ม = หน้าเดียว)
+    //       แต่เขียวบนเครื่องพัฒนาที่มีหนังสือ 405 เล่ม — เป็นเทสต์ที่ผลขึ้นกับ
+    //       ปริมาณข้อมูลในเครื่อง ไม่ได้ขึ้นกับว่าโค้ดถูกหรือผิด
+    //       (ตระกูลเดียวกับ FLT-E1 ใน tests/test_filters.php ที่แก้ด้วยวิธีนี้)
+    //    สร้าง fixture ให้พอเอง แทนที่จะข้ามเคส — จะได้ยังตรวจของจริงอยู่
+    //
+    // ⚠️ ห้ามใส่ $TAG ในชื่อเล่มเติมหน้า และต้องลบทิ้งทันทีที่ตรวจเสร็จ
+    //    ครั้งแรกที่เขียนเคสนี้ ตั้งชื่อว่า "[$TAG] เล่มเติมหน้า N" แล้วมันไปโผล่
+    //    ในผลค้นหาของ REF-C1 (ค้นด้วย $TAG) จนดันเล่มที่ต้องการตกไปหน้า 2 → C1 แดง
+    //    fixture ของเคสหนึ่งห้ามเปลี่ยนผลของอีกเคสหนึ่ง
+    $fillTag = 'REFFILL' . getmypid();
+    $normalCount = (int) $pdo->query("SELECT COUNT(*) FROM books WHERE is_reference = 0")->fetchColumn();
+    $needPage2 = max(0, (int) ITEMS_PER_PAGE + 1 - $normalCount);
+    $pageFillIds = [];
+    for ($i = 0; $i < $needPage2; $i++) {
+        $pageFillIds[] = $bookRepo->create([
+            'title' => "[$fillTag] เล่มเติมหน้า $i", 'author' => 'ผู้แต่งเติมหน้า', 'quantity' => 1,
+        ]);
+    }
+    if ($needPage2 > 0) {
+        echo "  ℹ️  สร้างหนังสือเพิ่ม $needPage2 เล่มชั่วคราว เพื่อให้มีมากกว่า 1 หน้า\n";
+        // กันเหนียว: ถ้าเทสต์ตายก่อนถึงบรรทัดลบข้างล่าง shutdown จะเก็บให้
+        register_shutdown_function(function () use ($pdo, $fillTag): void {
+            $pdo->exec("DELETE FROM books WHERE title LIKE '[$fillTag]%'");
+        });
+    }
+
     $listAll = http('GET', "$BASE_URL/admin/books.php?is_reference=0");
     check('REF-B6', preg_match('/href="\?[^"]*is_reference=0[^"]*page=\d+"/', $listAll['body']) === 1,
         'ลิงก์เลขหน้าพาตัวกรองไปด้วย', 'กดหน้า 2 แล้วตัวกรองหลุด');
+
+    // ลบทันที ไม่รอจบไฟล์ — หมวด C ค้นหาต่อจากนี้ ต้องไม่เจอเล่มเติมหน้าปนเข้าไป
+    if ($pageFillIds) {
+        $pdo->exec("DELETE FROM books WHERE id IN (" . implode(',', $pageFillIds) . ")");
+    }
 }
 
 echo "\n── C. ฝั่งสมาชิก: เห็นได้ ค้นเจอ แต่จองไม่ได้ ──\n";
@@ -292,6 +328,68 @@ $rj = json_decode($reserve['body'], true);
 check('REF-C4', is_array($rj) && ($rj['success'] ?? true) === false,
     'ยิง API จองตรง ๆ ถูกปฏิเสธ: ' . mb_substr($rj['message'] ?? '-', 0, 55),
     'ยิง API จองตรงแล้วจองสำเร็จ');
+
+echo "\n── E. เส้นทางแก้ไขจริง (BookService::updateBook) ──\n";
+
+// 🧠 เจตนาของหมวดนี้: หมวด A-D ข้างบนสลับ is_reference ด้วย SQL ตรง ๆ
+//    (UPDATE books SET is_reference = ...) ซึ่ง "ข้ามชั้น Service ที่ผู้ใช้เดินจริง"
+//    ไปทั้งหมด บั๊ก ก.6 — ติ๊กหนังสืออ้างอิงแล้วบันทึก ติ๊กหลุด และราคาปกหายไปด้วย —
+//    จึงรอดสายตามาได้ ทั้งที่ไฟล์นี้มีเทสต์เรื่องหนังสืออ้างอิงอยู่แล้ว 20 กว่าเคส
+//    หมวดนี้บังคับให้เดินทางเดียวกับที่หน้า admin/book_form.php เดิน
+//
+// ⚠️ สร้างหนังสือกับสมาชิกของตัวเองแยกต่างหาก ไม่ยืมของจากหมวด A-D
+//    เพราะ createBorrow() ตรวจ "เพดานการยืม" ก่อนตรวจ "หนังสืออ้างอิง"
+//    ถ้าสมาชิกติดเพดานค้างมาจากหมวดก่อนหน้า E3 จะแดงด้วยเหตุผลผิด
+
+$editBookTitle = "[$TAG] เล่มทดสอบหน้าแก้ไข";
+$editBookId = $bookRepo->create([
+    'title' => $editBookTitle, 'author' => 'ผู้แต่งทดสอบ', 'quantity' => 2,
+]);
+$stmtE = $pdo->prepare("INSERT INTO users (name, email, password, phone, role) VALUES (?, ?, ?, '0800000000', 'member')");
+$stmtE->execute(["[$TAG] สมาชิกหน้าแก้ไข", strtolower($TAG) . '_edit@test.local', $hash]);
+$editMemberId = (int) $pdo->lastInsertId();
+register_shutdown_function(function () use ($pdo, $editBookId, $editMemberId): void {
+    $pdo->exec("DELETE FROM borrows WHERE user_id = $editMemberId OR book_id = $editBookId");
+    $pdo->exec("DELETE FROM reservations WHERE user_id = $editMemberId OR book_id = $editBookId");
+    $pdo->exec("DELETE FROM books WHERE id = $editBookId");
+    $pdo->exec("DELETE FROM users WHERE id = $editMemberId");
+});
+
+// ค่าพื้นฐานที่หน้าแก้ไขส่งมาทุกครั้ง (เลียนแบบ $bookData ใน admin/book_form.php)
+$editBase = [
+    'title' => $editBookTitle, 'author' => 'ผู้แต่งทดสอบ',
+    'quantity' => 2, 'is_visible' => 1,
+];
+
+// E1: ติ๊ก "หนังสืออ้างอิง" ผ่านหน้าแก้ไข แล้วค่าต้องติดจริง
+$bookService->updateBook($editBookId, $editBase + ['is_reference' => 1, 'price' => 250]);
+$rowE = $pdo->query("SELECT is_reference, price FROM books WHERE id = $editBookId")->fetch();
+check('REF-E1', (int) $rowE['is_reference'] === 1,
+    'ติ๊กหนังสืออ้างอิงแล้วบันทึก ค่าติดจริง',
+    'บันทึกขึ้นว่าสำเร็จแต่ติ๊กหลุด — updateBook ไม่ได้ส่ง is_reference ต่อให้ Repository');
+
+// E2: ราคาปกที่กรอกมาพร้อมกันต้องรอดด้วย (หายจากต้นเหตุเดียวกัน)
+check('REF-E2', $rowE['price'] !== null && (float) $rowE['price'] == 250.0,
+    'ราคาปกที่กรอกพร้อมกันถูกเก็บไว้ (' . var_export($rowE['price'], true) . ')',
+    'ราคาปกหายตอนบันทึก ได้ ' . var_export($rowE['price'], true) . ' แทน 250.00');
+
+// E3: ค่าที่ติดต้องมีผลจริง ไม่ใช่แค่ตัวเลขนิ่ง ๆ ใน DB — ด่านยืมต้องทำงานตาม
+//     🧠 ข้อนี้สำคัญกว่า E1 เพราะ is_reference ไม่ใช่ป้ายแสดงผล มันเป็นตัวบล็อกการยืม
+//        ถ้าค่าถูกล้าง = การคุ้มครองถูกปิดเงียบ ๆ ไม่ใช่แค่ข้อมูลเพี้ยน
+try {
+    $borrowService->createBorrow($editMemberId, [$editBookId]);
+    fail('REF-E3', 'ตั้งเป็นหนังสืออ้างอิงผ่านหน้าแก้ไขแล้ว แต่ยังยืมออกจากห้องสมุดได้');
+} catch (Exception $e) {
+    check('REF-E3', str_contains($e->getMessage(), 'อ้างอิง'),
+        'ตั้งผ่านหน้าแก้ไขแล้ว ด่านยืมทำงานตามทันที',
+        'ถูกปฏิเสธด้วยเหตุผลอื่น ไม่ใช่เพราะเป็นหนังสืออ้างอิง: ' . $e->getMessage());
+}
+
+// E4: ปลดติ๊กแล้วต้องกลับเป็น 0 จริง — กันการ "แก้" ด้วยการ hardcode เป็น 1
+$bookService->updateBook($editBookId, $editBase + ['is_reference' => 0, 'price' => 250]);
+check('REF-E4', (int) $pdo->query("SELECT is_reference FROM books WHERE id = $editBookId")->fetchColumn() === 0,
+    'ปลดติ๊กแล้วกลับมาเป็นหนังสือปกติได้',
+    'ปลดติ๊กไม่ได้ ค่าค้างอยู่ที่ 1 — น่าจะมีใคร hardcode ค่าไว้แทนที่จะส่งค่าจริงต่อ');
 
 echo "\n── D. ค่าเริ่มต้นไม่กระทบของเดิม ──\n";
 $refCount = (int) $pdo->query("SELECT COUNT(*) FROM books WHERE is_reference = 1")->fetchColumn();
