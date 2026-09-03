@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `author` VARCHAR(100) NOT NULL COMMENT 'ผู้แต่ง',
                 `isbn` VARCHAR(20) DEFAULT NULL COMMENT 'รหัส ISBN',
                 `call_number` VARCHAR(50) DEFAULT NULL COMMENT 'เลขเรียกหนังสือ — ที่อยู่บนชั้น (รูปแบบอิสระ แต่ละห้องสมุดกำหนดเอง)',
-                `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
+                `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram ของ title+author+isbn+call_number สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
                 `category_id` INT DEFAULT NULL COMMENT 'หมวดหมู่',
                 `description` TEXT DEFAULT NULL COMMENT 'รายละเอียด',
                 `copy_notes` TEXT DEFAULT NULL COMMENT 'บันทึกภายในของเจ้าหน้าที่เกี่ยวกับเล่มแต่ละเล่ม (ข้อความอิสระ ระบบไม่ได้ตามรายเล่มให้)',

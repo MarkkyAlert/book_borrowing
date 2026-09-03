@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS `books` (
     -- 🔎 index ค้นหา: trigram ของ title+author+isbn สร้างโดย PHP (buildSearchTokens())
     --    ⚠️ ถ้า INSERT หนังสือด้วย SQL ตรง ๆ คอลัมน์นี้จะว่าง → ค้นหาเล่มนั้นไม่เจอ
     --       ต้องรัน `php database/rebuild_search_index.php` ตามหลังเสมอ
-    `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
+    `search_tokens` TEXT DEFAULT NULL COMMENT 'trigram ของ title+author+isbn+call_number สำหรับ FULLTEXT (สร้างโดย buildSearchTokens())',
     `category_id` INT DEFAULT NULL COMMENT 'หมวดหมู่',
     `description` TEXT DEFAULT NULL COMMENT 'รายละเอียด',
     `copy_notes` TEXT DEFAULT NULL COMMENT 'บันทึกภายในของเจ้าหน้าที่เกี่ยวกับเล่มแต่ละเล่ม (ข้อความอิสระ ระบบไม่ได้ตามรายเล่มให้)',

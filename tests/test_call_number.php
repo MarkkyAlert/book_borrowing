@@ -263,12 +263,50 @@ $loggedIn = str_contains($in, 'ออกจากระบบ') || str_contains(
 if (!$loggedIn) {
     fail('CN-C0', 'ล็อกอินไม่สำเร็จ — ข้ามหมวด C/D/E/F');
 } else {
-    $idDewey = $mkBook('ค้นด้วยเลขเรียก', '999.99 ค้นเจอ');
-    $html = http('GET', "$BASE_URL/admin/books.php?search=" . urlencode('999.99'));
-    preg_match_all('/book_form\.php\?[^"]*\bid=(\d+)/', $html, $m);
-    check('CN-C1', in_array((string) $idDewey, $m[1] ?? [], true),
-        'พิมพ์เลขเรียกในช่องค้นหาแล้วเจอ — บรรณารักษ์ที่ยืนหน้าชั้นมักถือเลขเรียกมา',
-        '🔴 ค้นด้วยเลขเรียกไม่เจอ');
+    /**
+     * 🔴 ต้องทดสอบ **ทุกรูปแบบเลขเรียก** ไม่ใช่แค่ตัวเลขล้วน
+     *
+     * 🧠 เดิมข้อนี้ทดสอบด้วย '999.99' อย่างเดียวแล้วเขียวมาตลอด
+     *    แต่ '999.99' เป็นทางที่รอดพอดี — buildSearchBooleanQuery() คืน null
+     *    เมื่อสัดส่วนตัวเลข ≥ 70% ระบบจึงตกไปใช้ LIKE ล้วนซึ่งมี call_number อยู่
+     *    ส่วนเลขแบบ LC ('PZ7.R79' ตัวเลข ~43%) ถูกบังคับให้ MATCH กับ search_tokens
+     *    ที่ตอนนั้นยังไม่มี call_number → ได้ 0 แถว → AND ตัดทิ้ง → ค้นไม่เจอ
+     *    ห้องสมุดที่ใช้ LC หรือดิวอี้ผสมอักษรผู้แต่งจะเจอปัญหานี้ทั้งระบบ
+     */
+    $findIds = function (string $term) use ($BASE_URL) {
+        $html = http('GET', "$BASE_URL/admin/books.php?search=" . urlencode($term));
+        preg_match_all('/book_form\.php\?[^"]*\bid=(\d+)/', $html, $mm);
+        return $mm[1] ?? [];
+    };
+
+    $callFormats = [
+        'ตัวเลขล้วน (ดิวอี้)'   => '999.99',
+        'LC (อักษรละตินปน)'     => 'PZ7.R79',
+        'ดิวอี้ + อักษรผู้แต่ง' => '823.914 R79',
+        'เลขไทย'                => 'ก123 น62',
+    ];
+    $notFound   = [];
+    $idDewey    = 0;    // 📌 ข้อ D ใช้เล่มนี้ต่อ — เก็บของแบบแรกไว้
+    $deweyCode  = '';
+    $html       = '';
+    foreach ($callFormats as $label => $code) {
+        $bid = $mkBook('ค้นเลขเรียก ' . $label, $code);
+        $ids = $findIds($code);
+        if ($idDewey === 0) {
+            $idDewey   = $bid;
+            $deweyCode = $code;
+            $html      = http('GET', "$BASE_URL/admin/books.php?search=" . urlencode($code));
+        }
+        if (!in_array((string) $bid, $ids, true)) {
+            $notFound[] = "{$label} ({$code})";
+        }
+    }
+    check('CN-C1', $notFound === [],
+        'ค้นเจอทุกรูปแบบเลขเรียกที่ห้องสมุดจริงใช้ ' . count($callFormats) . ' แบบ '
+            . '— บรรณารักษ์ที่ยืนหน้าชั้นมักถือเลขเรียกมา',
+        '🔴 ค้นไม่เจอ: ' . implode(' · ', $notFound)
+            . "\n       (ถ้าล้มเฉพาะแบบที่มีอักษรละติน ให้ดู makeSearchTokens() ว่ารวม call_number หรือยัง"
+            . "\n        และรัน database/rebuild_search_index.php --all)");
 
     // C2 — เล่มที่ไม่มีเลขเรียกต้องไม่หายจากรายการ
     $idNone = $mkBook('ไม่มีเลขเรียก', null);
@@ -277,6 +315,68 @@ if (!$loggedIn) {
     check('CN-C2', in_array((string) $idNone, $m2[1] ?? [], true),
         'เล่มที่ยังไม่ได้ลงเลขเรียกยังอยู่ในรายการตามปกติ',
         '🔴 เล่มที่ไม่มีเลขเรียกหายไปจากรายการ');
+
+    /**
+     * 🔴 กัน regression — การค้นภาษาไทยต้องไม่กว้างขึ้น
+     *
+     * 🧠 ทางแก้ที่ง่ายกว่าคือเปลี่ยน AND เป็น OR ใน buildListQuery()
+     *    ซึ่งจะทำให้ค้นเลขเรียกเจอเหมือนกัน แต่ผลการค้น **ทั้งระบบ** จะกว้างขึ้น
+     *    กลับไปเหมือนก่อนมี FULLTEXT (trigram ถูกใส่มาเพื่อความแม่นของภาษาไทย)
+     *    ข้อนี้เฝ้าไว้ว่าถ้าใครแก้เป็น OR ในอนาคต จะเห็นทันที
+     */
+    $idThai   = $mkBook('หนังสือชื่อไทยเฉพาะ ' . $uniq, null);
+    $hitExact = $findIds('หนังสือชื่อไทยเฉพาะ ' . $uniq);
+
+    /**
+     * 🔴 ส่วนนี้ตรวจที่ **ซอร์สโค้ด** ไม่ใช่พฤติกรรม — จงใจ
+     *
+     * 🧠 ลองทำเป็นเทสต์เชิงพฤติกรรมก่อนแล้วใช้ไม่ได้จริง: เปลี่ยน AND เป็น OR
+     *    แล้วรันด้วยคำไทยจริง (ประวัติ · วิทยา · ความรัก) ได้จำนวนผลลัพธ์ **เท่ากันทุกคำ**
+     *    เพราะบนข้อมูลชุดนี้ trigram กับ substring บังเอิญเห็นตรงกัน
+     *    เทสต์ที่ผ่านทั้งสองแบบคือเทสต์ที่ไม่ได้ตรวจอะไร จึงเปลี่ยนมาตรวจโครงสร้างแทน
+     *    (ผลต่างจะโผล่ก็ต่อเมื่อข้อมูลลูกค้าโตกว่านี้ — ตอนนั้นสายเกินไปแล้ว)
+     */
+    $repoSrc  = (string) file_get_contents(__DIR__ . '/../app/Repositories/BookRepository.php');
+    $joinsAnd = (bool) preg_match("/implode\(\s*' AND '\s*,\s*\\\$where\s*\)/", $repoSrc);
+
+    check('CN-C3', in_array((string) $idThai, $hitExact, true) && $joinsAnd,
+        'ค้นไทยคำเต็มยังเจอ (' . count($hitExact) . ' รายการ) '
+            . 'และ buildListQuery() ยังรวมเงื่อนไขด้วย AND — ความแม่นของการค้นไทยไม่ถูกลดทอน',
+        '🔴 ' . (!$joinsAnd
+            ? "buildListQuery() ไม่ได้รวม \$where ด้วย AND แล้ว\n"
+              . "       ถ้าเปลี่ยนเป็น OR เพื่อให้ค้นเลขเรียกเจอ = แก้บั๊กเล็กแล้วทำของใหญ่พัง\n"
+              . "       ผลการค้นภาษาไทยทั้งระบบจะกว้างขึ้นกลับไปเหมือนก่อนมี FULLTEXT\n"
+              . "       ทางที่ถูกคือใส่ call_number ลง makeSearchTokens() แล้ว rebuild"
+            : 'ค้นไทยคำเต็มไม่เจอ — ได้ ' . count($hitExact) . ' รายการ'));
+
+    /**
+     * 🔴 ทุกเล่มที่มีเลขเรียก ต้องมี trigram ของเลขนั้นใน search_tokens
+     *
+     * 🧠 จับกรณีลูกค้าอัปเกรดโค้ดแล้ว migration ไม่ได้รัน (หรือรันไม่ครบ)
+     *    search_tokens เป็นค่าที่คำนวณไว้ตอนบันทึก ไม่ได้คำนวณใหม่ตอนค้นหา
+     *    ถ้าไม่ rebuild หนังสือเก่าจะยังค้นด้วยเลขเรียกไม่เจอ ทั้งที่โค้ดถูกแล้ว
+     */
+    $stale = (int) $pdo->query("
+        SELECT COUNT(*) FROM books
+        WHERE call_number IS NOT NULL AND call_number <> ''
+          AND (search_tokens IS NULL OR search_tokens = '')
+    ")->fetchColumn();
+    $sample = $pdo->query("
+        SELECT call_number, search_tokens FROM books
+        WHERE call_number IS NOT NULL AND call_number <> '' LIMIT 30
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    $missingTok = 0;
+    foreach ($sample as $row) {
+        $first = explode(' ', buildSearchTokens($row['call_number']))[0] ?? '';
+        if ($first !== '' && !str_contains((string) $row['search_tokens'], $first)) {
+            $missingTok++;
+        }
+    }
+    check('CN-C4', $stale === 0 && $missingTok === 0,
+        'หนังสือที่มีเลขเรียกทุกเล่มมี trigram ของเลขนั้นใน search_tokens แล้ว '
+            . '(สุ่มตรวจ ' . count($sample) . ' เล่ม)',
+        "🔴 tokens ยังไม่ได้สร้างใหม่: ว่างเปล่า {$stale} เล่ม · ขาด trigram ของเลขเรียก {$missingTok} เล่ม\n"
+            . '       ต้องรัน `php database/migrate.php` หรือ `php database/rebuild_search_index.php --all`');
 
     // ============================================================
     // D. หน้าจอที่คนใช้เดินไปหยิบหนังสือ
@@ -288,14 +388,14 @@ if (!$loggedIn) {
 
     // 🖥️ หน้ารายละเอียดหนังสือ — จุดที่สมาชิกเห็นก่อนเดินไปชั้น
     $detail = http('GET', "$BASE_URL/book.php?id={$idDewey}");
-    str_contains($detail, '999.99 ค้นเจอ') ? $shown[] = 'หน้ารายละเอียด' : $missing[] = 'หน้ารายละเอียด';
+    str_contains($detail, $deweyCode) ? $shown[] = 'หน้ารายละเอียด' : $missing[] = 'หน้ารายละเอียด';
 
     // 🖥️ ตารางจัดการหนังสือ
-    str_contains($html, '999.99 ค้นเจอ') ? $shown[] = 'ตารางจัดการ' : $missing[] = 'ตารางจัดการ';
+    str_contains($html, $deweyCode) ? $shown[] = 'ตารางจัดการ' : $missing[] = 'ตารางจัดการ';
 
     // 🖥️ หน้าพิมพ์ฉลาก
     $labels = http('GET', "$BASE_URL/admin/book_labels.php");
-    str_contains($labels, '999.99 ค้นเจอ') ? $shown[] = 'หน้าพิมพ์ฉลาก' : $missing[] = 'หน้าพิมพ์ฉลาก';
+    str_contains($labels, $deweyCode) ? $shown[] = 'หน้าพิมพ์ฉลาก' : $missing[] = 'หน้าพิมพ์ฉลาก';
 
     check('CN-D1', $missing === [],
         'แสดงเลขเรียกครบทุกหน้าที่ต้องใช้ (' . implode(' · ', $shown) . ')',

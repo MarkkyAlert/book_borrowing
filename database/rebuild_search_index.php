@@ -61,7 +61,7 @@ function rebuildTokens(PDO $pdo, bool $all, bool $quiet): int
         //    เพราะ UPDATE ทำให้เงื่อนไข WHERE เปลี่ยน → OFFSET จะข้ามแถวไป
         $glue = $where === '' ? 'WHERE' : 'AND';
         $stmt = $pdo->prepare("
-            SELECT id, title, author, isbn
+            SELECT id, title, author, isbn, call_number
             FROM books
             {$where} {$glue} id > ?
             ORDER BY id
@@ -75,8 +75,10 @@ function rebuildTokens(PDO $pdo, bool $all, bool $quiet): int
 
         $pdo->beginTransaction();
         foreach ($rows as $row) {
-            // 📝 รวม 3 คอลัมน์ที่การค้นหาครอบคลุม (ตรงกับเงื่อนไข LIKE ใน BookRepository)
-            $source = trim($row['title'] . ' ' . $row['author'] . ' ' . ($row['isbn'] ?? ''));
+            // 📝 รวม 4 คอลัมน์ที่การค้นหาครอบคลุม (ตรงกับ makeSearchTokens() ใน BookRepository)
+            //    🔴 ต้องมี call_number ด้วย ไม่งั้นค้นเลขเรียกแบบ LC (PZ7.R79) ไม่เจอ
+            $source = trim($row['title'] . ' ' . $row['author'] . ' '
+                . ($row['isbn'] ?? '') . ' ' . ($row['call_number'] ?? ''));
             $update->execute([buildSearchTokens($source), $row['id']]);
             $lastId = (int) $row['id'];
             $done++;
