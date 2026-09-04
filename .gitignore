@@ -34,4 +34,9 @@ tests/fixtures/.school_seed.json
 # ผลรันชุดทดสอบ — สร้างใหม่ทุกครั้งที่รัน ไม่ใช่ของที่ลูกค้าต้องได้
 tests/logs/full_suite_*.json
 tests/logs/qa_run_*.jsonl
+# ⚠️ cookie jar ของ curl — ข้างในมี session token ที่ใช้ได้จริง ห้าม commit เด็ดขาด
 tests/logs/cookie_*.txt
+
+# ยกเว้นไฟล์เดียว: tests/report.md ตาราง Artifacts อ้างไฟล์นี้เป็นหลักฐานของรายงาน
+# ถ้าลบออก เอกสารที่ส่งให้ลูกค้าจะชี้ไปยังไฟล์ที่ไม่มีอยู่
+!tests/logs/qa_run_2026-02-13_132955.jsonl
