@@ -58,8 +58,15 @@ $overdueList = $dashboardService->getOverdueList(10);           // 10 ราย�
 //    เอามา 12 รายการพอดีกับ 4 คอลัมน์ × 3 แถว ที่เหลือให้กดไปดูใบเต็มในหน้ารายงาน
 $dueSoonList = $dashboardService->getDueSoonList(12);
 
-// 📦 หนังสือ stock ใกล้หมด (available <= threshold) — แจ้งเตือนให้สั่งซื้อเพิ่ม
-$lowStockBooks = $dashboardService->getLowStockBooks(2, 5);
+// 📦 หนังสือที่ถูกยืมหมด (available = 0) — หัวการ์ดข้างล่างพูดว่า "ถูกยืมหมด"
+//    🔴 [UAT รอบ 2 บั๊ก B] เดิมใช้ threshold = 2 ซึ่งคือ "ใกล้หมด" ไม่ใช่ "หมด"
+//       ทำให้หัวข้อกับข้อมูลพูดคนละเรื่อง (ของจริงตอนเจอ: หมด 7 เล่ม แต่ ≤2 มี 186 เล่ม)
+//       ปรับ threshold ให้ตรงกับหัวข้อ — 186 เล่มไม่ใช่ข้อมูลที่บรรณารักษ์ทำอะไรต่อได้
+$lowStockBooks = $dashboardService->getLowStockBooks(0, 5);
+
+// 🔢 จำนวน "จริง" สำหรับป้ายบนการ์ด — ห้ามใช้ count($lowStockBooks)
+//    เพราะลิสต์ข้างบนถูก LIMIT 5 ป้ายจึงเกิน 5 ไม่ได้เลย (บั๊กเดิม: บอก 5 ตลอด ทั้งที่มี 7)
+$outOfStockTotal = $dashboardService->getLowStockCount(0);
 
 // 💰 รายการค้างชำระ — ใช้แสดงบน dashboard + PDF export
 $unpaidFinesList = $dashboardService->getUnpaidFinesList(10);
@@ -516,10 +523,13 @@ require_once __DIR__ . '/header.php';
         <h5 class="font-bold text-amber-800 flex items-center">
             <i class="bi bi-exclamation-triangle text-amber-500 mr-2"></i>
             หนังสือที่ถูกยืมหมด
-            <span class="ml-2 px-2 py-0.5 bg-amber-500 text-white text-xs rounded-full"><?= count($lowStockBooks) ?></span>
+            <span class="ml-2 px-2 py-0.5 bg-amber-500 text-white text-xs rounded-full"><?= $outOfStockTotal ?></span>
         </h5>
-        <a href="books.php?filter=low_stock" class="text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-3 py-1 rounded-full transition-colors">
-            ดูทั้งหมด
+        <?php // 🔴 [UAT รอบ 2 บั๊ก C] เดิมส่ง ?filter=low_stock แต่ books.php อ่าน $status
+              //    ค่าจึงตกพื้น กด "ดูทั้งหมด" แล้วได้หนังสือครบทั้ง 405 เล่ม ไม่กรองอะไรเลย
+              //    (borrows.php ใช้ filter= จริง — พลาดเฉพาะลิงก์นี้ที่ชี้ไปคนละหน้า) ?>
+        <a href="books.php?status=out_of_stock" class="text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-3 py-1 rounded-full transition-colors">
+            ดูทั้งหมด<?= $outOfStockTotal > count($lowStockBooks) ? ' (' . $outOfStockTotal . ' เล่ม)' : '' ?>
         </a>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -809,7 +819,8 @@ function exportDashboardPDF() {
             
             <?php if (!empty($lowStockBooks)): ?>
             <div class="section">
-                <div class="section-title" style="color:#f97316;">📦 หนังสือที่ถูกยืมหมด</div>
+                <?php // แสดงแค่ 5 อันดับแรก — บอกยอดจริงไว้ด้วย ไม่งั้นใบพิมพ์จะรายงานต่ำกว่าความจริง ?>
+                <div class="section-title" style="color:#f97316;">📦 หนังสือที่ถูกยืมหมด<?= $outOfStockTotal > count($lowStockBooks) ? ' (แสดง ' . count($lowStockBooks) . ' จาก ' . $outOfStockTotal . ' เล่ม)' : '' ?></div>
                 <table>
                     <tr><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>หมวดหมู่</th><th>คงเหลือ</th></tr>
                     <?php foreach ($lowStockBooks as $book): ?>

@@ -219,9 +219,14 @@ const fpConfig = {
     maxDate: 'today'  // ไม่อนุญาตเลือกวันที่เกินวันนี้
 };
 
+// 🔴 [UAT รอบ 2 บั๊ก A] defaultDate ต้องเป็นรูปแบบเดียวกับ dateFormat ('d/m/Y')
+//    เดิมส่ง $startDate ที่เป็น ISO ('2026-09-01') เข้าไป flatpickr เลยอ่านด้วยแม่แบบ d/m/Y
+//    แล้วได้วันที่มั่ว ('20/06/2026') มาเขียนทับค่าที่เซิร์ฟเวอร์ใส่มาถูกอยู่แล้ว
+//    ผลคือช่องบนจอบอกคนละช่วงกับที่กรองจริง — ข้อมูลถูก แต่ป้ายโกหก
+//    ใช้ $startDateDisplay (d/m/Y) ซึ่งเป็นตัวเดียวกับที่ใส่ใน value= ของ input
 const startPicker = flatpickr('#start_date_picker', {
     ...fpConfig,
-    defaultDate: '<?= $startDate ?>',
+    defaultDate: '<?= $startDateDisplay ?>',
     onChange: function(selectedDates, dateStr) {
         document.getElementById('start_date_hidden').value = formatDateISO(selectedDates[0]);
     }
@@ -229,7 +234,7 @@ const startPicker = flatpickr('#start_date_picker', {
 
 const endPicker = flatpickr('#end_date_picker', {
     ...fpConfig,
-    defaultDate: '<?= $endDate ?>',
+    defaultDate: '<?= $endDateDisplay ?>',   // เหตุผลเดียวกับ startPicker ข้างบน
     onChange: function(selectedDates, dateStr) {
         document.getElementById('end_date_hidden').value = formatDateISO(selectedDates[0]);
     }

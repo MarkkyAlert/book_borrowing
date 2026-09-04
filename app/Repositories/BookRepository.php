@@ -420,7 +420,11 @@ class BookRepository
         if (!empty($filters['status'])) {
             match ($filters['status']) {
                 'available'    => $where[] = "b.available > 0",           // ยังมี stock
-                'out_of_stock' => $where[] = "b.available = 0",           // หมด stock
+                // 🧠 quantity > 0 = เคยมีเล่มจริง แต่ตอนนี้ออกไปหมด
+                //    เล่มที่ quantity = 0 คือ "ยังไม่เคยมีสต็อกเลย" คนละสถานะกับ "ถูกยืมหมด"
+                //    ต้องตรงกับ findLowStock()/countLowStock() ไม่งั้นป้ายบนการ์ดหน้าภาพรวม
+                //    กับหน้าที่ "ดูทั้งหมด" พาไป จะบอกคนละจำนวน (เจอตอน UAT รอบ 2: 7 vs 8)
+                'out_of_stock' => $where[] = "b.available = 0 AND b.quantity > 0", // ถูกยืมหมด
                 'low_stock'    => $where[] = "b.available > 0 AND b.available <= 2", // ใกล้หมด
                 'borrowed'     => $where[] = "b.available < b.quantity",  // มีคนยืมอยู่
                 default        => null, // ค่าอื่น → ไม่เพิ่มเงื่อนไข (ปลอดภัย)
@@ -991,6 +995,32 @@ class BookRepository
         $stmt->execute([$threshold, $limit]);
         // 📤 คืน array ของหนังสือที่ใกล้หมด stock → ใช้แสดงใน Dashboard
         return $stmt->fetchAll();
+    }
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: นับจำนวนจริงของหนังสือที่ stock ถึงเกณฑ์ (ไม่จำกัดจำนวน)
+     * ==========================================================================
+     *
+     * 🧠 ทำไมต้องมีคู่กับ findLowStock():
+     *    findLowStock() มี LIMIT เพราะใช้โชว์บนการ์ด แต่ "จำนวนที่โชว์" กับ
+     *    "จำนวนที่มีจริง" เป็นคนละเรื่อง หน้าภาพรวมเคยเอา count() ของลิสต์ที่
+     *    ถูก LIMIT แล้วมาแปะเป็นป้ายตัวเลข → ป้ายเกิน LIMIT ไม่ได้เลย
+     *    (เจอตอน UAT รอบ 2: ป้ายบอก 5 ตลอด ทั้งที่ของจริง 7 เล่ม)
+     *
+     * ⚠️ เงื่อนไขต้องเหมือน findLowStock() เป๊ะ ไม่งั้นป้ายกับลิสต์จะพูดคนละเรื่อง
+     *
+     * 📥 Input: @param int $threshold เหลือไม่เกินกี่เล่มถึงนับ (0 = ถูกยืมหมด)
+     * 📤 Output: @return int จำนวนเล่มทั้งหมดที่เข้าเกณฑ์
+     * ✅ Use case: DashboardService::getLowStockCount() → ป้ายบนการ์ดหน้าภาพรวม
+     */
+    public function countLowStock(int $threshold = 2): int
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM books WHERE available <= ? AND quantity > 0"
+        );
+        $stmt->execute([$threshold]);
+        return (int) $stmt->fetchColumn();
     }
 
     /**

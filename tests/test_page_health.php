@@ -291,6 +291,115 @@ check('PAGE-D1', !$promises,
     'ไม่มีหน้าไหนบอกผู้ใช้ให้รออีเมล',
     "🔴 พบคำสัญญาที่ระบบทำไม่ได้:\n       " . implode("\n       ", $promises));
 
+
+// ============================================================
+echo "\n── E. ตัวเลขและลิงก์บนหน้าจอต้องพูดตรงกับข้อมูลจริง (จาก UAT รอบ 2) ──\n";
+// ============================================================
+// 🧠 ที่มา: เดิน UAT ด้วยเบราว์เซอร์แล้วเจอ 3 อย่างที่ชุดทดสอบ 1,025 เคสมองไม่เห็น
+//    เพราะทุกเคสยิง Service/Repository ตรง ไม่มีใครอ่าน "สิ่งที่โผล่บนจอ"
+//    ทั้งสามข้อคือ "ข้อมูลถูก แต่หน้าจอบอกผิด" ซึ่งเทสต์ระดับ Service จับไม่ได้เลย
+
+// ── E1: ช่องวันที่ในหน้ารายงาน ต้องโชว์ช่วงเดียวกับที่กรองจริง ──
+//    บั๊กเดิม: flatpickr ตั้ง dateFormat='d/m/Y' แต่รับ defaultDate เป็น ISO
+//    → อ่านเพี้ยนเป็น '20/06/2026' มาเขียนทับค่าที่เซิร์ฟเวอร์ใส่มาถูกแล้ว
+//    ⚠️ เทสต์นี้รัน JS ไม่ได้ จึงตรวจที่ "ค่าที่ส่งให้ปฏิทิน" แทน — ถ้ารูปแบบตรงกับ
+//       dateFormat ปฏิทินจะอ่านถูก (แบบเดียวกับ CN-C3 ที่ตรวจระดับซอร์ส)
+$reportTabs = ['unpaid', 'revenue', 'books', 'overdue', 'due_soon', 'members', 'dormant', 'borrows'];
+$badFormat = [];
+$mismatch  = [];
+foreach ($reportTabs as $tab) {
+    $html = http('GET', "$BASE_URL/admin/reports.php?report={$tab}");
+    preg_match_all("/defaultDate: '([^']*)'/", $html, $dd);
+    preg_match('/name="start_date"[^>]*value="([^"]*)"/', $html, $hs);
+    preg_match('/name="end_date"[^>]*value="([^"]*)"/', $html, $he);
+    $hidden = [$hs[1] ?? '', $he[1] ?? ''];
+    foreach (($dd[1] ?? []) as $i => $v) {
+        // ต้องเป็น d/m/Y ให้ตรงกับ dateFormat ที่ตั้งไว้
+        if (!preg_match('#^\d{2}/\d{2}/\d{4}$#', $v)) {
+            $badFormat[] = "{$tab}: defaultDate='{$v}' (ต้องเป็น dd/mm/yyyy)";
+            continue;
+        }
+        // แปลงกลับเป็น ISO แล้วต้องตรงกับ hidden ที่ส่งไปกรองจริง
+        [$d, $m, $y] = explode('/', $v);
+        if (($hidden[$i] ?? '') !== "$y-$m-$d") {
+            $mismatch[] = "{$tab}: ช่องโชว์ {$v} แต่กรองจริง " . ($hidden[$i] ?? '?');
+        }
+    }
+}
+check('PAGE-E1', $badFormat === [],
+    'ค่าที่ส่งให้ปฏิทินเป็นรูปแบบ dd/mm/yyyy ตรงกับ dateFormat ทุกแท็บ (' . count($reportTabs) . ' แท็บ)',
+    '🔴 รูปแบบไม่ตรงกับ dateFormat จะอ่านเพี้ยน: ' . implode(' · ', $badFormat));
+
+check('PAGE-E2', $mismatch === [],
+    'ช่วงวันที่ที่คนเห็น = ช่วงที่ส่งไปกรองจริง ทุกแท็บ',
+    '🔴 ช่องวันที่โกหก: ' . implode(' · ', $mismatch));
+
+// ── E3: ป้ายตัวเลขบนการ์ด ต้องเป็นจำนวนจริง ไม่ใช่จำนวนที่โชว์ ──
+//    บั๊กเดิม: หน้าภาพรวมแปะ count() ของลิสต์ที่ถูก LIMIT 5 → ป้ายเกิน 5 ไม่ได้เลย
+$dash = http('GET', "$BASE_URL/admin/");
+$realOutOfStock = (int) $pdo->query(
+    "SELECT COUNT(*) FROM books WHERE available = 0 AND quantity > 0"
+)->fetchColumn();
+$badgeOk = false;
+if (preg_match('/หนังสือที่ถูกยืมหมด.*?>(\d+)</su', $dash, $bm)) {
+    $badgeOk = ((int) $bm[1] === $realOutOfStock);
+    $badgeVal = $bm[1];
+} else {
+    $badgeVal = '(ไม่พบการ์ด)';
+    // ไม่มีเล่มไหนถูกยืมหมดเลย → การ์ดไม่ขึ้น ถือว่าถูกต้อง
+    $badgeOk = ($realOutOfStock === 0);
+}
+check('PAGE-E3', $badgeOk,
+    "ป้ายบนการ์ด \"หนังสือที่ถูกยืมหมด\" = จำนวนจริง ({$realOutOfStock} เล่ม)",
+    "🔴 ป้ายบอก {$badgeVal} แต่ของจริง {$realOutOfStock} เล่ม — น่าจะเอา count() ของลิสต์ที่ถูก LIMIT มาแปะ");
+
+// ── E4: ลิงก์ทุกอันบนหน้าภาพรวมที่มีพารามิเตอร์ ต้องกรองได้จริง ──
+//    🛡️ ยามกันซ้ำรอย — บั๊กเดิมคือ Dashboard ส่ง ?filter=low_stock แต่ books.php อ่าน $status
+//       ค่าตกพื้น กด "ดูทั้งหมด" แล้วได้หนังสือครบทั้งกอง (borrows.php ใช้ filter= จริง
+//       ทั้งสองหน้าใช้ชื่อพารามิเตอร์ต่างกัน แล้วไม่มีใครเช็ค)
+//       เคสนี้จับ "ประเภท" ของบั๊ก ไม่ใช่จับแค่ลิงก์เดียว
+// 🧠 วัดด้วย "ขนาดของผลลัพธ์ทั้งชุด" ไม่ใช่จำนวนแถวในหน้าแรก
+//    เพราะทุกหน้าแบ่งหน้าละ 20 แถวเท่ากันหมด กรองหรือไม่กรองก็ได้ 20 แถวเท่ากัน
+//    (ตัวตรวจรุ่นแรกของเคสนี้นับ <tr> แล้วฟ้อง borrows.php?filter=overdue ผิด ๆ)
+//    ใช้เลขหน้าสุดท้ายจากแถบแบ่งหน้า ถ้าไม่มีแถบก็ถอยไปนับแถวแทน
+//    ⚠️ href ในหน้าถูก escape เป็น &amp;page=2 — regex ที่บังคับว่าต้องมี ? หรือ &
+//       นำหน้าจะไม่แมตช์ แล้วตกไปนับแถวเงียบ ๆ จนยามนี้กลายเป็นยามหลับ (เจอตอนทดสอบว่ามันแดงได้ไหม)
+$sizeOf = function (string $url) {
+    $html  = http('GET', $url);
+    $pages = preg_match_all('/page=(\d+)/', $html, $pm) ? (int) max($pm[1]) : 1;
+    $rows  = preg_match_all('/<tr[\s>]/', $html);
+    return ['pages' => $pages, 'rows' => $rows];
+};
+preg_match_all('#href="((?:books|borrows|members|payments|reservations)\.php\?[^"]+)"#', $dash, $lm);
+$deadLinks = [];
+$checked   = 0;
+foreach (array_unique($lm[1] ?? []) as $rel) {
+    $page = strtok($rel, '?');
+    $filtered   = $sizeOf("$BASE_URL/admin/" . html_entity_decode($rel));
+    $unfiltered = $sizeOf("$BASE_URL/admin/{$page}");
+    $checked++;
+    // กรองแล้วต้องได้ผลลัพธ์ "เล็กลง" — เท่าเดิมทุกมิติ = พารามิเตอร์ไม่มีผล
+    // เทียบจำนวนหน้าก่อน (แม่นกว่า) ถ้าไม่กรองก็มีหน้าเดียวอยู่แล้วค่อยเทียบจำนวนแถว
+    $same = $unfiltered['pages'] > 1
+        ? ($filtered['pages'] === $unfiltered['pages'] && $filtered['rows'] === $unfiltered['rows'])
+        : ($unfiltered['rows'] > 5 && $filtered['rows'] === $unfiltered['rows']);
+    if ($same) {
+        $deadLinks[] = $rel . " (ไม่กรอง {$unfiltered['pages']} หน้า/{$unfiltered['rows']} แถว → กรองแล้วได้เท่าเดิม)";
+    }
+}
+check('PAGE-E4', $deadLinks === [],
+    "ลิงก์บนหน้าภาพรวมกรองได้จริงทุกอัน ({$checked} ลิงก์)",
+    '🔴 ลิงก์ที่กดแล้วไม่กรองอะไรเลย (พารามิเตอร์ผิดชื่อ?): ' . implode(' · ', $deadLinks));
+
+// ── E5: การ์ดกับหน้าที่ "ดูทั้งหมด" พาไป ต้องบอกจำนวนเท่ากัน ──
+//    เจอตอนแก้ E3/E4: ป้ายบอก 7 แต่หน้าปลายทางได้ 8 เพราะนิยาม "หมด" ไม่ตรงกัน
+//    (การ์ดตัดเล่มที่ quantity=0 ออก แต่ตัวกรองในหน้าหนังสือไม่ตัด)
+$outPage = http('GET', "$BASE_URL/admin/books.php?status=out_of_stock");
+$outRows = preg_match_all('/book_form\.php\?id=/', $outPage);
+check('PAGE-E5', $outRows === $realOutOfStock,
+    "หน้า \"หนังสือหมด\" แสดง {$outRows} เล่ม เท่ากับป้ายบนการ์ด",
+    "🔴 การ์ดบอก {$realOutOfStock} แต่หน้าปลายทางแสดง {$outRows} — นิยาม \"หมด\" ของสองที่ไม่ตรงกัน");
+
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
