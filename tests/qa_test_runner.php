@@ -31,7 +31,7 @@ if (!is_dir(__DIR__ . '/logs')) {
 $TEST_USER_EMAIL = "qa_user_{$TIMESTAMP}@test.com";
 $TEST_USER_PASSWORD = 'Test123456';
 $ADMIN_EMAIL = 'admin@library.com';
-$ADMIN_PASSWORD = $argv[1] ?? 'password';
+$ADMIN_PASSWORD = $argv[1] ?? '123456';
 
 // State
 $userSession = null;

@@ -59,7 +59,7 @@ function curlGet($url)
 //    ซึ่งไม่มีอยู่จริงในระบบ → "Login Failed" ทุกครั้ง เทสต์นี้เลยไม่เคยทำงานเลยสักรอบ
 //    เปลี่ยนมาใช้บัญชี admin จริง และรับรหัสผ่านทาง argument แบบเดียวกับชุดอื่น
 $adminEmail    = ADMIN_EMAIL;
-$adminPassword = $argv[1] ?? 'password';
+$adminPassword = $argv[1] ?? '123456';
 
 echo "1. Logging in as Admin...\n";
 

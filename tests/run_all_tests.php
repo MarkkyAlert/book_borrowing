@@ -20,7 +20,7 @@ if (php_sapi_name() !== 'cli') {
     exit('CLI only');
 }
 
-$adminPassword = $argv[1] ?? 'password';
+$adminPassword = $argv[1] ?? '123456';
 $startTime = microtime(true);
 
 echo "\n";
@@ -37,6 +37,67 @@ echo "║  Suite 3:  Gap Analysis 8 ชุด (SQLi/XSS/integrity/…)     ║\n
 echo "║  Suite 3: HTTP Integration Tests (curl via Apache)      ║\n";
 echo "║  Suite 4: Upload Security Tests (real files)            ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
+
+// ============================================================
+// 🛡️ ด่านตรวจก่อนเริ่ม: ล็อกอิน admin ได้จริงไหม
+// ============================================================
+// 🧠 ทำไมต้องมี: ถ้ารหัสผ่าน admin ไม่ตรง ชุดที่ต้องล็อกอินจะแดง "พร้อมกันทั้งหมด"
+//    เกิดขึ้นจริงมาแล้ว — 60 เคสแดงรวด ยอดรวมหดจาก 1025 เหลือ 857
+//    อ่านแล้วเหมือน regression ร้ายแรง ทั้งที่โค้ดไม่ได้พังสักบรรทัด
+//    บรรทัด "❌ login ไม่สำเร็จ" ที่บอกความจริงถูกกลบอยู่กลางผลลัพธ์หลายพันบรรทัด
+//    → ล้มตั้งแต่ต้นแล้วบอกวิธีแก้ ดีกว่าปล่อยให้แดงเป็นพรวนแล้วให้คนไปเดาเอง
+//
+// ⚠️ ไม่บล็อกกรณี Apache ไม่ได้เปิด — กรณีนั้นมีทางเดิมรองรับอยู่แล้ว (ขึ้น SKIPPED)
+//    ด่านนี้จับเฉพาะ "Apache ตอบ แต่ล็อกอินไม่ผ่าน" ซึ่งเป็นคนละเรื่องกัน
+$preJar = tempnam(sys_get_temp_dir(), 'bbpre');
+$preFetch = function (string $url, array $post = []) use ($preJar): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_COOKIEJAR      => $preJar,
+        CURLOPT_COOKIEFILE     => $preJar,
+    ]);
+    if ($post) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+    }
+    $body = (string) curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['body' => $body, 'code' => $code];
+};
+
+$loginUrl = rtrim(APP_URL, '/') . '/login.php';
+$pre = $preFetch($loginUrl);
+if ($pre['code'] === 0) {
+    echo "\n  \033[33m⏭  Apache ไม่ตอบที่ " . rtrim(APP_URL, '/') . " — ชุดที่ต้องใช้ HTTP จะถูกข้าม\033[0m\n";
+} else {
+    preg_match('/name="csrf_token" value="([^"]+)"/', $pre['body'], $preTok);
+    $pre = $preFetch($loginUrl, [
+        'csrf_token' => $preTok[1] ?? '',
+        'email'      => ADMIN_EMAIL,
+        'password'   => $adminPassword,
+    ]);
+    // ตรวจแบบเดียวกับ tests/test_upload_security.php — หน้าแอดมินต้องโผล่ขึ้นมา
+    if (!str_contains($pre['body'], 'Dashboard') && !str_contains($pre['body'], 'ผู้ดูแลระบบ')) {
+        @unlink($preJar);
+        echo "\n\033[1;31m";
+        echo "╔══════════════════════════════════════════════════════════╗\n";
+        echo "║  หยุด: ล็อกอิน admin ไม่ผ่าน — ยังไม่ได้รันเทสต์สักชุด  ║\n";
+        echo "╚══════════════════════════════════════════════════════════╝\033[0m\n";
+        echo "  บัญชีที่ลอง : " . ADMIN_EMAIL . "\n";
+        echo "  รหัสที่ใช้   : " . (isset($argv[1]) ? 'ที่ส่งมาเป็น argument' : "ค่าปริยาย '123456' (ไม่ได้ส่ง argument มา)") . "\n\n";
+        echo "  ถ้ารันต่อ ชุดที่ต้องล็อกอินจะแดงทั้งหมดประมาณ 60 เคส\n";
+        echo "  ซึ่งอ่านแล้วเหมือนโค้ดพัง ทั้งที่แค่รหัสผ่านไม่ตรง\n\n";
+        echo "  \033[1mวิธีแก้ — ส่งรหัสผ่าน admin เป็น argument ตัวแรก:\033[0m\n";
+        echo "    php tests/run_all_tests.php <รหัสผ่าน>\n\n";
+        exit(2);
+    }
+    echo "\n  ✅ ล็อกอิน admin ผ่าน (" . ADMIN_EMAIL . ")\n";
+}
+@unlink($preJar);
 
 $suiteResults = [];
 

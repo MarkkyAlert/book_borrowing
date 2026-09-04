@@ -139,15 +139,27 @@ function analyseTables(string $html): array
             $lastHeader = $names ? (string) end($names) : '';
         }
 
-        // เซลล์สุดท้ายของแถวแรกมีปุ่ม/ลิงก์ที่กดแล้วเกิดอะไรขึ้นไหม
+        // เซลล์สุดท้ายมีปุ่ม/ลิงก์ที่กดแล้วเกิดอะไรขึ้นไหม
+        //
+        // 🔴 [บทเรียน] เดิมดู "แถวแรกแถวเดียว" แล้วตัดสินทั้งตาราง
+        //    ซึ่งพังทันทีที่แถวแรกบังเอิญเป็นรายการที่ไม่มีปุ่ม เช่นหน้ายืม-คืน
+        //    ที่แถวแรกเป็น "คืนแล้ว" → คอลัมน์ปุ่มว่าง → ตัดสินว่าตารางไม่มีปุ่มเลย
+        //    → MOB-A2/A3 แดง ทั้งที่ CSS กับ HTML ถูกต้องทุกอย่าง
+        //    (เจอจริงหลัง UAT ไปกดคืนหนังสือรายการบนสุด)
+        //    ความจริงคือ "ตารางนี้มีคอลัมน์ปุ่มไหม" ไม่ใช่ "แถวแรกมีปุ่มไหม"
+        //    จึงต้องไล่ทุกแถว — เจอปุ่มในแถวไหนก็ถือว่ามีคอลัมน์ปุ่ม
         $lastCellHasAction = false;
+        $rowCount = 0;
         if (preg_match('/<tbody\b.*?<\/tbody>/s', $body, $tb)
-            && preg_match('/<tr\b[^>]*>(.*?)<\/tr>/s', $tb[0], $tr)) {
-            preg_match_all('/<td\b[^>]*>(.*?)<\/td>/s', $tr[1], $tds);
-            $cells = $tds[1] ?? [];
-            if ($cells) {
-                $last = (string) end($cells);
-                $lastCellHasAction = (bool) preg_match('/<(button|a)\b/i', $last);
+            && preg_match_all('/<tr\b[^>]*>(.*?)<\/tr>/s', $tb[0], $trs, PREG_SET_ORDER)) {
+            foreach ($trs as $tr) {
+                preg_match_all('/<td\b[^>]*>(.*?)<\/td>/s', $tr[1], $tds);
+                $cells = $tds[1] ?? [];
+                if (!$cells) continue;   // แถวว่าง/แถวข้อความ "ไม่พบข้อมูล" ไม่นับเป็นแถวข้อมูล
+                $rowCount++;
+                if (preg_match('/<(button|a)\b/i', (string) end($cells))) {
+                    $lastCellHasAction = true;
+                }
             }
         }
 
@@ -155,6 +167,9 @@ function analyseTables(string $html): array
             'sticky'            => str_contains($attrs, 'sticky-action'),
             'lastHeader'        => $lastHeader,
             'lastCellHasAction' => $lastCellHasAction,
+            // 🧠 ตารางที่ไม่มีแถวข้อมูลเลย ตัดสินจากเนื้อในไม่ได้ (ติดตั้งสดจะเจอบ่อย)
+            //    ต้องข้ามไป ไม่ใช่ตัดสินว่า "ไม่มีปุ่ม" แล้วฟ้องผิด ๆ
+            'rowCount'          => $rowCount,
         ];
     }
     return $out;
@@ -187,9 +202,15 @@ $missing = [];
 $covered = [];
 $stickyWithoutAction = [];
 
+$emptyTables = [];
 foreach ($pages as $file => $label) {
     $html = http('GET', "$BASE_URL/admin/{$file}");
     foreach (analyseTables($html) as $i => $t) {
+        // ตารางที่ยังไม่มีข้อมูลเลย ตัดสินไม่ได้ — จดไว้ให้เห็น ไม่ข้ามเงียบ ๆ
+        if ($t['rowCount'] === 0) {
+            $emptyTables[] = "{$label} (ตารางที่ " . ($i + 1) . ")";
+            continue;
+        }
         if ($t['lastCellHasAction'] && !$t['sticky']) {
             $missing[] = "{$label} (ตารางที่ " . ($i + 1) . ", คอลัมน์ท้าย \"{$t['lastHeader']}\")";
         }
@@ -201,6 +222,12 @@ foreach ($pages as $file => $label) {
             $stickyWithoutAction[] = "{$label} (ตารางที่ " . ($i + 1) . ")";
         }
     }
+}
+
+if ($emptyTables) {
+    echo "  ℹ️  ข้ามตารางที่ยังไม่มีข้อมูล " . count($emptyTables) . " ตาราง: "
+        . implode(' · ', array_slice($emptyTables, 0, 4))
+        . (count($emptyTables) > 4 ? ' …' : '') . "\n";
 }
 
 check('MOB-A1', $missing === [],
@@ -218,6 +245,7 @@ foreach ($pages as $file => $label) {
     $html = http('GET', "$BASE_URL/admin/{$file}");
     foreach (analyseTables($html) as $i => $t) {
         if (!$t['sticky']) continue;
+        if ($t['rowCount'] === 0) continue;   // ไม่มีข้อมูลให้ดู ตัดสินไม่ได้ (นับไว้แล้วใน $emptyTables)
         if (!$t['lastCellHasAction']) {
             $notLast[] = "{$label}: คอลัมน์ท้ายคือ \"{$t['lastHeader']}\" ซึ่งไม่มีปุ่ม";
         }
