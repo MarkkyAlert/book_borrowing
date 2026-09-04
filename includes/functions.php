@@ -636,7 +636,7 @@ function validatePassword(string $password, bool $allowEmpty = false): ?string
  * 📥 Input: @param array $data {name, email, phone?, password?}, @param bool $isEdit
  * 📤 Output: @return array error messages (empty = valid)
  */
-function validateMemberData(array $data, bool $isEdit = false): array
+function validateMemberData(array $data, bool $isEdit = false, bool $requireEmail = false): array
 {
     $errors = [];
 
@@ -648,9 +648,21 @@ function validateMemberData(array $data, bool $isEdit = false): array
     }
 
     // Email
-    if (empty(trim($data['email'] ?? ''))) {
-        $errors[] = 'กรุณากรอกอีเมล';
-    } elseif (!isValidEmail($data['email'])) {
+    // 🧠 [UAT รอบ 2 ข้อ ฒ.2] เดิมบังคับกรอกเสมอ ทำให้สมาชิกที่ไม่มีอีเมลจริง
+    //    (ผู้สูงอายุ เด็กเล็ก) สมัครไม่ได้เลย บรรณารักษ์ต้องกรอกอีเมลปลอมให้เอง
+    //    เว้นว่างได้ → MemberService จะสร้างอีเมลภายในให้ (ดู INTERNAL_EMAIL_DOMAIN)
+    //
+    // 🔴 แต่ $requireEmail = true สำหรับ **การสมัครเองผ่านหน้าเว็บสาธารณะ**
+    //    คนที่สมัครออนไลน์ใช้คอมอยู่แล้ว และถ้าไม่มีอีเมลเขาจะไม่รู้รหัสประจำตัว
+    //    ที่ระบบตั้งให้ไว้ล็อกอินครั้งถัดไป — กลายเป็นบัญชีที่เจ้าตัวเข้าไม่ได้
+    //    การเว้นอีเมลจึงใช้ได้เฉพาะตอนเจ้าหน้าที่กรอกให้ที่เคาน์เตอร์ (บอกรหัสให้ได้ทันที)
+    //    (เจอตอนรันชุดทดสอบ: เคส VL-01 จับได้ว่าหน้าสมัครสาธารณะหลุด)
+    $emailGiven = trim($data['email'] ?? '');
+    if ($emailGiven === '') {
+        if ($requireEmail) {
+            $errors[] = 'กรุณากรอกอีเมล';
+        }
+    } elseif (!isValidEmail($emailGiven)) {
         $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
 

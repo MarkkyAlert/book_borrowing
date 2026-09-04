@@ -22,6 +22,7 @@
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../app/Services/MemberService.php';   // isInternalEmail() — แสดง "ไม่มีอีเมล"
 // 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
@@ -92,6 +93,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // 🏷️ admin เท่านั้นที่เปลี่ยน role ได้ (Service whitelist ซ้ำอีกชั้น)
                 if (isAdmin() && $role !== null) {
                     $updateData['role'] = $role;
+                }
+                // 🏷️ สถานะใช้งาน
+                //
+                // 🔴 [บทเรียนจากบั๊ก ก.6] ห้ามเขียน is_active ทุกครั้งที่มี POST เข้ามา
+                //    checkbox ที่ไม่ติ๊กจะไม่มีใน $_POST เลย แยกไม่ออกจาก "ฟอร์มไม่มีช่องนี้"
+                //    เดิมเขียนแบบ isset() เฉย ๆ ผลคือสคริปต์/ฟอร์มเก่าที่ไม่ส่งช่องนี้มา
+                //    ไปปิดสมาชิกคนนั้นเงียบ ๆ (เจอจริงตอนรันชุดทดสอบ — สมาชิก 2 คนถูกปิดโดยไม่มีใครสั่ง)
+                //
+                //    จึงใช้ช่องซ่อน is_active_present เป็นตัวบอกว่า "ฟอร์มนี้มีสวิตช์จริง"
+                //    ไม่มีช่องนี้ = ไม่แตะสถานะเดิมเลย
+                if (isset($_POST['is_active_present'])) {
+                    $updateData['is_active'] = isset($_POST['is_active']) ? 1 : 0;
                 }
                 $memberService->updateMember($member['id'], $updateData);
                 
@@ -185,10 +198,60 @@ require_once __DIR__ . '/header.php';
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <i class="bi bi-envelope text-gray-400"></i>
                             </div>
-                            <input type="email" id="email" name="email" value="<?= e($member['email']) ?>" required
+                            <?php // 🧠 [UAT รอบ 2 ข้อ ฒ.2] อีเมลไม่บังคับแล้ว — สมาชิกที่ไม่มีอีเมลจริง
+                                  //    (ผู้สูงอายุ เด็กเล็ก) เคยสมัครไม่ได้เลย ต้องกรอกอีเมลปลอมให้
+                                  //    เว้นว่าง = ระบบสร้างอีเมลภายในให้ ใช้ล็อกอินได้ แต่ส่งเมลออกไม่ได้
+                                  $isInternal = \App\Services\MemberService::isInternalEmail($member['email'] ?? null); ?>
+                            <input type="email" id="email" name="email" value="<?= e($isInternal ? '' : ($member['email'] ?? '')) ?>"
                                    class="pl-10 block w-full rounded-xl border-gray-300 focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-11"
-                                   placeholder="user@example.com">
+                                   placeholder="เว้นว่างได้ ถ้าสมาชิกไม่มีอีเมล">
                         </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            <?php if ($isInternal): ?>
+                                สมาชิกคนนี้<strong>ไม่มีอีเมล</strong> — ระบบตั้งรหัสประจำตัวให้แล้ว
+                                (<?= e($member['email']) ?>) ใช้ล็อกอินได้ แต่ระบบส่งเมลไปหาไม่ได้
+                                ถ้าลืมรหัสผ่านต้องให้เจ้าหน้าที่ตั้งใหม่ให้
+                            <?php else: ?>
+                                เว้นว่างได้ถ้าสมาชิกไม่มีอีเมล — ระบบจะสร้างรหัสประจำตัวให้แทน
+                                (คนที่ไม่มีอีเมลจะรีเซ็ตรหัสผ่านเองไม่ได้ ต้องมาที่เคาน์เตอร์)
+                            <?php endif; ?>
+                        </p>
+
+                        <?php if ($isEdit): ?>
+                        <?php // 🏷️ [UAT รอบ 2 ข้อ ฒ.5] สมาชิกที่เคยยืมลบไม่ได้ตลอดกาล (ประวัติต้องอยู่)
+                              //    จึงต้องมีทางทำเครื่องหมายว่า "ไม่มาแล้ว" แทน
+                              //    ปิดใช้งาน = หายจากดรอปดาวน์ผู้ยืม + ล็อกอินไม่ได้
+                              //    แต่ประวัติการยืมยังอยู่ครบ และเจ้าหน้าที่ยังรับคืนหนังสือได้ ?>
+                        <div class="mt-6 pt-5 border-t border-gray-100">
+                            <div class="flex items-start justify-between gap-4">
+                                <div>
+                                    <label for="is_active" class="block text-sm font-medium text-gray-700">
+                                        ยังใช้งานอยู่
+                                    </label>
+                                    <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                                        ปิดสวิตช์นี้เมื่อสมาชิกไม่มาใช้บริการแล้ว (เช่น จบการศึกษา ย้ายที่อยู่)<br>
+                                        เขาจะ<strong>หายจากรายชื่อตอนบันทึกการยืม</strong>และ<strong>เข้าระบบไม่ได้</strong>
+                                        แต่<strong>ประวัติการยืมยังอยู่ครบ</strong> และคุณยังรับคืนหนังสือที่เขาค้างไว้ได้ตามปกติ
+                                        <?php
+                                        $activeBorrows = (int) $pdo->query(
+                                            'SELECT COUNT(*) FROM borrows WHERE user_id = ' . (int) $member['id'] . " AND status = 'borrowing'"
+                                        )->fetchColumn();
+                                        if ($activeBorrows > 0): ?>
+                                            <br><span class="text-amber-700 font-medium">⚠️ ตอนนี้ยังถือหนังสืออยู่ <?= $activeBorrows ?> เล่ม</span>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                                <?php // 🔴 ช่องซ่อนนี้คือตัวบอกว่า "ฟอร์มนี้มีสวิตช์สถานะจริง"
+                                      //    ห้ามลบ — ไม่มีมันแล้ว POST ที่ไม่ส่ง is_active จะถูกตีความว่า "ปิดใช้งาน" ?>
+                                <input type="hidden" name="is_active_present" value="1">
+                                <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                                    <input type="checkbox" id="is_active" name="is_active" value="1"
+                                        class="sr-only peer" <?= (int) ($member['is_active'] ?? 1) === 1 ? 'checked' : '' ?>>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                                </label>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div>

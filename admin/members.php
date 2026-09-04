@@ -14,6 +14,7 @@
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../app/Services/MemberService.php';   // isInternalEmail() — แสดง "ไม่มีอีเมล"
 // 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
@@ -128,6 +129,8 @@ require_once __DIR__ . '/header.php';
                       //    "คนนี้ยืมเพิ่มได้ไหม" และ "ใครค้างเงินบ้าง" ?>
                 <option value="quota_full" <?= $status === 'quota_full' ? 'selected' : '' ?>>เต็มโควตา (ยืมเพิ่มไม่ได้)</option>
                 <option value="has_unpaid_fine" <?= $status === 'has_unpaid_fine' ? 'selected' : '' ?>>ค้างค่าปรับ</option>
+                <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>ยังใช้งานอยู่</option>
+                <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>เลิกใช้งานแล้ว</option>
             </select>
         </div>
         <div class="md:col-span-2">
@@ -164,6 +167,7 @@ require_once __DIR__ . '/header.php';
                         <th class="px-6 py-4 font-medium" width="50">#</th>
                         <th class="px-6 py-4 font-medium">ชื่อ-นามสกุล</th>
                         <th class="px-6 py-4 font-medium">สิทธิ์</th>
+                        <th class="px-6 py-4 font-medium">สถานะ</th>
                         <th class="px-6 py-4 font-medium">อีเมล</th>
                         <th class="px-6 py-4 font-medium">เบอร์โทร</th>
                         <th class="px-6 py-4 font-medium text-center">โควตาที่ใช้</th>
@@ -195,7 +199,28 @@ require_once __DIR__ . '/header.php';
                                     </span>
                                 <?php endif; ?>
                             </td>
-                            <td class="px-6 py-4 text-gray-600"><?= e($member['email']) ?></td>
+                            <?php // 🏷️ สถานะใช้งาน — คนที่เลิกใช้แล้วยังอยู่ในรายชื่อ (ประวัติต้องอยู่)
+                                  //    แต่ต้องเห็นชัดว่าเขาไม่โผล่ในดรอปดาวน์ผู้ยืมและเข้าระบบไม่ได้แล้ว ?>
+                            <td class="px-6 py-4">
+                                <?php if ((int) ($member['is_active'] ?? 1) === 1): ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        ใช้งานอยู่
+                                    </span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600" title="ไม่โผล่ในรายชื่อตอนบันทึกการยืม และเข้าระบบไม่ได้ — แต่ประวัติยังอยู่ครบ">
+                                        <i class="bi bi-pause-circle mr-1"></i>เลิกใช้งาน
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <?php // 🧠 อีเมลภายในที่ระบบสร้างให้ ไม่ใช่ที่อยู่จริง — โชว์ไปก็ทำให้เข้าใจผิด
+                                  //    ว่าส่งเมลหาได้ จึงแสดงเป็น "ไม่มีอีเมล" แทน ?>
+                            <td class="px-6 py-4 text-gray-600">
+                                <?php if (\App\Services\MemberService::isInternalEmail($member['email'])): ?>
+                                    <span class="text-gray-400 italic">ไม่มีอีเมล</span>
+                                <?php else: ?>
+                                    <?= e($member['email']) ?>
+                                <?php endif; ?>
+                            </td>
                             <td class="px-6 py-4 text-gray-600 font-mono text-xs"><?= e($member['phone'] ?: '-') ?></td>
                             <td class="px-6 py-4 text-center">
                                 <?php

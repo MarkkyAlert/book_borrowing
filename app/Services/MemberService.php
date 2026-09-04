@@ -142,6 +142,27 @@ class MemberService
      * 🧠 เหตุผล: คืน plain password ครั้งเดียวสำหรับแสดงให้ admin เห็น
      * ✅ Use case: admin/member_form.php POST, register.php, api/add_member.php
      */
+    /**
+     * 🏷️ โดเมนสำหรับอีเมลที่ระบบสร้างให้เอง (สมาชิกที่ไม่มีอีเมลจริง)
+     *
+     * 🔴 ทำไมต้องเป็น .invalid: RFC 2606 สงวนไว้ไม่ให้จดจริง — ส่งเมลออกไปไม่มีวันถึงใคร
+     *    ถ้าใช้ "@local" เฉย ๆ จะ **ไม่ผ่าน isValidEmail()** (โดเมนไม่มีจุด)
+     *    แล้วพอบรรณารักษ์กดแก้ไขสมาชิกคนนั้นทีหลัง จะติด "รูปแบบอีเมลไม่ถูกต้อง"
+     *    ทั้งที่ไม่ได้แตะช่องอีเมลเลย
+     */
+    public const INTERNAL_EMAIL_DOMAIN = 'local.invalid';
+
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: อีเมลนี้เป็นอีเมลที่ระบบสร้างให้เองหรือเปล่า
+     * ==========================================================================
+     * ใช้ตัดสินว่าจะโชว์ "ไม่มีอีเมล" บนหน้าจอ และห้ามส่งเมลไปที่อยู่นี้
+     */
+    public static function isInternalEmail(?string $email): bool
+    {
+        return $email !== null && str_ends_with($email, '@' . self::INTERNAL_EMAIL_DOMAIN);
+    }
+
     public function createMember(array $data, bool $mustChangePassword = false): array
     {
         // 📝 Step 1: Validate ผ่าน shared helper (Single Source of Truth)
@@ -151,8 +172,9 @@ class MemberService
             throw new Exception($errors[0]);
         }
 
-        // 📝 Step 2: ตรวจ email ซ้ำ
-        if ($this->emailExists($data['email'])) {
+        // 📝 Step 2: ตรวจ email ซ้ำ (เฉพาะตอนที่กรอกมาจริง)
+        $emailGiven = trim($data['email'] ?? '');
+        if ($emailGiven !== '' && $this->emailExists($emailGiven)) {
             throw new Exception('อีเมลนี้ถูกใช้งานแล้ว');
         }
 
@@ -160,9 +182,19 @@ class MemberService
         $password = !empty($data['password']) ? $data['password'] : $this->generateRandomPassword();
         // 📝 Step 4: hash password แล้ว INSERT
         //    🔴 ต้อง hash ก่อน INSERT เสมอ! ห้ามเก็บ plaintext
+        // 🧠 ไม่กรอกอีเมล → ต้องมีค่าชั่วคราวที่ไม่ซ้ำใครก่อน เพราะคอลัมน์เป็น NOT NULL UNIQUE
+        //    แล้วค่อยเปลี่ยนเป็น m{รหัสสมาชิก}@local.invalid หลัง INSERT (ต้องรู้ id ก่อน)
+        //    ⚠️ ครอบ transaction ไว้ ถ้า UPDATE ล้มจะได้ไม่เหลือสมาชิกที่อีเมลเป็นค่าชั่วคราวค้าง
+        $needsInternalEmail = ($emailGiven === '');
+        $emailToSave = $needsInternalEmail
+            ? 'pending-' . bin2hex(random_bytes(8)) . '@' . self::INTERNAL_EMAIL_DOMAIN
+            : $emailGiven;
+
+        $this->pdo->beginTransaction();
+        try {
         $memberId = $this->userRepo->create([
             'name' => trim($data['name']),
-            'email' => trim($data['email']),
+            'email' => $emailToSave,
             'phone' => trim($data['phone'] ?? ''),
             'password' => hashPassword($password),
             'role' => 'member',
@@ -171,12 +203,26 @@ class MemberService
             'must_change_password' => $mustChangePassword ? 1 : 0
         ]);
 
+            // 🏷️ เปลี่ยนค่าชั่วคราวเป็นอีเมลภายในที่อ่านรู้เรื่อง — m{รหัสสมาชิก}@local.invalid
+            //    ใช้รหัสสมาชิก 6 หลักแบบเดียวกับที่โชว์บนบัตรและในดรอปดาวน์ผู้ยืม
+            if ($needsInternalEmail) {
+                $emailToSave = 'm' . str_pad((string) $memberId, 6, '0', STR_PAD_LEFT)
+                    . '@' . self::INTERNAL_EMAIL_DOMAIN;
+                $this->userRepo->updateEmail($memberId, $emailToSave);
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+
         // 📤 คืน plain password ครั้งเดียวสำหรับแสดงให้ admin เห็น
         //    ⚠️ หลังจากนี้ไม่มีทางดึง plaintext กลับมาได้
         return [
             'id' => $memberId,
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $emailToSave,
             'password' => $password
         ];
     }
@@ -219,6 +265,11 @@ class MemberService
         // 🏷️ role update (optional — เฉพาะเมื่อ admin ส่งมา, whitelist ป้องกัน privilege escalation)
         if (isset($data['role']) && in_array($data['role'], ['member', 'staff'])) {
             $updateData['role'] = $data['role'];
+        }
+
+        // 🏷️ สถานะใช้งาน (optional) — ส่งมาเฉพาะตอนที่ตั้งใจเปลี่ยนเท่านั้น
+        if (array_key_exists('is_active', $data)) {
+            $updateData['is_active'] = (int) (bool) $data['is_active'];
         }
 
         return $this->userRepo->update($id, $updateData);
@@ -435,7 +486,11 @@ class MemberService
         }
         
         // 📝 Step 3: ตรวจว่ามีอยู่แล้วหรือไม่ (ตาม email)
-        $existing = $this->userRepo->findByEmail($email);
+        //
+        // ⚠️ แถวที่ไม่กรอกอีเมลมาเลย จะหา "คนเดิม" ไม่ได้ เพราะอีเมลคือกุญแจ upsert ตัวเดียว
+        //    จึงถือเป็นคนใหม่เสมอ — นำเข้าไฟล์เดิมซ้ำจะได้สมาชิกซ้ำ
+        //    (บอกไว้บนหน้านำเข้าแล้วว่าแถวที่ไม่มีอีเมลจะเพิ่มใหม่ทุกครั้ง)
+        $existing = $email === '' ? null : $this->userRepo->findByEmail($email);
         
         if ($existing) {
             // 🔄 มีอยู่แล้ว → UPDATE เฉพาะ name + phone (ไม่เปลี่ยน password เดิม)
@@ -452,14 +507,34 @@ class MemberService
             //       และอีเมลของห้องสมุดโรงเรียนมักเดาได้เป็นชุด (std0001@, std0002@, ...)
             //    ⚠️ ตั้งเฉพาะแถวที่ **สร้างใหม่** — แถวที่ upsert ไม่แตะรหัสเดิมอยู่แล้ว
             //       จึงต้องไม่ไปบังคับคนที่ตั้งรหัสของตัวเองไปนานแล้ว
-            $memberId = $this->userRepo->create([
-                'name' => $name,
-                'email' => $email,
-                'password' => hashPassword($defaultPassword),
-                'phone' => $phone,
-                'role' => 'member',
-                'must_change_password' => 1
-            ]);
+            // 🏷️ ไม่กรอกอีเมล → ใส่ค่าชั่วคราวที่ไม่ซ้ำก่อน แล้วเปลี่ยนเป็นอีเมลภายในหลังรู้ id
+            //    (เหตุผลเดียวกับ createMember — คอลัมน์เป็น NOT NULL UNIQUE)
+            $needsInternalEmail = ($email === '');
+            $emailToSave = $needsInternalEmail
+                ? 'pending-' . bin2hex(random_bytes(8)) . '@' . self::INTERNAL_EMAIL_DOMAIN
+                : $email;
+
+            $this->pdo->beginTransaction();
+            try {
+                $memberId = $this->userRepo->create([
+                    'name' => $name,
+                    'email' => $emailToSave,
+                    'password' => hashPassword($defaultPassword),
+                    'phone' => $phone,
+                    'role' => 'member',
+                    'must_change_password' => 1
+                ]);
+                if ($needsInternalEmail) {
+                    $this->userRepo->updateEmail(
+                        $memberId,
+                        'm' . str_pad((string) $memberId, 6, '0', STR_PAD_LEFT) . '@' . self::INTERNAL_EMAIL_DOMAIN
+                    );
+                }
+                $this->pdo->commit();
+            } catch (\Throwable $e) {
+                $this->pdo->rollBack();
+                throw $e;
+            }
             return ['action' => 'created', 'id' => $memberId];
         }
     }

@@ -238,6 +238,7 @@ $gapSuites = [
     'Profile Security'           => 'test_profile_security.php',
     // 📌 3 ตัวนี้เพิ่งซ่อม (2026-08-28) — เดิมทิ้งขยะไว้/query คอลัมน์ที่ไม่มีอยู่จริง
     'Member Management'          => 'test_member_management.php',
+    'อีเมลไม่บังคับ + เลิกใช้งาน' => 'test_member_status.php',   // ฒ.2 ฒ.5-6 จาก UAT รอบ 2
     'Reservations'               => 'test_reservations.php',
     'Reports Queries'            => 'reports_test.php',
     // 📌 กลุ่มที่ตรวจแล้วว่ามีของที่ชุดอื่นไม่ได้ทดสอบ (2026-08-28)

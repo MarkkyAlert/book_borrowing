@@ -18,6 +18,7 @@
 
 // 🔌 โหลด bootstrap (autoload, config, session, DB)
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../app/Services/MemberService.php';   // isInternalEmail() — แสดง "ไม่มีอีเมล"
 // 🔒 [AUTH] staff/admin เท่านั้น
 requireStaff();
 
@@ -306,7 +307,10 @@ require_once __DIR__ . '/header.php';
                                     data-code="<?= e($memberCode) ?>"
                                     data-phone="<?= e($member['phone'] ?? '-') ?>"
         data-quota="<?= quotaForRole($member['role'] ?? null) ?>">
-                                    <?= e($member['name']) ?> — รหัส <?= e($memberCode) ?> (<?= e($member['email']) ?>)
+                                    <?php // อีเมลภายในไม่ใช่ที่อยู่จริง — โชว์ "ไม่มีอีเมล" จะได้ไม่เข้าใจผิด
+                                          $memberEmailLabel = \App\Services\MemberService::isInternalEmail($member['email'])
+                                              ? 'ไม่มีอีเมล' : $member['email']; ?>
+                                    <?= e($member['name']) ?> — รหัส <?= e($memberCode) ?> (<?= e($memberEmailLabel) ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>

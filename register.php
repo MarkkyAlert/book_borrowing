@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'email' => $email,
         'phone' => $phone,
         'password' => $password
-    ]));
+    ], false, true));
 
     // 🔒 Page-specific: ตรวจ confirm password ตรงกัน
     if ($password !== $confirmPassword) {

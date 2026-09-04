@@ -119,14 +119,35 @@ class UserRepository
      * 📤 Output: @return array รายการผู้ใช้ (ไม่รวม password)
      * ✅ Use case: admin/borrow_form.php → dropdown เลือกผู้ยืม
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: เปลี่ยนอีเมลของสมาชิกคนเดียว (ใช้ตอนสร้างอีเมลภายในให้)
+     * ==========================================================================
+     *
+     * 🧠 ทำไมต้องมีเมธอดแยก: อีเมลภายใน (m000207@local.invalid) อ้างอิงรหัสสมาชิก
+     *    ซึ่งรู้ได้หลัง INSERT เท่านั้น จึงต้อง INSERT ค่าชั่วคราวก่อนแล้วค่อยแก้
+     *    ผู้เรียกต้องครอบ transaction เอง (MemberService::createMember ทำแล้ว)
+     *
+     * 📥 Input: @param int $id, @param string $email
+     * 📤 Output: @return bool
+     * ✅ Use case: MemberService::createMember() / importMember()
+     */
+    public function updateEmail(int $id, string $email): bool
+    {
+        $stmt = $this->pdo->prepare('UPDATE users SET email = ? WHERE id = ?');
+        return $stmt->execute([$email, $id]);
+    }
+
     public function findAllMembers(): array
     {
         // � SQL: ดึง member + staff (ไม่รวม admin) เรียงตามชื่อ
         // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
+        // 🏷️ เอาเฉพาะคนที่ยังใช้งาน — คนที่เลิกใช้แล้วไม่ควรโผล่ในดรอปดาวน์ผู้ยืม
+        //    (ประวัติเก่ายังอยู่ครบ และหน้ารายชื่อสมาชิกยังเห็นทุกคนตามเดิม)
         $stmt = $this->pdo->query("
             SELECT id, name, email, phone, role, created_at
             FROM users
-            WHERE role IN ('member', 'staff')
+            WHERE role IN ('member', 'staff') AND is_active = 1
             ORDER BY name, id
         ");
         return $stmt->fetchAll();
@@ -243,8 +264,8 @@ class UserRepository
         // 🔴 $data['password'] ต้องเป็น hash แล้ว! (ห้ามส่ง plaintext)
         //    Service layer ต้อง password_hash() ก่อนเรียก
         $stmt = $this->pdo->prepare("
-            INSERT INTO users (name, email, phone, password, role, must_change_password)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (name, email, phone, password, role, must_change_password, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
 
         // 🚀 bind ค่าทั้งหมด
@@ -256,7 +277,9 @@ class UserRepository
             $data['role'] ?? 'member',  // role (default: member)
             // 🔑 [F-53] default 0 = ไม่บังคับ — คนที่ตั้งรหัสเอง (register.php) ต้องไม่โดน
             //    ผู้เรียกที่ "รู้รหัสของผู้ใช้" (import, admin สร้างให้) ต้องส่ง 1 มาเอง
-            !empty($data['must_change_password']) ? 1 : 0
+            !empty($data['must_change_password']) ? 1 : 0,
+            // 🏷️ สมาชิกใหม่ = ใช้งานได้เสมอ ผู้เรียกส่ง 0 มาได้ถ้าต้องการสร้างแบบปิดไว้ก่อน
+            array_key_exists('is_active', $data) ? (int) (bool) $data['is_active'] : 1
         ]);
 
         // 📤 คืน user ID ที่สร้าง (AUTO_INCREMENT)
@@ -295,6 +318,14 @@ class UserRepository
         if (isset($data['role'])) {
             $sets[] = 'role = ?';
             $params[] = $data['role'];
+        }
+
+        // 🏷️ สถานะใช้งาน (optional) — ส่งมาเฉพาะตอนที่ตั้งใจเปลี่ยน
+        //    🔴 ห้ามเปลี่ยนเป็น "ส่งทุกครั้ง" เด็ดขาด ไม่งั้นผู้เรียกที่ไม่รู้จักคอลัมน์นี้
+        //       จะเผลอเปิดสมาชิกที่ปิดไว้กลับมาโดยไม่ตั้งใจ (บทเรียนจากบั๊ก ก.6)
+        if (array_key_exists('is_active', $data)) {
+            $sets[] = 'is_active = ?';
+            $params[] = (int) (bool) $data['is_active'];
         }
 
         $params[] = $id; // WHERE id = ?
@@ -660,6 +691,11 @@ class UserRepository
         } elseif ($status === 'has_unpaid_fine') {
             // 🔴 [F-48] ใช้นิยามเดียวกับหน้าการเงิน — ดู memberComputedColumns()
             $having[] = "unpaid_fine_total > 0";
+        } elseif ($status === 'inactive') {
+            // 🏷️ คนที่เลิกใช้งานแล้ว — ต้องยังหาเจอในหน้ารายชื่อ (แค่ไม่โผล่ในดรอปดาวน์ผู้ยืม)
+            $where[] = 'u.is_active = 0';
+        } elseif ($status === 'active') {
+            $where[] = 'u.is_active = 1';
         }
         $havingSQL = $having ? 'HAVING ' . implode(' AND ', $having) : '';
 

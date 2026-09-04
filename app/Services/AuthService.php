@@ -97,6 +97,15 @@ class AuthService
         if (!password_verify($password, $user['password'])) {
             return null;
         }
+
+        // 🏷️ สมาชิกที่เลิกใช้งานแล้ว เข้าระบบไม่ได้
+        //    🛡️ คืน null เหมือนกรณีรหัสผิด — ไม่บอกว่า "บัญชีถูกปิด" เพื่อไม่ให้คนนอก
+        //       ใช้หน้าล็อกอินไล่เดาว่าอีเมลไหนมีบัญชีอยู่ในระบบ (เหตุผลเดียวกับ Step 1)
+        //    ⚠️ ปิดแค่ "การเข้าระบบ" เท่านั้น — เจ้าหน้าที่ยังรับคืนหนังสือของคนนี้ได้ปกติ
+        //       ไม่งั้นหนังสือจะถูกขังอยู่กับคนที่ติดต่อไม่ได้
+        if (array_key_exists('is_active', $user) && (int) $user['is_active'] !== 1) {
+            return null;
+        }
         
         // 📤 คืน user data (รวม hash) → Controller จะเก็บ id + role ใน session
         return $user;
@@ -299,7 +308,13 @@ class AuthService
         $recentRequests = $resetRepo->countRecentByEmail($email, 1);
         $overLimit = $recentRequests >= 3;
 
-        if (!$user || $overLimit) {
+        // 🏷️ อีเมลภายในที่ระบบสร้างให้ (m000207@local.invalid) ส่งเมลออกไปไม่มีวันถึงใคร
+        //    ออก token ไปก็เสียเปล่า และแถวใน password_resets จะค้าง
+        //    ปฏิบัติเหมือนกรณี "ไม่พบอีเมล" — คำตอบหน้าตาเดียวกัน ไม่เปิดช่องให้เดาว่ามีบัญชีไหม
+        require_once __DIR__ . '/MemberService.php';
+        $isInternal = \App\Services\MemberService::isInternalEmail($email);
+
+        if (!$user || $overLimit || $isInternal) {
             // 🛡️ [SECURITY] ไม่บอกว่า email ไม่อยู่ในระบบ หรือขอถี่เกินไป — ป้องกัน enumeration
             //    คืนผลเดียวกันทั้ง 2 กรณี → ผู้เรียกแยกไม่ออกว่าเกิดอะไรขึ้น
             //    🔴 ห้ามเปลี่ยนเป็น error คนละแบบเด็ดขาด (ดูเหตุผลด้านบน)
