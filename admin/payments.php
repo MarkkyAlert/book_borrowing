@@ -100,6 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $totalRevenue = $paymentRepo->getTotalCollected();     // ยอดชำระแล้วทั้งหมด
 $unpaidTotal = $borrowRepo->getTotalUnpaidFines();     // ยอดค้างชำระรวม
 $thisMonthRevenue = $paymentRepo->getThisMonthTotal(); // ยอดเดือนนี้
+// 📅 ยอดวันนี้ — บรรณารักษ์ปิดเงินสดทุกวัน เดิมต้องข้ามไปหน้ารายงานถึงจะเห็น
+$todayRevenue = $paymentRepo->getTodayTotal();
 
 $waivedTotal = $borrowRepo->sumWaivedFines();           // ยอดที่ยกเว้นไปทั้งหมด
 
@@ -231,6 +233,8 @@ require_once __DIR__ . '/header.php';
             <td style="color: green;"><?= number_format($totalRevenue) ?> ฿</td>
             <td><strong>ค้างชำระ:</strong></td>
             <td style="color: red;"><?= number_format($unpaidTotal) ?> ฿</td>
+            <td><strong>วันนี้:</strong></td>
+            <td style="color: blue;"><?= number_format($todayRevenue) ?> ฿</td>
             <td><strong>เดือนนี้:</strong></td>
             <td style="color: blue;"><?= number_format($thisMonthRevenue) ?> ฿</td>
         </tr>
@@ -238,7 +242,7 @@ require_once __DIR__ . '/header.php';
 </div>
 
 <!-- Stats Cards (Screen only) -->
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6 screen-only">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6 screen-only">
     <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg shadow-green-500/20">
         <div class="flex justify-between items-start">
             <div>
@@ -263,6 +267,19 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
     
+    <?php // 📅 วางไว้ก่อน "เดือนนี้" ให้การ์ดที่อิงเวลาอยู่ติดกัน — อ่านไล่จากช่วงสั้นไปยาว ?>
+    <div class="bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg shadow-sky-500/20">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-sky-100 text-xs font-medium mb-1">วันนี้</p>
+                <h3 class="text-2xl font-bold"><?= number_format($todayRevenue) ?> ฿</h3>
+            </div>
+            <div class="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <i class="bi bi-cash-coin text-xl"></i>
+            </div>
+        </div>
+    </div>
+
     <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-lg shadow-blue-500/20">
         <div class="flex justify-between items-start">
             <div>

@@ -197,6 +197,28 @@ class PaymentRepository
      *
      * ✅ Use case: admin/index.php → DashboardService
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: ยอดที่เก็บได้ "วันนี้" — ใช้ปิดยอดตอนสิ้นวัน
+     * ==========================================================================
+     *
+     * 🧠 ทำไมต้องมีแยกจาก getThisMonthTotal():
+     *    บรรณารักษ์ปิดเงินสดทุกวัน ไม่ใช่ทุกเดือน — เดิมต้องข้ามไปหน้ารายงาน
+     *    แล้วกดปุ่ม "วันนี้" ในสรุปรายได้ ถึงจะเห็นตัวเลขนี้
+     *
+     * ⚠️ ใช้ DATE(created_at) = CURDATE() ไม่ใช่ created_at >= CURDATE()
+     *    เพื่อไม่ให้รายการที่บันทึกล่วงหน้า (ถ้ามี) หลุดเข้ามาปนยอดวันนี้
+     *
+     * 📤 Output: @return float ยอดรวมที่รับชำระวันนี้ (0 ถ้ายังไม่มี)
+     * ✅ Use case: admin/payments.php การ์ด "วันนี้"
+     */
+    public function getTodayTotal(): float
+    {
+        return (float) $this->pdo->query(
+            "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE DATE(created_at) = CURDATE()"
+        )->fetchColumn();
+    }
+
     public function getThisMonthTotal(): float
     {
         // 📝 SQL: รวมยอดชำระเดือนนี้

@@ -345,6 +345,18 @@ function setDateRange(range) {
                                         </span>
                                     <?php elseif ($key === 'total_amount'): ?>
                                         <span class="text-green-600 font-bold"><?= number_format($value, 2) ?> ฿</span>
+                                    <?php elseif (in_array($key, REPORT_PHONE_COLUMNS, true) && $value !== null && $value !== ''): ?>
+                                        <?php // 📞 ใบรายชื่อโทรตามมีไว้เพื่อโทร — บนมือถือต้องแตะแล้วโทรออกได้เลย
+                                              //    กรองเหลือเฉพาะตัวเลขและ + ก่อนใส่ใน href กันค่าแปลก ๆ หลุดเข้า attribute
+                                              //    ข้อความที่แสดงยังเป็นค่าเดิมทุกตัวอักษร (ไม่แตะทาง CSV/PDF ที่เรนเดอร์คนละทาง)
+                                              $telHref = preg_replace('/[^0-9+]/', '', (string) $value); ?>
+                                        <?php if ($telHref !== ''): ?>
+                                            <a href="tel:<?= e($telHref) ?>" class="text-primary-600 hover:text-primary-700 hover:underline whitespace-nowrap">
+                                                <i class="bi bi-telephone-fill text-xs mr-1"></i><?= e($value) ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <?= e($value) ?>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <?php // 📝 role และวันที่ถูกแปลง/จัดรูปแบบมาจาก SQL แล้ว (ดู ReportRepository)
                                               //    ไม่ต้องแปลงซ้ำที่นี่ — ไม่งั้นหน้าเว็บกับ CSV/PDF จะไม่ตรงกัน ?>

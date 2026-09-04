@@ -204,6 +204,16 @@ function formatReportValue(string $key, mixed $value): string
 const REPORT_TEXT_CODE_COLUMNS = ['phone', 'user_phone', 'isbn', 'member_code', 'barcode'];
 
 /**
+ * 🎯 คอลัมน์ที่เป็น "เบอร์โทรจริง" — ใช้ทำลิงก์ tel: บนหน้าจอ
+ *
+ * 🔴 ทำไมไม่ใช้ REPORT_TEXT_CODE_COLUMNS: ลิสต์นั้นรวม isbn/barcode ด้วย
+ *    ถ้าเอามาทำ tel: ผู้ใช้จะกด ISBN แล้วเครื่องโทรออกเป็นเลข 13 หลัก
+ *
+ * ⚙️ เพิ่มรายงานใหม่ที่มีเบอร์โทร → เพิ่มชื่อคอลัมน์ทั้งลิสต์นี้และลิสต์ข้างบน
+ */
+const REPORT_PHONE_COLUMNS = ['phone', 'user_phone'];
+
+/**
  * 🎯 คอลัมน์ตัวเลขที่ **ห้ามรวมยอด** ถึงจะเป็นตัวเลขก็ตาม — F-50
  *
  * 🔴 เจอตอนทดสอบจริง: แถวรวมของรายงานค้างชำระขึ้นว่า "ค้างมา 11,660 วัน"

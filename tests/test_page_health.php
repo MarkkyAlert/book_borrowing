@@ -400,6 +400,113 @@ check('PAGE-E5', $outRows === $realOutOfStock,
     "หน้า \"หนังสือหมด\" แสดง {$outRows} เล่ม เท่ากับป้ายบนการ์ด",
     "🔴 การ์ดบอก {$realOutOfStock} แต่หน้าปลายทางแสดง {$outRows} — นิยาม \"หมด\" ของสองที่ไม่ตรงกัน");
 
+
+// ============================================================
+echo "\n── F. ของที่เพิ่มให้ตามผล UAT รอบ 2 ──\n";
+// ============================================================
+
+// ── F1: ใบรายชื่อโทรตาม ต้องกดเบอร์แล้วโทรออกได้ ──
+//    ฎ.4: ใบนี้มีไว้เพื่อโทร แต่เบอร์เป็นข้อความเฉย ๆ บนมือถือต้องพิมพ์เองทีละคน
+$callSheet = http('GET', "$BASE_URL/admin/reports.php?report=due_soon");
+preg_match_all('/<tbody.*?<\/tbody>/s', $callSheet, $tb);
+$body     = $tb[0][0] ?? '';
+$dataRows = preg_match_all('/<tr[\s>]/', $body);
+preg_match_all('#href="tel:([0-9+]+)"[^>]*>.*?([0-9]{6,})\s*</a>#s', $body, $tm, PREG_SET_ORDER);
+$telCount = count($tm);
+// เบอร์ใน href ต้องตรงกับเบอร์ที่แสดง ไม่ใช่คนละเลข
+$telMismatch = [];
+foreach ($tm as $m) {
+    if ($m[1] !== $m[2]) $telMismatch[] = "href={$m[1]} แต่แสดง {$m[2]}";
+}
+// 🧠 ติดตั้งสดยังไม่มีการยืมเลย ใบโทรตามจึงว่าง — ตัดสินไม่ได้ ต้องข้าม
+//    แต่ข้ามแบบพิมพ์บอก ไม่ใช่ข้ามเงียบ ๆ และไม่ใช่ปล่อยให้แดงด้วยเหตุผลผิด
+if ($dataRows === 0) {
+    echo "  ⏭  ข้าม PAGE-F1/F2 — ยังไม่มีรายการใกล้ครบกำหนดในระบบ (ติดตั้งใหม่)\n";
+} else {
+check('PAGE-F1', $telCount === $dataRows && $telMismatch === [],
+    "ทุกแถวในใบโทรตามกดโทรออกได้ ({$telCount}/{$dataRows} แถว) และเบอร์ในลิงก์ตรงกับที่แสดง",
+    $telMismatch !== []
+        ? '🔴 เบอร์ในลิงก์ไม่ตรงกับที่แสดง: ' . implode(' · ', $telMismatch)
+        : "🔴 มี {$dataRows} แถว แต่กดโทรได้ {$telCount} แถว");
+
+// ── F2: ทางส่งออก CSV ต้องไม่โดนกระทบ ──
+//    🛡️ การเติมลิงก์บนหน้าจอต้องไม่ทำให้ HTML หลุดลงไฟล์ และ ' นำหน้าเบอร์ต้องยังอยู่
+//       (ไม่งั้น Excel จะกินเลข 0 ตัวหน้าหาย — ฎ.5 เคยผ่านมาแล้ว ห้ามทำพัง)
+$csvOut = http('GET', "$BASE_URL/admin/reports.php?report=due_soon&export=csv");
+$csvLines = array_values(array_filter(explode("\n", str_replace("\r", '', $csvOut))));
+$csvHasHtml  = (bool) preg_match('/<a |href=|<i class/', $csvOut);
+$csvKeepsZero = (bool) preg_match("/,'0\d/", $csvLines[1] ?? '');
+check('PAGE-F2', !$csvHasHtml && $csvKeepsZero,
+    "ไฟล์ CSV ไม่มี HTML ปน และเบอร์ยังมี ' นำหน้า (เลข 0 ไม่หายใน Excel)",
+    '🔴 ' . ($csvHasHtml ? 'มี HTML หลุดลงไฟล์ CSV ' : '') . (!$csvKeepsZero ? "เบอร์ไม่มี ' นำหน้าแล้ว" : ''));
+}
+
+// ── F3: ต้องทำ tel: เฉพาะคอลัมน์ที่เป็นเบอร์โทรจริง ──
+//    REPORT_TEXT_CODE_COLUMNS รวม isbn/barcode/member_code ด้วย ถ้าเผลอเอาลิสต์นั้น
+//    มาทำ tel: ผู้ใช้จะกด ISBN แล้วเครื่องโทรออกเป็นเลข 13 หลัก
+//
+//    ⚠️ ตรวจที่ซอร์ส ไม่ใช่ที่หน้าจอ เพราะตอนนี้ยังไม่มีรายงานไหนคืนคอลัมน์ isbn เลย
+//       (มีแค่ในนิยามค่าคงที่เผื่ออนาคต) ถ้าตรวจจากหน้าจอ เคสนี้จะเป็นยามหลับที่
+//       ล้มไม่ได้เลย — ลองทำลายโค้ดดูแล้วมันยังเขียว จึงเปลี่ยนมาตรวจแบบนี้
+//       (วิธีเดียวกับ CN-C3 ในเทสต์เลขเรียกหนังสือ)
+$reportsSrc = file_get_contents(__DIR__ . '/../admin/reports.php');
+$usesPhoneList = (bool) preg_match('/href="tel:/', $reportsSrc)
+    && (bool) preg_match('/in_array\(\$key,\s*REPORT_PHONE_COLUMNS\s*,\s*true\).*?href="tel:/s', $reportsSrc);
+$leaksCodeList = (bool) preg_match('/in_array\(\$key,\s*REPORT_TEXT_CODE_COLUMNS\s*,\s*true\).*?href="tel:/s', $reportsSrc);
+// อ่านค่าคงที่จากซอร์สโดยตรง — ไม่ require เพราะไฟล์นั้นต้องการ dependency อื่น
+$helperSrc = file_get_contents(__DIR__ . '/../includes/report_helper.php');
+preg_match("/const REPORT_PHONE_COLUMNS = \[(.*?)\];/s", $helperSrc, $pc);
+preg_match_all("/'([a-z_]+)'/", $pc[1] ?? '', $pcCols);
+$phoneCols = $pcCols[1] ?? [];
+$phoneListClean = $phoneCols !== [] && !array_intersect($phoneCols, ['isbn', 'barcode', 'member_code']);
+
+check('PAGE-F3', $usesPhoneList && !$leaksCodeList && $phoneListClean,
+    'ลิงก์ tel: ผูกกับ REPORT_PHONE_COLUMNS (' . implode(', ', $phoneCols) . ') เท่านั้น',
+    '🔴 ' . ($leaksCodeList ? 'ใช้ REPORT_TEXT_CODE_COLUMNS ทำ tel: → ISBN/barcode จะกลายเป็นลิงก์โทร' : '')
+        . (!$phoneListClean ? ' REPORT_PHONE_COLUMNS มีคอลัมน์ที่ไม่ใช่เบอร์โทรปนอยู่' : '')
+        . (!$usesPhoneList ? ' หาเงื่อนไข tel: ที่ผูกกับ REPORT_PHONE_COLUMNS ไม่เจอ' : ''));
+
+// ── F4: การ์ด "วันนี้" ต้องเป็นยอดของวันนี้จริง ไม่ใช่ยอดเดือน ──
+//    ญ.10: สิ้นวันต้องรู้ว่าเก็บเงินได้กี่บาท
+//    🧠 ปกติสองค่านี้มักเท่ากัน (เดือนที่เพิ่งเริ่ม) เทียบเฉย ๆ จะเป็นยามหลับ
+//       จึงแอบใส่รายการย้อนหลังในเดือนเดียวกันก่อน เพื่อบังคับให้สองค่าต่างกันจริง
+$todayNum  = (int) date('j');
+$anyBorrowId = (int) $pdo->query("SELECT COALESCE(MIN(id), 0) FROM borrows")->fetchColumn();
+if ($anyBorrowId === 0) {
+    // payments.borrow_id เป็น FK — ไม่มีรายการยืมเลยก็ใส่รายการทดสอบไม่ได้
+    echo "  ⏭  ข้าม PAGE-F4 — ยังไม่มีรายการยืมในระบบ ใส่รายการชำระทดสอบไม่ได้ (ติดตั้งใหม่)\n";
+} elseif ($todayNum < 2) {
+    echo "  ⏭  ข้าม PAGE-F4 — วันนี้เป็นวันที่ 1 ของเดือน ใส่รายการย้อนหลังในเดือนเดียวกันไม่ได้\n";
+} else {
+    $anyBorrow = $anyBorrowId;
+    $probeAmt  = 7777;
+    $backdate  = date('Y-m-01 09:00:00');
+    $pdo->prepare("INSERT INTO payments (borrow_id, amount, recorded_by, created_at) VALUES (?, ?, NULL, ?)")
+        ->execute([$anyBorrow, $probeAmt, $backdate]);
+    $probeId = (int) $pdo->lastInsertId();
+
+    $html   = http('GET', "$BASE_URL/admin/payments.php");
+    $today  = (float) $pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE DATE(created_at)=CURDATE()")->fetchColumn();
+    $month  = (float) $pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())")->fetchColumn();
+
+    $pdo->exec("DELETE FROM payments WHERE id = {$probeId}");   // เก็บกวาดทันที
+
+    // ตอนนี้ today กับ month ต่างกันแน่นอน (ต่างกัน 7,777) → การ์ดต้องโชว์ today
+    $ok = false;
+    // ⚠️ ต้องจับ "การ์ด" ให้ตรง ไม่ใช่คำว่า "วันนี้" คำแรกในหน้า
+    //    (กระดิ่งมี "ครบกำหนดคืนวันนี้" อยู่ก่อน — ตัวอ่านรุ่นแรกไปเจออันนั้นแล้วได้เลขมั่ว)
+    if (preg_match('/>\s*วันนี้\s*<\/p>\s*<h3[^>]*>\s*([\d,]+)\s*฿/su', $html, $cm)) {
+        $shown = (float) str_replace(',', '', $cm[1]);
+        $ok = (abs($shown - $today) < 1);
+        $shownTxt = number_format($shown);
+    } else {
+        $shownTxt = '(ไม่พบการ์ด)';
+    }
+    check('PAGE-F4', $ok && abs($today - $month) > 1,
+        'การ์ด "วันนี้" โชว์ยอดของวันนี้ (' . number_format($today) . ' ฿) ไม่ใช่ยอดเดือน (' . number_format($month) . ' ฿)',
+        "🔴 การ์ดโชว์ {$shownTxt} ฿ · วันนี้จริง " . number_format($today) . " ฿ · เดือนนี้ " . number_format($month) . ' ฿');
+}
+
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
