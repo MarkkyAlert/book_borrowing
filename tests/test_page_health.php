@@ -374,24 +374,33 @@ $sizeOf = function (string $url) {
     return ['pages' => $pages, 'rows' => $rows];
 };
 preg_match_all('#href="((?:books|borrows|members|payments|reservations)\.php\?[^"]+)"#', $dash, $lm);
-$deadLinks = [];
-$checked   = 0;
+$deadLinks    = [];
+$undecidable  = [];
+$checked      = 0;
 foreach (array_unique($lm[1] ?? []) as $rel) {
     $page = strtok($rel, '?');
     $filtered   = $sizeOf("$BASE_URL/admin/" . html_entity_decode($rel));
     $unfiltered = $sizeOf("$BASE_URL/admin/{$page}");
     $checked++;
     // กรองแล้วต้องได้ผลลัพธ์ "เล็กลง" — เท่าเดิมทุกมิติ = พารามิเตอร์ไม่มีผล
-    // เทียบจำนวนหน้าก่อน (แม่นกว่า) ถ้าไม่กรองก็มีหน้าเดียวอยู่แล้วค่อยเทียบจำนวนแถว
-    $same = $unfiltered['pages'] > 1
-        ? ($filtered['pages'] === $unfiltered['pages'] && $filtered['rows'] === $unfiltered['rows'])
-        : ($unfiltered['rows'] > 5 && $filtered['rows'] === $unfiltered['rows']);
-    if ($same) {
+    //
+    // ⚠️ ตัดสินได้เฉพาะตอนที่ "ไม่กรองแล้วยาวเกิน 1 หน้า" เท่านั้น
+    //    ถ้าข้อมูลทั้งหมดมีหน้าเดียว ตัวกรองที่ทำงานถูกก็อาจคืนครบทุกแถวได้
+    //    (เจอจริง: reservations.php?expiring=1 — การจองค้างทั้ง 7 รายการหมดอายุ
+    //     ภายใน 24 ชม. พอดี ตัวกรองจึงคืนทั้ง 7 อย่างถูกต้อง แต่ยามฟ้องว่า "ไม่กรอง")
+    //    กรณีนั้นข้ามพร้อมพิมพ์บอก ไม่เดาแทนผู้อ่าน
+    if ($unfiltered['pages'] <= 1) {
+        $undecidable[] = $rel . " ({$unfiltered['rows']} แถว หน้าเดียว)";
+    } elseif ($filtered['pages'] === $unfiltered['pages'] && $filtered['rows'] === $unfiltered['rows']) {
         $deadLinks[] = $rel . " (ไม่กรอง {$unfiltered['pages']} หน้า/{$unfiltered['rows']} แถว → กรองแล้วได้เท่าเดิม)";
     }
 }
+if ($undecidable) {
+    echo "  ℹ️  ตัดสินไม่ได้ " . count($undecidable) . " ลิงก์ (ข้อมูลไม่ถึง 2 หน้า จะกรองหรือไม่กรองก็ได้ผลเท่ากัน): "
+        . implode(' · ', $undecidable) . "\n";
+}
 check('PAGE-E4', $deadLinks === [],
-    "ลิงก์บนหน้าภาพรวมกรองได้จริงทุกอัน ({$checked} ลิงก์)",
+    "ลิงก์บนหน้าภาพรวมกรองได้จริงทุกอัน (ตัดสินได้ " . ($checked - count($undecidable)) . " จาก {$checked} ลิงก์)",
     '🔴 ลิงก์ที่กดแล้วไม่กรองอะไรเลย (พารามิเตอร์ผิดชื่อ?): ' . implode(' · ', $deadLinks));
 
 // ── E5: การ์ดกับหน้าที่ "ดูทั้งหมด" พาไป ต้องบอกจำนวนเท่ากัน ──

@@ -694,6 +694,53 @@ foreach ($legacyDocs as $rel2) {
     }
 }
 // ============================================================
+// M. เอกสารเรื่องการจองหมดอายุ ต้องตรงกับพฤติกรรมจริง
+// ============================================================
+// 🔴 ที่มา: DEPLOYMENT.md เคยเขียนว่า "ถ้าไม่ตั้ง cron การจองจะค้างเป็น pending
+//    ตลอด → stock ไม่คืน → หนังสือหายจากระบบ" ซึ่ง **ไม่จริง**
+//    UAT รอบ 3 พิสูจน์แล้วว่าระบบปล่อยให้เองตอนมีคนเปิดหน้า (lazy expire)
+//    เอกสารที่ขู่เกินจริงทำให้ลูกค้าคิดว่าต้องตั้ง cron ให้ได้ ทั้งที่ไม่ตั้งก็ใช้ได้ครบ
+//
+// 🧠 เคสนี้เฝ้า 2 ทิศ: เอกสารต้องไม่ขู่เกินจริง **และ** กลไก lazy expire ต้องยังอยู่จริง
+//    ถ้าใครถอด markExpiredReservations() ออกจากเส้นทางเหล่านี้ เอกสารจะกลายเป็นคำโกหกทันที
+$lazyCallers = [
+    'app/Services/HomeService.php'                    => 'markExpiredReservations',
+    'app/Services/BookService.php'                    => 'markExpiredReservations',
+    'app/Repositories/ReservationRepository.php'      => 'markExpiredReservations',
+    'admin/index.php'                                 => 'expireOverdueReservations',
+];
+$missingLazy = [];
+foreach ($lazyCallers as $rel => $needle) {
+    $src = (string) @file_get_contents($ROOT . '/' . $rel);
+    // ต้องเป็นการ "เรียกใช้" ไม่ใช่แค่พูดถึงในคอมเมนต์
+    if (!preg_match('/->' . preg_quote($needle, '/') . '\s*\(/', $src)) {
+        $missingLazy[] = $rel;
+    }
+}
+
+$deploySrc2 = (string) @file_get_contents($ROOT . '/docs/DEPLOYMENT.md');
+$limitSrc2  = (string) @file_get_contents($ROOT . '/docs/LIMITATIONS.md');
+$faqSrc2    = (string) @file_get_contents($ROOT . '/docs/FAQ.md');
+// ข้อความขู่เกินจริงแบบเดิมที่ต้องไม่กลับมา
+$overclaim = (bool) preg_match('/ค้างเป็น\s*`?pending`?\s*ตลอด|หนังสือหายจากระบบ/u', $deploySrc2);
+// เอกสารต้องอธิบายพฤติกรรมจริงไว้ทั้ง 3 ที่
+$explained = str_contains($deploySrc2, 'ระบบเคลียร์ให้เองอยู่แล้ว')
+    && str_contains($limitSrc2, 'ปล่อยตอนมีคนเปิดหน้า')
+    && str_contains($faqSrc2, 'ยังไม่กลับขึ้นชั้น');
+
+check('DOC-M1', $missingLazy === [] && !$overclaim && $explained,
+    'เอกสารอธิบายการจองหมดอายุตรงกับกลไกจริง (lazy expire ยังอยู่ครบ ' . count($lazyCallers) . ' จุด)',
+    '🔴 ' . ($missingLazy ? 'กลไก lazy expire หายไปจาก: ' . implode(', ', $missingLazy) . ' ' : '')
+        . ($overclaim ? 'DEPLOYMENT.md ยังขู่ว่า "ค้างตลอด/หนังสือหายจากระบบ" ซึ่งไม่จริง ' : '')
+        . (!$explained ? 'เอกสารยังไม่ได้อธิบายพฤติกรรมจริงครบทั้ง 3 ไฟล์' : ''));
+
+// 🧠 cron เป็น "ของแถม" ไม่ใช่ "ของที่ขาดไม่ได้" — สคริปต์ต้องมีอยู่จริงถ้าเอกสารชี้ไป
+$cronPromised = str_contains($deploySrc2, 'cron/expire_reservations.php');
+check('DOC-M2', !$cronPromised || is_file($ROOT . '/cron/expire_reservations.php'),
+    'สคริปต์ cron ที่เอกสารชี้ไปมีอยู่จริง (เป็นทางเลือก ไม่ตั้งก็ใช้ได้)',
+    '🔴 เอกสารบอกให้ตั้ง cron/expire_reservations.php แต่ไม่มีไฟล์นี้ในโปรเจกต์');
+
+// ============================================================
 // L. เอกสารบอกว่า "สำรองข้อมูลได้" → ปุ่มต้องมีอยู่จริง
 // ============================================================
 // 🧠 เดิม LIMITATIONS.md บอกว่าไม่มีปุ่มสำรองข้อมูล ให้ไปใช้ mysqldump เอง
