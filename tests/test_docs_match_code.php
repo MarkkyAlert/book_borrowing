@@ -693,6 +693,35 @@ foreach ($legacyDocs as $rel2) {
         if (!in_array($id, $liveIds, true)) { $ghostIds[] = "{$rel2} → {$id}"; }
     }
 }
+// ============================================================
+// L. เอกสารบอกว่า "สำรองข้อมูลได้" → ปุ่มต้องมีอยู่จริง
+// ============================================================
+// 🧠 เดิม LIMITATIONS.md บอกว่าไม่มีปุ่มสำรองข้อมูล ให้ไปใช้ mysqldump เอง
+//    พอทำปุ่มแล้วก็แก้เอกสารตาม — เคสนี้กันไม่ให้ทั้งสองฝั่งเดินคนละทางในอนาคต
+//    (ถ้าใครลบ admin/backup.php ทิ้ง เอกสารจะโกหกทันทีโดยไม่มีใครรู้)
+$backupPage   = __DIR__ . '/../admin/backup.php';
+$settingsSrc  = (string) @file_get_contents(__DIR__ . '/../admin/settings.php');
+$limitSrc     = (string) @file_get_contents(__DIR__ . '/../docs/LIMITATIONS.md');
+$deploySrc    = (string) @file_get_contents(__DIR__ . '/../docs/DEPLOYMENT.md');
+
+$featureExists = is_file($backupPage) && str_contains($settingsSrc, 'backup.php');
+$docsClaimIt   = str_contains($limitSrc, 'สำรองข้อมูล') && str_contains($deploySrc, 'สำรองข้อมูล');
+$docsDenyIt    = (bool) preg_match('/ยังไม่มีปุ่มดัมป์|ไม่มีปุ่มสำรอง/u', $limitSrc);
+
+check('DOC-L1', $featureExists && $docsClaimIt && !$docsDenyIt,
+    'เอกสารกับปุ่มสำรองข้อมูลตรงกัน — มีทั้ง admin/backup.php และคำอธิบายในเอกสาร',
+    '🔴 ' . (!$featureExists ? 'เอกสารบอกว่าสำรองข้อมูลได้ แต่หาปุ่ม/หน้า backup.php ไม่เจอ ' : '')
+        . ($docsDenyIt ? 'เอกสารยังเขียนว่า "ไม่มีปุ่มสำรองข้อมูล" ทั้งที่ทำแล้ว ' : '')
+        . (!$docsClaimIt ? 'ทำปุ่มแล้วแต่เอกสารยังไม่ได้พูดถึง' : ''));
+
+// 🛡️ ไฟล์สำรองมีข้อมูลอ่อนไหว — เอกสาร/หน้าจอต้องเตือนผู้ใช้ ไม่ใช่ให้เขาเดาเอง
+$warnsOnScreen = str_contains($settingsSrc, 'ข้อมูลส่วนตัวของสมาชิกทุกคน');
+$warnsInFile   = str_contains((string) @file_get_contents($backupPage), 'คำเตือน');
+check('DOC-L2', $warnsOnScreen && $warnsInFile,
+    'มีคำเตือนเรื่องข้อมูลอ่อนไหวทั้งบนหน้าจอและในหัวไฟล์สำรอง',
+    '🔴 ' . (!$warnsOnScreen ? 'หน้าตั้งค่าไม่เตือนว่าไฟล์มีข้อมูลส่วนตัว ' : '')
+        . (!$warnsInFile ? 'หัวไฟล์ .sql ไม่มีคำเตือน' : ''));
+
 check('DOC-K2', $liveIds && !$ghostIds,
     'รหัสเคสทุกตัวที่บันทึกเก่าอ้าง ยังมีอยู่จริงใน qa_test_runner.php (' . count($liveIds) . ' เคส)',
     "🔴 บันทึกเก่าอ้างเคสที่ไม่มีแล้ว:\n       " . implode("\n       ", $ghostIds));

@@ -525,6 +525,42 @@ require_once __DIR__ . '/header.php';
             </div>
         </div>
 
+        <!-- ══ สำรองข้อมูล ══ -->
+        <?php // 🔴 [UAT รอบ 3 ต.3] เดิมไม่มีปุ่มสำรองข้อมูลเลย เอกสารบอกให้ลูกค้า
+              //    ไปใช้ mysqldump/phpMyAdmin เอง ซึ่งบรรณารักษ์ที่ดูแลคนเดียวทำไม่ได้ ?>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h5 class="font-bold text-gray-800"><i class="bi bi-shield-check text-slate-600 mr-2"></i>สำรองข้อมูล</h5>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    ดาวน์โหลดข้อมูลทั้งระบบเก็บไว้ — ถ้าเครื่องนี้พัง จะเอาไฟล์นี้กู้คืนได้
+                </p>
+            </div>
+
+            <div class="p-6">
+                <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 mb-4 text-sm text-amber-900">
+                    <p class="font-semibold mb-1">อ่านก่อนกด</p>
+                    <ul class="list-disc list-inside space-y-1 text-xs leading-relaxed">
+                        <li>ไฟล์ที่ได้มี<strong>ข้อมูลส่วนตัวของสมาชิกทุกคน</strong> — อีเมล เบอร์โทร
+                            รหัสผ่านที่เข้ารหัสไว้ และรหัสผ่านอีเมลของห้องสมุด</li>
+                        <li>เก็บไว้ในที่ปลอดภัย <strong>อย่าส่งต่อทางแชทหรืออีเมล</strong>โดยไม่ใส่รหัส</li>
+                        <li>ควรสำรองอย่างน้อย<strong>เดือนละครั้ง</strong> และก่อนปิดเทอมทุกครั้ง
+                            แล้วเก็บสำเนาไว้คนละที่กับเครื่องนี้ (เช่น แฟลชไดรฟ์)</li>
+                        <li>วิธีกู้คืนเขียนไว้ในหัวไฟล์แล้ว เปิดด้วย Notepad อ่านได้</li>
+                    </ul>
+                </div>
+
+                <form method="POST" action="<?= APP_URL ?>/admin/backup.php">
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <button type="submit" class="inline-flex items-center px-4 py-2.5 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-lg transition-colors">
+                        <i class="bi bi-download mr-2"></i>ดาวน์โหลดไฟล์สำรองข้อมูล
+                    </button>
+                </form>
+                <p class="text-xs text-gray-400 mt-3">
+                    ไฟล์จะถูกส่งให้ดาวน์โหลดทันที ไม่มีการเก็บสำเนาไว้บนเซิร์ฟเวอร์
+                </p>
+            </div>
+        </div>
+
         <!-- ══ บัตรสมาชิก ══ -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">

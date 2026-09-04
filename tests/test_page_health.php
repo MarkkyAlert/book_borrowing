@@ -74,14 +74,17 @@ function check(string $id, bool $ok, string $okMsg, string $failMsg): void
 $COOKIE = tempnam(sys_get_temp_dir(), 'bbph');
 register_shutdown_function(fn() => @unlink($COOKIE));
 
-function http(string $method, string $url, array $fields = []): string
+function http(string $method, string $url, array $fields = [], ?string $jar = null): string
 {
     global $COOKIE;
+    // 🧠 $jar = ยิงด้วย session อื่น (เช่น ทดสอบว่าเจ้าหน้าที่ธรรมดาโหลดไฟล์สำรองได้ไหม)
+    //    ไม่ส่งมา = ใช้ session ของแอดมินที่ล็อกอินไว้ตั้งแต่ต้นไฟล์
+    $jar = $jar ?? $COOKIE;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEJAR      => $COOKIE,
-        CURLOPT_COOKIEFILE     => $COOKIE,
+        CURLOPT_COOKIEJAR      => $jar,
+        CURLOPT_COOKIEFILE     => $jar,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT        => 30,
     ]);
@@ -506,6 +509,92 @@ if ($anyBorrowId === 0) {
         'การ์ด "วันนี้" โชว์ยอดของวันนี้ (' . number_format($today) . ' ฿) ไม่ใช่ยอดเดือน (' . number_format($month) . ' ฿)',
         "🔴 การ์ดโชว์ {$shownTxt} ฿ · วันนี้จริง " . number_format($today) . " ฿ · เดือนนี้ " . number_format($month) . ' ฿');
 }
+
+
+// ============================================================
+echo "\n── G. สำรองข้อมูล (UAT รอบ 3 ข้อ ต.3) ──\n";
+// ============================================================
+// 🧠 ไฟล์สำรองมีข้อมูลอ่อนไหวทั้งระบบ (hash รหัสผ่านทุกคน · อีเมล · เบอร์โทร ·
+//    รหัสผ่าน SMTP) หมวดนี้จึงเฝ้า 2 เรื่องคู่กัน: ใครโหลดได้ และไฟล์ใช้กู้คืนได้จริงไหม
+
+$backupUrl = "$BASE_URL/admin/backup.php";
+$adminTok  = csrfFrom(http('GET', "$BASE_URL/admin/settings.php"));
+
+// ── G1: ต้องเป็นผู้ดูแลระบบ + ต้องมาจากปุ่มจริงเท่านั้น ──
+$looksLikeDump = fn(string $body): bool => str_contains($body, 'ไฟล์สำรองข้อมูล')
+    && str_contains($body, 'CREATE TABLE');
+
+$leaks = [];
+// ไม่ล็อกอิน (cookie jar ใหม่)
+$anonJar = tempnam(sys_get_temp_dir(), 'bkanon');
+if ($looksLikeDump(http('POST', $backupUrl, ['csrf_token' => $adminTok], $anonJar))) {
+    $leaks[] = 'คนที่ไม่ได้ล็อกอินโหลดได้';
+}
+@unlink($anonJar);
+// เจ้าหน้าที่ (staff) — ไม่ใช่ผู้ดูแล
+$staffJar = tempnam(sys_get_temp_dir(), 'bkstaff');
+$sLogin = http('GET', "$BASE_URL/login.php", [], $staffJar);
+http('POST', "$BASE_URL/login.php", [
+    'email' => 'staff@library.com', 'password' => '123456', 'csrf_token' => csrfFrom($sLogin),
+], $staffJar);
+$staffTok = csrfFrom(http('GET', "$BASE_URL/admin/", [], $staffJar));
+if ($looksLikeDump(http('POST', $backupUrl, ['csrf_token' => $staffTok], $staffJar))) {
+    $leaks[] = 'เจ้าหน้าที่ (staff) โหลดได้';
+}
+@unlink($staffJar);
+// ผู้ดูแลแต่ไม่มี token (จำลองการถูกหลอกให้กดลิงก์จากเว็บอื่น)
+if ($looksLikeDump(http('POST', $backupUrl, []))) {
+    $leaks[] = 'ยิงมาโดยไม่มี CSRF token ก็ได้ไฟล์';
+}
+// ผู้ดูแล + GET ธรรมดา
+if ($looksLikeDump(http('GET', $backupUrl))) {
+    $leaks[] = 'เปิดด้วย URL เฉย ๆ (GET) ก็ได้ไฟล์';
+}
+check('PAGE-G1', $leaks === [],
+    'ไฟล์สำรองโหลดได้เฉพาะผู้ดูแลระบบที่กดปุ่มจากหน้าตั้งค่า (กัน 4 ทาง)',
+    '🔴 ไฟล์สำรองหลุด: ' . implode(' · ', $leaks));
+
+// ── G2: ผู้ดูแลกดปุ่มจริงต้องได้ไฟล์ และต้องครบทุกตาราง ──
+$dump = http('POST', $backupUrl, ['csrf_token' => $adminTok]);
+$dbTables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+$missingTables = [];
+foreach ($dbTables as $t) {
+    if (!str_contains($dump, "CREATE TABLE `{$t}`")) $missingTables[] = $t;
+}
+check('PAGE-G2', $looksLikeDump($dump) && $missingTables === [],
+    'ผู้ดูแลได้ไฟล์สำรองที่มีโครงสร้างครบ ' . count($dbTables) . ' ตาราง (' . number_format(strlen($dump) / 1024) . ' KB)',
+    '🔴 ' . (!$looksLikeDump($dump) ? 'ผู้ดูแลกดแล้วไม่ได้ไฟล์ ' : '') . ($missingTables ? 'ขาดตาราง: ' . implode(', ', $missingTables) : ''));
+
+// ── G3: 🛡️ ไฟล์ต้องกู้คืนได้จริง — backup ที่กู้ไม่ได้ไม่ใช่ backup ──
+//    เทสต์นี้ตรวจ "ความครบถ้วนของเนื้อไฟล์": จำนวน INSERT ต้องเท่าจำนวนแถวจริง
+//    และข้อความไทยที่มีอักขระพิเศษต้องอยู่ในไฟล์แบบอ่านออก ไม่ใช่ escape เพี้ยน
+//    (การกู้คืนลงฐานข้อมูลจริงทดสอบด้วยมือแล้ว — เทสต์นี้เฝ้าไม่ให้เนื้อไฟล์เพี้ยนภายหลัง)
+$rowMismatch = [];
+foreach ($dbTables as $t) {
+    $real   = (int) $pdo->query("SELECT COUNT(*) FROM `{$t}`")->fetchColumn();
+    $inFile = substr_count($dump, "INSERT INTO `{$t}` (");
+    if ($real !== $inFile) $rowMismatch[] = "{$t}: จริง {$real} แต่ในไฟล์ {$inFile}";
+}
+// ข้อความไทยที่มีอัญประกาศ/ไม้ยมก ต้องรอดออกมาอ่านได้
+$thaiSample = (string) $pdo->query("SELECT title FROM books WHERE title LIKE '%ๆ%' LIMIT 1")->fetchColumn();
+$thaiOk = $thaiSample === '' || str_contains($dump, $thaiSample);
+check('PAGE-G3', $rowMismatch === [] && $thaiOk,
+    'จำนวน INSERT ตรงกับแถวจริงทุกตาราง และภาษาไทยในไฟล์อ่านออก',
+    '🔴 ' . ($rowMismatch ? implode(' · ', array_slice($rowMismatch, 0, 3)) : '')
+        . (!$thaiOk ? " ข้อความไทยเพี้ยนในไฟล์ (หาไม่เจอ: {$thaiSample})" : ''));
+
+// ── G4: ห้ามมีไฟล์สำรองตกค้างในโฟลเดอร์เว็บ ──
+//    🔴 กับดักคลาสสิก: เขียน dump ลงดิสก์ก่อนแล้วค่อยให้โหลด → ใครเดา URL ถูกก็ได้ไป
+$webRoot = realpath(__DIR__ . '/..');
+$strayDumps = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($webRoot, FilesystemIterator::SKIP_DOTS)) as $f) {
+    $path = $f->getPathname();
+    if (str_contains($path, '/.git/') || str_contains($path, '/database/')) continue;
+    if (preg_match('/backup.*\.sql$/i', $f->getFilename())) $strayDumps[] = str_replace($webRoot, '', $path);
+}
+check('PAGE-G4', $strayDumps === [],
+    'ไม่มีไฟล์สำรองตกค้างในโฟลเดอร์เว็บ (สตรีมออกอย่างเดียว ไม่เขียนลงดิสก์)',
+    '🔴 พบไฟล์สำรองค้างอยู่ให้ใครก็โหลดได้: ' . implode(' · ', $strayDumps));
 
 // ============================================================
 echo "\n══════════════════════════════════════\n";
