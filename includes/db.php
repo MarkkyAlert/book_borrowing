@@ -114,6 +114,11 @@ function renderDatabaseDownPage(?string $detail = null): void
         exit;
     }
 
+    // 🛡️ แยกข้อความตามเส้นทาง — ใช้ SCRIPT_NAME แบบเดียวกับตัวตรวจ AJAX ข้างบน
+    //    เพราะตอนฐานข้อมูลล่มจะพึ่ง session/role ไม่ได้ (บางระบบเก็บ session ใน DB)
+    //    เจ้าหน้าที่เท่านั้นที่ควรเห็นวิธีแก้ ส่วนสมาชิกเห็นแค่ว่าให้ถามที่เคาน์เตอร์
+    $isStaffArea = isset($_SERVER['SCRIPT_NAME']) && str_contains($_SERVER['SCRIPT_NAME'], '/admin/');
+
     $appName = defined('APP_NAME') ? APP_NAME : 'ระบบยืมคืนหนังสือ';
     // 🛡️ escape เสมอ — $detail มาจากข้อความของ MySQL ซึ่งอาจมีอักขระพิเศษ
     $safeName   = htmlspecialchars($appName, ENT_QUOTES, 'UTF-8');
@@ -128,13 +133,33 @@ function renderDatabaseDownPage(?string $detail = null): void
     echo 'border-radius:1rem;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}';
     echo 'h1{font-size:1.5rem;margin:0 0 .75rem}p{margin:.5rem 0;color:#475569;line-height:1.7}';
     echo '.icon{font-size:3rem;line-height:1}';
+    echo '.steps{margin-top:1.25rem;padding:1rem 1rem 1rem .25rem;background:#f8fafc;';
+    echo 'border:1px solid #e2e8f0;border-radius:.5rem;text-align:left}';
+    echo '.steps ol{margin:0;padding-left:1.5rem}.steps li{margin:.5rem 0;line-height:1.7;color:#334155}';
+    echo '.muted{color:#64748b;font-size:.9em}';
     echo '.detail{margin-top:1.5rem;padding:1rem;background:#fef2f2;border:1px solid #fecaca;';
     echo 'border-radius:.5rem;text-align:left;font-family:ui-monospace,monospace;font-size:.8rem;';
     echo 'color:#991b1b;word-break:break-all}</style></head><body><div class="box">';
     echo '<div class="icon">🔌</div>';
     echo '<h1>ระบบขัดข้องชั่วคราว</h1>';
-    echo '<p>ขณะนี้ระบบไม่สามารถเชื่อมต่อฐานข้อมูลได้</p>';
-    echo '<p>กรุณาลองใหม่อีกสักครู่ หรือติดต่อผู้ดูแลระบบ</p>';
+
+    if ($isStaffArea) {
+        // 👩‍💼 ฝั่งเจ้าหน้าที่ — คนอ่านคือคนที่แก้ได้ จึงบอกขั้นตอนที่ทำเองได้ทันที
+        echo '<p>ขณะนี้ระบบไม่สามารถเชื่อมต่อฐานข้อมูลได้</p>';
+        echo '<div class="steps"><ol>';
+        echo '<li>เปิด <strong>XAMPP Control Panel</strong> แล้วดูว่า <strong>MySQL</strong> ยังทำงานอยู่ไหม<br>';
+        echo 'ถ้าไม่ได้ทำงาน ให้กด <strong>Start</strong> แล้วรีเฟรชหน้านี้ — ระบบจะกลับมาเองทันที ';
+        echo '<span class="muted">ข้อมูลไม่หาย ไม่ต้องกู้คืนอะไร</span></li>';
+        echo '<li>ถ้ากด Start แล้วยังขึ้นหน้านี้อยู่ ให้ติดต่อผู้ขาย แล้วบอกว่า<br>';
+        echo '<strong>&ldquo;หน้าเว็บขึ้นว่าเชื่อมต่อฐานข้อมูลไม่ได้&rdquo;</strong></li>';
+        echo '</ol></div>';
+    } else {
+        // 🛡️ ฝั่งสมาชิก — ห้ามบอกว่าเบื้องหลังใช้อะไร
+        //    นักเรียนที่เปิดเว็บมาเจอ "เปิด XAMPP Control Panel" คือทั้งงง
+        //    และเท่ากับบอกสแตกของเซิร์ฟเวอร์ให้คนนอกรู้ฟรี ๆ
+        echo '<p>ขณะนี้ระบบไม่สามารถให้บริการได้ชั่วคราว</p>';
+        echo '<p>กรุณาลองใหม่อีกสักครู่ หรือสอบถามที่เคาน์เตอร์ห้องสมุด</p>';
+    }
     if ($safeDetail !== null) {
         echo '<div class="detail"><strong>รายละเอียด (แสดงเพราะเปิด APP_DEBUG):</strong><br>' . $safeDetail;
         echo '<br><br>⚠️ อย่าลืมตั้ง APP_DEBUG=false กลับหลังแก้ปัญหาเสร็จ</div>';

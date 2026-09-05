@@ -605,6 +605,74 @@ check('PAGE-G4', $strayDumps === [],
     'ไม่มีไฟล์สำรองตกค้างในโฟลเดอร์เว็บ (สตรีมออกอย่างเดียว ไม่เขียนลงดิสก์)',
     '🔴 พบไฟล์สำรองค้างอยู่ให้ใครก็โหลดได้: ' . implode(' · ', $strayDumps));
 
+
+// ============================================================
+echo "\n── H. หน้าตอนฐานข้อมูลล่ม (UAT รอบ 3 ข้อ ต.1) ──\n";
+// ============================================================
+// 🧠 ทำไมเรียกฟังก์ชันตรง ไม่หยุด MySQL จริง:
+//    การหยุดบริการฐานข้อมูลกลางชุดทดสอบจะทำให้เคสอื่นล้มหมด และเป็นสิ่งที่
+//    เครื่องของลูกค้าอาจไม่อนุญาต — renderDatabaseDownPage() เป็นฟังก์ชันบริสุทธิ์
+//    ที่ไม่แตะฐานข้อมูลอยู่แล้ว จึงยิงตรงได้ผลเหมือนกัน
+//
+// 🔴 หน้านี้คือหน้าเดียวที่คนนอกเห็นตอนระบบล่ม — ต้องช่วยเจ้าหน้าที่ให้แก้เองได้
+//    แต่ต้องไม่บอกสแตกเบื้องหลังให้คนทั่วไปรู้
+$renderDown = function (string $scriptName): string {
+    $cmd = 'SCRIPT_NAME_TEST=1 ' . escapeshellarg(PHP_BINARY) . ' -r '
+        . escapeshellarg(
+            '$_SERVER["SCRIPT_NAME"] = ' . var_export($scriptName, true) . ';'
+            . 'require ' . var_export(__DIR__ . '/../includes/config.php', true) . ';'
+            . 'require ' . var_export(__DIR__ . '/../includes/db.php', true) . ';'
+            . 'ob_start(); renderDatabaseDownPage(null); echo ob_get_clean();'
+        ) . ' 2>/dev/null';
+    return (string) shell_exec($cmd);
+};
+$downStaff  = $renderDown('/admin/index.php');
+$downPublic = $renderDown('/index.php');
+
+// ── H1: เจ้าหน้าที่ต้องได้ขั้นตอนที่ทำเองได้ ──
+//    เดิมเขียนแค่ "ติดต่อผู้ดูแลระบบ" ซึ่งเป็นทางตัน เพราะบรรณารักษ์คือผู้ดูแลระบบเอง
+$staffNeeds = ['XAMPP', 'MySQL', 'Start', 'รีเฟรช'];
+$staffMissing = array_values(array_filter($staffNeeds, fn($w) => !str_contains($downStaff, $w)));
+check('PAGE-H1', $downStaff !== '' && $staffMissing === [],
+    'หน้าล่มฝั่งเจ้าหน้าที่บอกขั้นตอนที่ทำเองได้ (เปิด XAMPP → ดู MySQL → กด Start → รีเฟรช)',
+    '🔴 ' . ($downStaff === '' ? 'เรนเดอร์หน้าไม่ได้' : 'ขาดคำแนะนำ: ' . implode(', ', $staffMissing)));
+
+// ── H2: 🛡️ ฝั่งสมาชิกต้องไม่รู้ว่าเบื้องหลังใช้อะไร ──
+//    นักเรียนที่เปิดเว็บมาเจอ "เปิด XAMPP Control Panel" คือทั้งงงและ
+//    เท่ากับบอกสแตกของเซิร์ฟเวอร์ให้คนนอกรู้ฟรี ๆ ตอนที่ระบบกำลังอ่อนแอที่สุด
+$stackWords = ['XAMPP', 'MySQL', 'Control Panel', 'phpMyAdmin', 'Apache'];
+$leakedToPublic = array_values(array_filter($stackWords, fn($w) => str_contains($downPublic, $w)));
+check('PAGE-H2', $downPublic !== '' && $leakedToPublic === [],
+    'หน้าล่มฝั่งสมาชิกไม่บอกสแตกเบื้องหลัง (บอกแค่ให้สอบถามที่เคาน์เตอร์)',
+    '🔴 คนนอกเห็นสแตกของเซิร์ฟเวอร์: ' . implode(', ', $leakedToPublic));
+
+// ── H3: ทั้งสองฝั่งต้องไม่รั่วความลับ ──
+$secrets = ['book_borrowing', '127.0.0.1', '/Applications/XAMPP', 'SQLSTATE', 'PDOException', 'Stack trace'];
+$leaked = [];
+foreach (['เจ้าหน้าที่' => $downStaff, 'สมาชิก' => $downPublic] as $side => $html) {
+    foreach ($secrets as $w) {
+        if (str_contains($html, $w)) $leaked[] = "{$side}: {$w}";
+    }
+}
+check('PAGE-H3', $leaked === [],
+    'หน้าล่มไม่รั่วชื่อฐานข้อมูล / host / path / stack trace ทั้งสองฝั่ง',
+    '🔴 รั่ว: ' . implode(' · ', $leaked));
+
+// ── H4: ต้องยืนได้ด้วยตัวเอง — ฐานข้อมูลล่มแล้วจะไปโหลดอะไรจากไหนไม่ได้ ──
+//    (ข้อบังคับที่ includes/db.php เขียนไว้เอง: ห้ามเรียก DB · ห้ามโหลด CSS/JS จากที่อื่น)
+$externalRefs = [];
+foreach (['เจ้าหน้าที่' => $downStaff, 'สมาชิก' => $downPublic] as $side => $html) {
+    if (preg_match_all('/(?:src|href)="(?!#)([^"]+)"/', $html, $m)) {
+        foreach ($m[1] as $ref) $externalRefs[] = "{$side}: {$ref}";
+    }
+}
+$has503 = str_contains(file_get_contents(__DIR__ . '/../includes/db.php'), 'http_response_code(503)')
+    && str_contains(file_get_contents(__DIR__ . '/../includes/db.php'), 'Retry-After');
+check('PAGE-H4', $externalRefs === [] && $has503,
+    'หน้าล่มยืนได้ด้วยตัวเอง (ไม่โหลดไฟล์จากที่อื่นเลย) และยังตอบ 503 + Retry-After',
+    '🔴 ' . ($externalRefs ? 'โหลดไฟล์ภายนอก: ' . implode(' · ', $externalRefs) . ' ' : '')
+        . (!$has503 ? 'ไม่ได้ตอบ 503/Retry-After แล้ว' : ''));
+
 // ============================================================
 echo "\n══════════════════════════════════════\n";
 printf(" RESULTS: %d/%d passed (%.1f%%)%s\n",
