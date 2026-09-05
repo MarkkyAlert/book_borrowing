@@ -21,7 +21,23 @@ $pdo = getDB();
 $userId = $_SESSION['user_id'];
 
 use App\Repositories\BorrowRepository;
+use App\Services\BorrowService;
 $borrowRepo = new BorrowRepository($pdo);
+
+// 💰 [UAT รอบ 5] ต้องใช้ Service เพื่อคำนวณ "ค่าปรับถึงวันนี้" ของเล่มที่ยังไม่ได้คืน
+//
+// 🔴 ปัญหาเดิม: หน้านี้อ่าน borrows.fine_amount จากฐานข้อมูลตรง ๆ ซึ่งระบบเขียนลงไป
+//    ตอน**รับคืน**เท่านั้น เล่มที่ยังค้างอยู่จึงเป็น 0.00 เสมอ
+//    ผลคือนักเรียนที่เลยกำหนดมา 10 วันเห็นแค่ "(เลยกำหนด 10 วัน)" ไม่มีตัวเลขเงินเลย
+//    ทั้งที่เจ้าหน้าที่เปิดหน้าเดียวกันเห็น "100 บาท" ชัด ๆ
+//
+// 🧠 ใช้ calculateFine() ตัวเดียวกับ admin/borrows.php ไม่คำนวณเอง
+//    เพื่อให้ตัวเลขสองฝั่งตรงกันเสมอ **รวมถึงการหักวันที่ห้องสมุดปิด**
+//    ถ้าคำนวณเองที่นี่ วันหนึ่งกฎเปลี่ยนแล้วสองฝั่งจะเถียงกันเงียบ ๆ
+//
+// ⚡ ต้นทุน: สมาชิกยืมได้สูงสุด 3 เล่ม จึงเรียกไม่เกิน 3 ครั้งต่อหน้า
+//    และ ClosedDayRepository มี cache ระดับ request อยู่แล้ว
+$borrowService = new BorrowService($pdo);
 
 // 📥 รับ filter จาก query string
 $statusFilter = $_GET['status'] ?? '';
@@ -226,6 +242,17 @@ function getDaysRemaining($dueDate): int {
                                                 กำหนดคืน: <?= date('d/m/Y', strtotime($borrow['due_date'])) ?>
                                                 <?php if ($isOverdue): ?>
                                                     <span class="text-red-500">(เลยกำหนด <?= abs($daysRemaining) ?> วัน)</span>
+                                                    <?php // 💰 [UAT รอบ 5] บอกยอดที่เดินอยู่ ณ วันนี้
+                                                          //    ⚠️ ไม่ใช้คำว่า "ค้างชำระ" เพราะยังไม่ถึงกำหนดจ่าย
+                                                          //       และยอดนี้ยังไม่ถูกบันทึกลงฐานข้อมูล (บันทึกตอนรับคืน)
+                                                          //    🧠 บอกด้วยว่าคืนเร็วยอดหยุด — ไม่งั้นเห็นตัวเลขแล้วท้อ ไม่มาคืนเลย
+                                                          $runningFine = $borrowService->calculateFine($borrow['due_date'], null); ?>
+                                                    <?php if ($runningFine['amount'] > 0): ?>
+                                                        <span class="block sm:inline text-red-600 font-semibold mt-1 sm:mt-0 sm:ml-1">
+                                                            <i class="bi bi-cash-coin mr-1"></i>ค่าปรับถึงวันนี้ <?= number_format($runningFine['amount'], 2) ?> บาท
+                                                            <span class="font-normal text-gray-500">— คืนเร็วยอดหยุดเร็ว</span>
+                                                        </span>
+                                                    <?php endif; ?>
                                                 <?php elseif ($isDueToday): ?>
                                                     <span class="text-amber-600">(วันนี้!)</span>
                                                 <?php else: ?>

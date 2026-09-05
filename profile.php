@@ -48,6 +48,26 @@ $activeBorrows = $borrowStats['active_borrows'] ?? 0;
 $unpaidFines = $borrowRepo->getUnpaidFinesByUser($_SESSION['user_id']);
 $totalUnpaidAmount = array_sum(array_column($unpaidFines, 'fine_amount'));
 
+// 💰 [UAT รอบ 5] ค่าปรับที่ "กำลังเดิน" ของเล่มที่ยังไม่ได้คืน
+//
+// 🔴 **ห้ามบวกรวมเข้ากับ $totalUnpaidAmount** — เป็นเงินคนละสถานะกัน
+//    ค้างชำระ = คืนแล้ว ยอดถูกบันทึก ถึงกำหนดจ่ายแล้ว
+//    กำลังเดิน = ยังไม่คืน ยอดยังโตทุกวัน ยังไม่ถูกบันทึกลงฐานข้อมูล
+//
+//    ระบบมี 6 query ที่นิยามคำว่า "ค้างชำระ" และ tests/test_fine_waiver.php หมวด C
+//    บังคับให้ทั้ง 6 ที่ตรงกัน ถ้าเอายอดที่กำลังเดินยัดเข้าไปในตัวเลขนี้
+//    นักเรียนจะเห็นเลขหนึ่ง แต่หน้าค่าปรับของเจ้าหน้าที่เห็นอีกเลขสำหรับคนเดียวกัน
+//    → กลายเป็นบั๊ก "ตัวเลขเถียงกันข้ามหน้า" ตระกูลเดียวกับที่แก้ไปแล้วใน UAT รอบ 2
+//
+// 🧠 จึงแสดงเป็นบรรทัดแยก และใช้ calculateFine() ตัวเดียวกับหน้าเจ้าหน้าที่
+$borrowService = new \App\Services\BorrowService($pdo);
+$runningFineTotal = 0.0;
+foreach ($borrowRepo->findAll(['user_id' => $_SESSION['user_id'], 'status' => 'borrowing']) as $b) {
+    if ($b['due_date'] < date('Y-m-d')) {
+        $runningFineTotal += $borrowService->calculateFine($b['due_date'], null)['amount'];
+    }
+}
+
 // 🔖 จำนวนรายการจองที่รอดำเนินการ
 $pendingReservations = $reservationRepo->findByUser($_SESSION['user_id'], 'pending');
 
@@ -295,6 +315,14 @@ require_once __DIR__ . '/includes/header.php';
                             <p class="text-2xl font-bold <?= $totalUnpaidAmount > 0 ? 'text-red-600' : 'text-green-600' ?>">
                                 <?= number_format($totalUnpaidAmount, 2) ?> <span class="text-sm font-normal">บาท</span>
                             </p>
+                            <?php // 💰 [UAT รอบ 5] บรรทัดแยก ไม่รวมกับยอดข้างบน (ดูเหตุผลตรงที่คำนวณ) ?>
+                            <?php if ($runningFineTotal > 0): ?>
+                                <p class="text-xs text-amber-700 mt-1.5 leading-relaxed">
+                                    <i class="bi bi-clock-history mr-1"></i>
+                                    ค่าปรับถึงวันนี้อีก <span class="font-bold"><?= number_format($runningFineTotal, 2) ?></span> บาท
+                                    จากเล่มที่ยังไม่ได้คืน — คืนเร็วยอดหยุดเร็ว
+                                </p>
+                            <?php endif; ?>
                         </div>
                         <div class="w-12 h-12 <?= $totalUnpaidAmount > 0 ? 'bg-red-100' : 'bg-green-100' ?> rounded-xl flex items-center justify-center">
                             <i class="bi bi-cash-coin text-xl <?= $totalUnpaidAmount > 0 ? 'text-red-600' : 'text-green-600' ?>"></i>
