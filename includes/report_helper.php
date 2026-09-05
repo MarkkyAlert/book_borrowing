@@ -41,7 +41,8 @@
  *   $config = getReportConfig('books', '2024-01-01', '2024-12-31', $repo);
  *   // { data: [...], headers: [...], filename: 'top_books_2024-01-15', title: '...' }
  */
-function getReportConfig(string $type, string $start, string $end, $repo, bool $forPdf = false): array
+function getReportConfig(string $type, string $start, string $end, $repo, bool $forPdf = false,
+                         bool $onlyUncalled = false): array
 {
     // 📝 สร้างข้อความช่วงวันที่สำหรับใส่ใน title
     $dateRangeText = formatDate($start) . ' - ' . formatDate($end);
@@ -80,10 +81,12 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
         case 'overdue':
             // 📝 หนังสือค้างส่ง (ไม่ใช้ date range เพราะดูแค่ "ตอนนี้")
             return [
-                'data' => $repo->getOverdueReport(),
+                'data' => $repo->getOverdueReport($onlyUncalled),
                 'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)', 'โทรแล้วเมื่อ'],
-                'filename' => "overdue_books_" . date('Y-m-d'),
-                'title' => 'รายงานหนังสือค้างส่ง',
+                'filename' => "overdue_books_" . ($onlyUncalled ? "uncalled_" : "") . date('Y-m-d'),
+                // 🔴 ใบที่พิมพ์ออกมาต้องบอกเองว่ากรองอะไรอยู่
+                //    ไม่งั้นใบ "เฉพาะที่ยังไม่ได้โทร" จะดูเหมือนรายชื่อทั้งหมด
+                'title' => 'รายงานหนังสือค้างส่ง' . ($onlyUncalled ? ' (เฉพาะที่ยังไม่ได้โทร)' : ''),
                 'uses_date_range' => false,
             ];
 
@@ -92,10 +95,11 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             //    🧠 คู่กับ 'overdue' — ตัวนั้นตามหลัง ตัวนี้ตามก่อน
             //    ระบบไม่ส่งอีเมล บรรณารักษ์จึงพิมพ์ใบนี้ออกมาแล้วโทรเอง
             return [
-                'data' => $repo->getDueSoonReport(DUE_SOON_DAYS),
+                'data' => $repo->getDueSoonReport(DUE_SOON_DAYS, $onlyUncalled),
                 'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เหลืออีก (วัน)', 'โทรแล้วเมื่อ'],
-                'filename' => "due_soon_" . date('Y-m-d'),
-                'title' => 'ใบรายชื่อโทรตาม — ครบกำหนดภายใน ' . DUE_SOON_DAYS . ' วัน',
+                'filename' => "due_soon_" . ($onlyUncalled ? "uncalled_" : "") . date('Y-m-d'),
+                'title' => 'ใบรายชื่อโทรตาม — ครบกำหนดภายใน ' . DUE_SOON_DAYS . ' วัน'
+                    . ($onlyUncalled ? ' (เฉพาะที่ยังไม่ได้โทร)' : ''),
                 'uses_date_range' => false,
             ];
 

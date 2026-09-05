@@ -650,8 +650,13 @@ class ReportRepository
      * 📤 @return array [{name, phone, title, borrow_date, due_date, days_left}, ...]
      * ⚠️ phone = ข้อมูลส่วนบุคคล ต้อง escape ก่อนแสดง และใบที่พิมพ์ออกมามีเบอร์โทร
      */
-    public function getDueSoonReport(int $days): array
+    public function getDueSoonReport(int $days, bool $onlyUncalled = false): array
     {
+        // 📞 [UAT รอบ 4 ข้อ 3] ตัดคนที่โทรไปแล้ววันนี้ออกจากใบ
+        //    บรรณารักษ์พิมพ์ใบไปนั่งโทร โทรไม่หมดใน 1 วัน พรุ่งนี้พิมพ์ใหม่
+        //    ถ้าไม่ตัดออก จะต้องไล่กากบาททีละแถวเทียบใบเก่าเอง
+        // 🛡️ $onlyUncalled เป็น bool — ต่อสตริงตรงนี้ปลอดภัย ไม่ใช่ข้อมูลจากผู้ใช้
+        $uncalledSQL = $onlyUncalled ? 'AND b.contacted_at IS NULL' : '';
         $borrowDateCol = "DATE_FORMAT(b.borrow_date, '%d/%m/%Y') as borrow_date";
         $dueDateCol    = "DATE_FORMAT(b.due_date, '%d/%m/%Y') as due_date";
 
@@ -668,6 +673,7 @@ class ReportRepository
             WHERE b.status = 'borrowing'
               AND b.due_date >= CURDATE()
               AND b.due_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+              {$uncalledSQL}
             ORDER BY b.due_date ASC, u.name ASC, b.id ASC
         ");
         $stmt->bindValue(1, $days, PDO::PARAM_INT);
@@ -675,8 +681,13 @@ class ReportRepository
         return $stmt->fetchAll();
     }
 
-    public function getOverdueReport(): array
+    public function getOverdueReport(bool $onlyUncalled = false): array
     {
+        // 📞 [UAT รอบ 4 ข้อ 3] ตัดคนที่โทรไปแล้ววันนี้ออกจากใบ
+        //    บรรณารักษ์พิมพ์ใบไปนั่งโทร โทรไม่หมดใน 1 วัน พรุ่งนี้พิมพ์ใหม่
+        //    ถ้าไม่ตัดออก จะต้องไล่กากบาททีละแถวเทียบใบเก่าเอง
+        // 🛡️ $onlyUncalled เป็น bool — ต่อสตริงตรงนี้ปลอดภัย ไม่ใช่ข้อมูลจากผู้ใช้
+        $uncalledSQL = $onlyUncalled ? 'AND b.contacted_at IS NULL' : '';
         // 🔄 Flow: admin/reports.php + export_pdf.php → ReportService
         // 🎯 ดึงรายการหนังสือที่เกินกำหนดคืน (overdue) ทั้งหมด
         //
@@ -710,6 +721,7 @@ class ReportRepository
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
             WHERE b.status = 'borrowing' AND b.due_date < CURDATE()
+              {$uncalledSQL}
             ORDER BY b.due_date ASC, b.id ASC
         ")->fetchAll();
     }

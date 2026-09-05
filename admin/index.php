@@ -571,6 +571,21 @@ require_once __DIR__ . '/header.php';
         <button onclick="exportDashboardPDF()" class="inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-rose-500/20">
             <i class="bi bi-printer mr-2"></i>พิมพ์สรุป
         </button>
+
+        <?php // 💾 [UAT รอบ 4 ข้อ 5] เดิมปุ่มสำรองข้อมูลอยู่แค่ในหน้าตั้งค่า
+              //    ตอนคอมเริ่มมีอาการแปลก ๆ คนจะรีบหา "ปุ่มเซฟ" ที่หน้าแรก ไม่ใช่ไปขุดในหน้าตั้งค่า
+              //    ⚠️ ขึ้นเฉพาะผู้ดูแลระบบ — backup.php เรียก requireAdmin()
+              //       ถ้าโชว์ให้เจ้าหน้าที่ทั่วไปด้วย กดแล้วจะเจอหน้า "ไม่มีสิทธิ์" เฉย ๆ
+              //    🧠 ต้องเป็น POST + CSRF เหมือนในหน้าตั้งค่า จะทำเป็นลิงก์ธรรมดาไม่ได้ ?>
+        <?php if (isAdmin()): ?>
+            <form method="POST" action="<?= APP_URL ?>/admin/backup.php" class="inline">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <button type="submit" class="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-amber-500/20"
+                        title="ดาวน์โหลดไฟล์สำรองข้อมูลทั้งระบบ — ควรทำเดือนละครั้งและก่อนปิดเทอม">
+                    <i class="bi bi-shield-check mr-2"></i>สำรองข้อมูล
+                </button>
+            </form>
+        <?php endif; ?>
     </div>
 </div>
 

@@ -220,11 +220,32 @@ echo "\n── D. รายการเดิมหลังอัปเกร�
 
 // CALL-4: ทุกแถวที่มีอยู่ก่อนต้องเป็น "ยังไม่เคยโทร"
 //    🔴 ถ้า migration ตั้ง DEFAULT เป็น NOW() ทั้งใบจะดูเหมือนโทรครบแล้วตั้งแต่วันอัปเกรด
-$total    = (int) $pdo->query("SELECT COUNT(*) FROM borrows WHERE user_id <> $memberId")->fetchColumn();
-$contacted = (int) $pdo->query("SELECT COUNT(*) FROM borrows WHERE user_id <> $memberId AND contacted_at IS NOT NULL")->fetchColumn();
-check('CALL-4', $contacted === 0,
-    "รายการยืมเดิมทั้ง {$total} แถวเป็น \"ยังไม่เคยโทร\" — ไม่มีแถวไหนถูกตั้งค่าให้เองตอนอัปเกรด",
-    "🔴 มี {$contacted} แถวถูกทำเครื่องหมายว่าโทรแล้วทั้งที่ไม่มีใครกด");
+// 🔴 [แก้ยามที่ผูกกับข้อมูลในเครื่อง] เดิมข้อนี้เขียนว่า "ต้องไม่มีแถวไหนมี contacted_at เลย"
+//    ซึ่งเป็นจริงเฉพาะตอนที่ยังไม่มีใครใช้ฟีเจอร์ — พอบรรณารักษ์เริ่มโทรจริง ยามจะแดงถาวร
+//    แล้วคนจะเลิกสนใจทั้งชุด (เป็นรูปแบบที่พลาดซ้ำมาแล้วหลายครั้งในโปรเจกต์นี้)
+//
+// 🧠 สิ่งที่ต้องการยืนยันจริง ๆ คือ "migration ไม่ได้ประทับเวลาให้ทุกแถวรวดเดียว"
+//    ตรวจ 2 อย่างที่ไม่ขึ้นกับว่ามีใครโทรไปแล้วกี่สาย:
+$total = (int) $pdo->query("SELECT COUNT(*) FROM borrows WHERE user_id <> $memberId")->fetchColumn();
+
+// (1) ระดับซอร์ส — คอลัมน์ต้องไม่มีค่าเริ่มต้นเป็นเวลาปัจจุบัน
+$migFile = glob(__DIR__ . '/../database/migrations/*add_contact_tracking*.php');
+$migSrc  = $migFile ? (string) file_get_contents($migFile[0]) : '';
+$hasDefault = (bool) preg_match('/contacted_at[^,]*DEFAULT\s+(NOW|CURRENT_TIMESTAMP)/i', $migSrc);
+
+// (2) ระดับข้อมูล — ลายเซ็นของการประทับรวดเดียวคือ "เวลาเดียวกันครอบเกือบทุกแถว"
+//     การโทรจริงกระจายตัวตามวันที่โทร ไม่มีทางกองอยู่ที่วินาทีเดียวเป็นครึ่งฐานข้อมูล
+$biggestBatch = (int) $pdo->query("SELECT COALESCE(MAX(c), 0) FROM (
+        SELECT COUNT(*) c FROM borrows WHERE contacted_at IS NOT NULL GROUP BY contacted_at
+    ) t")->fetchColumn();
+$bulkStamped = $total > 0 && $biggestBatch > $total * 0.5;
+
+check('CALL-4', $migSrc !== '' && !$hasDefault && !$bulkStamped,
+    "รายการยืมเดิม {$total} แถวไม่ได้ถูกประทับว่าโทรแล้วตอนอัปเกรด"
+        . " (ไม่มี DEFAULT เวลาปัจจุบัน · กองใหญ่สุดที่เวลาเดียวกัน {$biggestBatch} แถว)",
+    '🔴 ' . ($migSrc === '' ? 'หาไฟล์ migration ไม่เจอ ' : '')
+          . ($hasDefault ? 'คอลัมน์ตั้ง DEFAULT เป็นเวลาปัจจุบัน — ทุกแถวจะดูเหมือนโทรแล้ว ' : '')
+          . ($bulkStamped ? "มี {$biggestBatch} จาก {$total} แถวถูกประทับเวลาเดียวกัน = ประทับรวดเดียว" : ''));
 
 // CALL-4b: เจ้าหน้าที่ที่โทรถูกลบ → ประวัติต้องไม่หายทั้งแถว (FK เป็น SET NULL)
 $fk = $pdo->query("
@@ -315,6 +336,79 @@ if (!str_contains($home, 'ออกจากระบบ') && !str_contains($hom
     check('CALL-5d', $near && !$far,
         'ปุ่ม "จดว่าโทรแล้ว" ขึ้นเฉพาะแถวที่เกินกำหนด/ใกล้ครบกำหนด ไม่ขึ้นกับเล่มที่เพิ่งยืมไป',
         '🔴 ' . (!$near ? 'แถวที่ควรมีปุ่มกลับไม่มี ' : '') . ($far ? 'แถวที่ยังไม่ถึงเวลาโทรกลับมีปุ่ม' : ''));
+
+    // ════════════════════════════════════════════════════════
+    echo "\n── F. กรอง \"ยังไม่ได้โทร\" (UAT รอบ 4 ข้อ 3) ──\n";
+
+    // CALL-6: ตัวกรองต้อง **ซ้อน** กับเกินกำหนดได้ ไม่ใช่แทนที่กัน
+    //    🔴 คำถามจริงของบรรณารักษ์ทุกเช้าคือ "เกินกำหนด และ ยังไม่ได้โทร เหลือใคร"
+    //       ถ้าซ้อนไม่ได้ ต้องกลับไปไล่ 8 หน้าเองเหมือนเดิม = แก้ไม่ตรงปัญหา
+    $countOn = function (string $qs) use ($http, $BASE): int {
+        return preg_match('/ทั้งหมด\s*([0-9,]+)/u', $http('GET', "{$BASE}/admin/borrows.php?{$qs}"), $m)
+            ? (int) str_replace(',', '', $m[1]) : -1;
+    };
+    $ovAll  = $countOn('filter=overdue');
+    $ovLeft = $countOn('filter=overdue&uncalled=1');
+    $called = (int) $pdo->query("SELECT COUNT(*) FROM borrows
+        WHERE contacted_at IS NOT NULL AND status = 'borrowing' AND due_date < CURDATE()")->fetchColumn();
+    check('CALL-6', $ovAll > 0 && $ovLeft === $ovAll - $called && $called > 0,
+        "กรองซ้อนกันได้: เกินกำหนด {$ovAll} → ยังไม่ได้โทร {$ovLeft} (โทรไปแล้ว {$called})",
+        "🔴 เกินกำหนด {$ovAll} · ยังไม่ได้โทร {$ovLeft} · โทรแล้วจริง {$called} — ตัวเลขไม่สอดคล้อง");
+
+    // CALL-6b: กดเปลี่ยนหน้าแล้วตัวกรองต้องไม่หลุด
+    //    🧠 เคยพลาดแบบนี้มาแล้วกับตัวกรองอื่น (F-37) — ลิงก์หน้า 2 ต้องพา uncalled ไปด้วย
+    $page1 = $http('GET', "{$BASE}/admin/borrows.php?filter=overdue&uncalled=1");
+    $keepsFilter = str_contains($page1, 'uncalled=1') && preg_match('/href="[^"]*page=2[^"]*"/', $page1, $pm)
+        && str_contains(html_entity_decode($pm[0]), 'uncalled=1');
+    check('CALL-6b', $keepsFilter,
+        'ลิงก์เปลี่ยนหน้าพาตัวกรอง "ยังไม่ได้โทร" ไปด้วย — กดหน้า 2 แล้วไม่หลุดกลับไปดูทั้งหมด',
+        '🔴 ลิงก์หน้าถัดไปไม่มี uncalled=1 — กดแล้วตัวกรองหาย ต้องเริ่มไล่ใหม่');
+
+    // CALL-7: ใบที่พิมพ์ออกมาก็ต้องกรองได้ — คนที่พิมพ์ใบไปนั่งโทรคือคนที่เจอปัญหาตัวจริง
+    $sheetAll  = $http('GET', "{$BASE}/admin/export_pdf.php?report=overdue");
+    $sheetLeft = $http('GET', "{$BASE}/admin/export_pdf.php?report=overdue&uncalled=1");
+    $rowsOf    = fn(string $h) => substr_count($h, '<tr');
+    check('CALL-7', $rowsOf($sheetLeft) === $rowsOf($sheetAll) - $called
+            && str_contains($sheetLeft, 'เฉพาะที่ยังไม่ได้โทร')
+            && !str_contains($sheetAll, 'เฉพาะที่ยังไม่ได้โทร'),
+        'ใบพิมพ์กรองได้ (' . $rowsOf($sheetAll) . ' → ' . $rowsOf($sheetLeft) . ' แถว) และหัวใบบอกเองว่ากรองอยู่',
+        '🔴 ' . ($rowsOf($sheetLeft) !== $rowsOf($sheetAll) - $called ? 'จำนวนแถวไม่ลด ' : '')
+              . (!str_contains($sheetLeft, 'เฉพาะที่ยังไม่ได้โทร') ? 'หัวใบไม่บอกว่ากรองอยู่ — ใบที่พิมพ์ออกมาจะดูเหมือนรายชื่อทั้งหมด' : ''));
+
+    // CALL-7b: ชื่อไฟล์ต้องต่างกัน ไม่งั้นดาวน์โหลดสองแบบแล้วทับกันในโฟลเดอร์ Downloads
+    $nameOf = function (string $qs) use ($COOKIE, $BASE): string {
+        $ch = curl_init("{$BASE}/admin/reports.php?report=overdue&export=csv&{$qs}");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true,
+            CURLOPT_NOBODY => true, CURLOPT_COOKIEFILE => $COOKIE, CURLOPT_TIMEOUT => 30]);
+        $h = (string) curl_exec($ch); curl_close($ch);
+        return preg_match('/filename="([^"]+)"/', $h, $m) ? $m[1] : '';
+    };
+    check('CALL-7b', $nameOf('') !== '' && $nameOf('') !== $nameOf('uncalled=1'),
+        'ชื่อไฟล์ Excel ต่างกันระหว่างใบเต็มกับใบที่กรอง (' . $nameOf('uncalled=1') . ')',
+        '🔴 ชื่อไฟล์ซ้ำกัน — ดาวน์โหลดสองแบบแล้วทับกัน แยกไม่ออกว่าใบไหนกรองอยู่');
+
+    // ════════════════════════════════════════════════════════
+    echo "\n── G. แถวที่ไม่มีเบอร์ (UAT รอบ 4 ข้อ 4) ──\n";
+
+    // CALL-8: ช่องว่างเปล่า ๆ แยกไม่ออกว่า "ไม่มีเบอร์" หรือ "ระบบพิมพ์ตก"
+    //    ⚠️ แต่ไฟล์ Excel ต้องยังว่างจริง ไม่ใช่คำว่า "ไม่มีเบอร์"
+    //       ไม่งั้นลูกค้าเอาไปกรอง/นำเข้าต่อแล้วได้ข้อความมาเป็นเบอร์โทร
+    $noPhoneRows = (int) $pdo->query("SELECT COUNT(*) FROM borrows b JOIN users u ON b.user_id = u.id
+        WHERE b.status = 'borrowing' AND b.due_date < CURDATE() AND (u.phone IS NULL OR u.phone = '')")->fetchColumn();
+    $screen = $http('GET', "{$BASE}/admin/reports.php?report=overdue");
+    $csvTxt = $http('GET', "{$BASE}/admin/reports.php?report=overdue&export=csv");
+    if ($noPhoneRows === 0) {
+        pass('CALL-8', 'ข้ามได้ — ตอนนี้ไม่มีสมาชิกที่ค้างส่งและไม่มีเบอร์ให้ตรวจ');
+    } else {
+        check('CALL-8',
+            substr_count($screen, 'ไม่มีเบอร์') >= $noPhoneRows
+                && substr_count($sheetAll, 'ไม่มีเบอร์') >= $noPhoneRows
+                && !str_contains($csvTxt, 'ไม่มีเบอร์'),
+            "แถวที่ไม่มีเบอร์ {$noPhoneRows} แถวเขียนบอกทั้งบนจอและบนใบพิมพ์ · ไฟล์ Excel ยังเป็นช่องว่างจริง",
+            '🔴 ' . (substr_count($screen, 'ไม่มีเบอร์') < $noPhoneRows ? 'หน้าจอไม่บอก ' : '')
+                  . (substr_count($sheetAll, 'ไม่มีเบอร์') < $noPhoneRows ? 'ใบพิมพ์ไม่บอก ' : '')
+                  . (str_contains($csvTxt, 'ไม่มีเบอร์') ? 'ไฟล์ Excel มีคำว่า "ไม่มีเบอร์" ปนเข้าไปในช่องเบอร์โทร' : ''));
+    }
 }
 
 // ============================================================

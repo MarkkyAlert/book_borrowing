@@ -74,7 +74,9 @@ if ($startDate === $today && $endDate === $today) {
 // 📦 ดึงข้อมูลผ่าน report_helper.php (Single Source of Truth)
 //    ใช้ร่วมกับ export_pdf.php — เพิ่ม report type ใหม่ที่ report_helper.php เท่านั้น
 require_once __DIR__ . '/../includes/report_helper.php';
-$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, false);
+// 📞 [UAT รอบ 4 ข้อ 3] เฉพาะที่ยังไม่ได้โทร — ใช้ได้กับใบโทรตาม 2 ใบเท่านั้น
+$onlyUncalled = ($_GET['uncalled'] ?? '') === '1';
+$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, false, $onlyUncalled);
 $data = $reportConfig['data'];       // array ข้อมูลรายงาน
 $headers = $reportConfig['headers']; // หัวคอลัมน์ตาราง
 $filename = $reportConfig['filename']; // ชื่อไฟล์สำหรับ export
@@ -143,7 +145,7 @@ require_once __DIR__ . '/header.php';
             <p class="text-gray-500">วิเคราะห์ข้อมูลเพื่อการวางแผน</p>
         </div>
         <div class="flex gap-2">
-            <a href="reports.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+            <a href="reports.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?><?= $onlyUncalled ? '&uncalled=1' : '' ?>&export=csv" class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
                 <?php // 🔤 [F-46] "CSV" ไม่บอกว่ากดแล้วได้อะไร — บรรณารักษ์ที่ไม่คุ้นศัพท์คอมพิวเตอร์
                       //    ไม่รู้ว่าเป็นไฟล์ที่เปิดใน Excel ได้ · ใช้แนวเดียวกับปุ่ม "พิมพ์รายงาน" ข้างล่าง
                       //    ที่ตั้งชื่อตามสิ่งที่ผู้ใช้ได้ ไม่ใช่ชื่อเทคนิค ?>
@@ -155,7 +157,7 @@ require_once __DIR__ . '/header.php';
                 //    ผลลัพธ์ปลายทางคือไฟล์ PDF เหมือนกัน แต่ต้องไม่เรียกว่า "Export PDF"
                 //    ไม่งั้นลูกค้าคาดหวังไฟล์ดาวน์โหลดทันทีแล้วผิดหวัง (ดู F-07)
                 ?>
-                <a href="export_pdf.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
+                <a href="export_pdf.php?report=<?= $reportType ?>&start_date=<?= $startDate ?>&end_date=<?= $endDate ?><?= $onlyUncalled ? '&uncalled=1' : '' ?>" target="_blank" class="inline-flex items-center px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
                     <i class="bi bi-printer mr-2"></i>
                     พิมพ์รายงาน
                 </a>
@@ -205,9 +207,20 @@ $endDateDisplay = date('d/m/Y', strtotime($endDate));
 </div>
 <?php else: ?>
     <?php // รายงานกลุ่มนี้เป็นภาพ ณ ปัจจุบัน — บอกให้ชัดแทนที่จะโชว์ช่องวันที่ที่กดแล้วไม่มีผล ?>
-    <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-6 text-sm text-slate-600">
-        <i class="bi bi-info-circle mr-1"></i>
-        รายงานนี้แสดง<strong>สภาพ ณ ตอนนี้ทั้งหมด</strong> ไม่ได้กรองตามช่วงวันที่
+    <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-6 text-sm text-slate-600 flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <i class="bi bi-info-circle mr-1"></i>
+            รายงานนี้แสดง<strong>สภาพ ณ ตอนนี้ทั้งหมด</strong> ไม่ได้กรองตามช่วงวันที่
+        </div>
+        <?php // 📞 [UAT รอบ 4 ข้อ 3] ใบโทรตามเท่านั้นที่กรอง "ยังไม่ได้โทร" ได้
+              //    ใบอื่น (ค้างชำระ) ไม่มีบันทึกการโทร จึงไม่ขึ้นปุ่มนี้ให้กดเปล่า ๆ ?>
+        <?php if (in_array($reportType, ['overdue', 'due_soon'], true)): ?>
+            <a href="reports.php?report=<?= $reportType ?><?= $onlyUncalled ? '' : '&uncalled=1' ?>"
+               class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors <?= $onlyUncalled ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50' ?>">
+                <i class="bi bi-telephone-x mr-1.5"></i>
+                <?= $onlyUncalled ? 'กำลังดูเฉพาะที่ยังไม่ได้โทร — กดเพื่อดูทั้งหมด' : 'เฉพาะที่ยังไม่ได้โทร' ?>
+            </a>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
@@ -363,6 +376,13 @@ function setDateRange(range) {
                                         </span>
                                     <?php elseif ($key === 'total_amount'): ?>
                                         <span class="text-green-600 font-bold"><?= number_format($value, 2) ?> ฿</span>
+                                    <?php // 📞 [UAT รอบ 4 ข้อ 4] ช่องเบอร์ว่างเปล่าอ่านไม่ออกว่าเกิดอะไรขึ้น
+                                          //    บรรณารักษ์แยกไม่ออกว่า "สมาชิกไม่ได้ให้เบอร์ไว้" หรือ "ระบบพิมพ์ตก"
+                                          //    เขียนบอกไปเลยว่าไม่มี จะได้ไปตามทางอื่น (ที่ห้องเรียน/ผู้ปกครอง) ?>
+                                    <?php elseif (in_array($key, REPORT_PHONE_COLUMNS, true) && ($value === null || $value === '')): ?>
+                                        <span class="text-gray-400 italic whitespace-nowrap">
+                                            <i class="bi bi-telephone-x text-xs mr-1"></i>ไม่มีเบอร์
+                                        </span>
                                     <?php elseif (in_array($key, REPORT_PHONE_COLUMNS, true) && $value !== null && $value !== ''): ?>
                                         <?php // 📞 ใบรายชื่อโทรตามมีไว้เพื่อโทร — บนมือถือต้องแตะแล้วโทรออกได้เลย
                                               //    กรองเหลือเฉพาะตัวเลขและ + ก่อนใส่ใน href กันค่าแปลก ๆ หลุดเข้า attribute

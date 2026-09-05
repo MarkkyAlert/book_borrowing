@@ -191,6 +191,13 @@ if ($filter === 'overdue') {
     $filters['due_today'] = true;     // แสดงเฉพาะครบกำหนดวันนี้
 }
 
+// 📞 [UAT รอบ 4 ข้อ 3] "ยังไม่ได้โทร" — ซ้อนกับตัวกรองด้านบนได้
+//    ใช้พารามิเตอร์แยกเพราะคำถามจริงคือ "เกินกำหนด **และ** ยังไม่ได้โทร"
+$uncalled = ($_GET['uncalled'] ?? '') === '1';
+if ($uncalled) {
+    $filters['not_contacted'] = true;
+}
+
 // 📄 นับยอดรวมก่อน (ด้วย filter ชุดเดียวกัน) แล้วคำนวณว่าอยู่หน้าไหน ต้องข้ามกี่แถว
 // 🧠 ต้องนับก่อนใส่ limit/offset — ไม่งั้นจะได้ยอดแค่ในหน้านั้น
 $pagination = paginate($borrowRepo->countAll($filters), $page, ITEMS_PER_PAGE);
@@ -207,7 +214,8 @@ $booksWithPendingReservation = array_flip(array_map('intval',
 ));
 
 // 📄 filter ที่ต้องติดไปกับลิงก์เปลี่ยนหน้า — ไม่งั้นกดหน้า 2 แล้วตัวกรองหาย
-$paginationParams = ['search' => $search, 'status' => $status, 'filter' => $filter];
+$paginationParams = ['search' => $search, 'status' => $status, 'filter' => $filter,
+                      'uncalled' => $uncalled ? '1' : ''];
 
 $pageTitle = 'จัดการยืม-คืน';
 require_once __DIR__ . '/header.php';
@@ -245,6 +253,9 @@ require_once __DIR__ . '/header.php';
             </select>
         </div>
         <div class="md:col-span-4 flex flex-wrap gap-2">
+            <?php // 🧠 ตัวกรองที่ไม่ได้อยู่ในฟอร์ม ต้องพกไปด้วยตอนกดค้นหา ไม่งั้นกดแล้วหลุด ?>
+            <?php if ($uncalled): ?><input type="hidden" name="uncalled" value="1"><?php endif; ?>
+            <?php if ($filter !== ''): ?><input type="hidden" name="filter" value="<?= e($filter) ?>"><?php endif; ?>
             <button type="submit" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                 <i class="bi bi-search mr-1"></i>ค้นหา
             </button>
@@ -253,8 +264,21 @@ require_once __DIR__ . '/header.php';
             <a href="borrows.php?filter=due_today" class="px-3 py-2 rounded-lg text-sm font-medium transition-colors border <?= $filter === 'due_today' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'text-gray-600 hover:bg-gray-50 border-gray-200' ?>">
                 <i class="bi bi-calendar-event mr-1 text-amber-500"></i>ครบวันนี้
             </a>
-            <a href="borrows.php?filter=overdue" class="px-3 py-2 rounded-lg text-sm font-medium transition-colors border <?= $filter === 'overdue' ? 'bg-red-50 text-red-700 border-red-200' : 'text-gray-600 hover:bg-gray-50 border-gray-200' ?>">
+            <a href="borrows.php?filter=overdue<?= $uncalled ? '&uncalled=1' : '' ?>" class="px-3 py-2 rounded-lg text-sm font-medium transition-colors border <?= $filter === 'overdue' ? 'bg-red-50 text-red-700 border-red-200' : 'text-gray-600 hover:bg-gray-50 border-gray-200' ?>">
                 <i class="bi bi-exclamation-triangle mr-1 text-red-500"></i>เกินกำหนด
+            </a>
+
+            <?php // 📞 [UAT รอบ 4 ข้อ 3] สลับเปิด/ปิดได้ และ **คงตัวกรองเดิมไว้**
+                  //    กดจากหน้า "เกินกำหนด" ต้องได้ "เกินกำหนด + ยังไม่ได้โทร"
+                  //    ไม่ใช่กระโดดกลับไปดูทั้งหมด ซึ่งจะทำให้ต้องกดใหม่ทุกครั้ง ?>
+            <a href="borrows.php?<?= http_build_query(array_filter([
+                    'search' => $search,
+                    'status' => $status,
+                    'filter' => $filter,
+                    'uncalled' => $uncalled ? null : '1',
+               ])) ?>"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors border <?= $uncalled ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'text-gray-600 hover:bg-gray-50 border-gray-200' ?>">
+                <i class="bi bi-telephone-x mr-1 text-indigo-500"></i>ยังไม่ได้โทร<?= $uncalled ? ' ✓' : '' ?>
             </a>
         </div>
     </form>

@@ -38,7 +38,8 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) || !strtotime($endDate)) {
 // 📦 ดึงข้อมูลผ่าน report_helper.php (Single Source of Truth — shared กับ reports.php)
 //    เพิ่ม report type ใหม่ที่ report_helper.php เท่านั้น
 require_once __DIR__ . '/../includes/report_helper.php';
-$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, true);
+$onlyUncalled = ($_GET['uncalled'] ?? '') === '1';
+$reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, true, $onlyUncalled);
 $data = $reportConfig['data'];         // array ข้อมูลรายงาน
 $headers = $reportConfig['headers'];   // หัวคอลัมน์
 $reportTitle = $reportConfig['title']; // ชื่อรายงาน (แสดงบนหัวกระดาษ)
@@ -255,7 +256,17 @@ $orgName = getSetting('org_name', 'ระบบห้องสมุด');
                                     //    ทำให้เบอร์โทร "0891234567" ถูกแปลงเป็น "891,234,567"
                                     //    ตอนนี้ตัดสินจาก "ชื่อคอลัมน์" แทน (ดู includes/report_helper.php)
                                     ?>
-                                    <?= e(formatReportValue($key, $value)) ?>
+                                    <?php // 📞 [UAT รอบ 4 ข้อ 4] บนใบที่พิมพ์ออกมา ช่องว่างยิ่งอ่านไม่ออก
+                                          //    เพราะบรรณารักษ์กำลังไล่โทรทีละแถวอยู่ ต้องรู้ว่าข้ามได้เลย
+                                          //    🧠 บอกที่ชั้นแสดงผลเท่านั้น — ไฟล์ Excel ยังต้องเป็นช่องว่างจริง
+                                          //       ไม่งั้นลูกค้าเอาไปกรอง/นำเข้าต่อแล้วได้คำว่า "ไม่มีเบอร์" เป็นเบอร์
+                                          $isEmptyPhone = in_array($key, REPORT_PHONE_COLUMNS, true)
+                                              && ($value === null || $value === ''); ?>
+                                    <?php if ($isEmptyPhone): ?>
+                                        <span style="color:#999">— ไม่มีเบอร์ —</span>
+                                    <?php else: ?>
+                                        <?= e(formatReportValue($key, $value)) ?>
+                                    <?php endif; ?>
                                 </td>
                             <?php endforeach; ?>
                         </tr>

@@ -271,6 +271,19 @@ class BorrowRepository
             $where[] = "b.status = 'borrowing' AND b.due_date = CURDATE()";
         }
 
+        // 🔍 filter: not_contacted → เฉพาะที่ยังไม่เคยโทรตาม
+        //
+        // 🔴 [UAT รอบ 4 ข้อ 3] ระบบจดได้ว่าโทรใครแล้ว แต่ไม่ช่วยให้ทำงานต่อ
+        //    เกินกำหนด 145 รายการ หน้าละ 20 = 8 หน้า · โทรไป 30 สายวันนี้
+        //    พรุ่งนี้เปิดมาต้องไล่ดูทีละแถวเองว่าเหลือใคร
+        //
+        // 🧠 ตั้งใจให้เป็นตัวกรอง **แยก** ไม่ใช่ค่าที่สามของ filter
+        //    เพราะต้องใช้ซ้อนกับ overdue/due_today ได้ ("เกินกำหนด + ยังไม่ได้โทร")
+        //    ซึ่งเป็นคำถามจริงที่บรรณารักษ์ถามทุกเช้า
+        if (isset($filters['not_contacted']) && $filters['not_contacted']) {
+            $where[] = "b.contacted_at IS NULL";
+        }
+
         // 📝 รวม WHERE clauses ด้วย AND → ถ้าไม่มี filter → $whereSQL = '' (ดึงทั้งหมด)
         $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 

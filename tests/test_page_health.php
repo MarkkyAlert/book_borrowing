@@ -606,6 +606,45 @@ check('PAGE-G4', $strayDumps === [],
     '🔴 พบไฟล์สำรองค้างอยู่ให้ใครก็โหลดได้: ' . implode(' · ', $strayDumps));
 
 
+// ── G5: 💾 [UAT รอบ 4 ข้อ 5] ปุ่มสำรองข้อมูลต้องอยู่ในหน้าแรกด้วย ──
+//    เดิมอยู่แค่ในหน้าตั้งค่า — ตอนคอมเริ่มมีอาการแปลก ๆ คนจะรีบหา "ปุ่มเซฟ"
+//    ที่หน้าแรก ไม่ใช่ไปขุดในหน้าตั้งค่า ซึ่งเป็นนาทีที่สำคัญที่สุดของฟีเจอร์นี้
+//
+// ⚠️ และต้องขึ้น **เฉพาะผู้ดูแลระบบ** เพราะ backup.php เรียก requireAdmin()
+//    ถ้าโชว์ให้เจ้าหน้าที่ทั่วไปด้วย กดแล้วจะเจอหน้าปฏิเสธเฉย ๆ = ปุ่มหลอก
+$dashAdmin = http('GET', "$BASE_URL/admin/index.php");
+
+// 🔴 ต้องเปิด session ของเจ้าหน้าที่ใหม่ — $staffJar ด้านบนถูก unlink ไปแล้ว
+//    ถ้าใช้ตัวเดิมจะได้ "หน้าเข้าสู่ระบบ" กลับมาแทนหน้าแรก แล้วยามจะเขียวด้วยเหตุผลผิด
+//    (เพราะหน้า login ไม่มีปุ่มสำรองข้อมูลอยู่แล้วโดยธรรมชาติ — พิสูจน์มาแล้วตอนทำลายโค้ด)
+$g5Jar = tempnam(sys_get_temp_dir(), 'g5staff');
+$g5Login = http('GET', "$BASE_URL/login.php", [], $g5Jar);
+http('POST', "$BASE_URL/login.php", [
+    'email' => 'staff@library.com', 'password' => '123456', 'csrf_token' => csrfFrom($g5Login),
+], $g5Jar);
+$dashStaff = http('GET', "$BASE_URL/admin/index.php", [], $g5Jar);
+@unlink($g5Jar);
+
+$staffLoggedIn = str_contains($dashStaff, 'ออกจากระบบ');
+$adminHasBtn = (bool) preg_match('#<form[^>]*action="[^"]*backup\.php"#', $dashAdmin);
+$staffHasBtn = (bool) preg_match('#<form[^>]*action="[^"]*backup\.php"#', $dashStaff);
+check('PAGE-G5', $staffLoggedIn && $adminHasBtn && !$staffHasBtn,
+    'หน้าแรกมีปุ่มสำรองข้อมูลให้ผู้ดูแลระบบ และไม่โชว์ปุ่มหลอกให้เจ้าหน้าที่ทั่วไป',
+    '🔴 ' . (!$staffLoggedIn ? 'ล็อกอินเป็นเจ้าหน้าที่ไม่สำเร็จ — ตัดสินข้อนี้ไม่ได้ ' : '')
+          . (!$adminHasBtn ? 'ผู้ดูแลระบบไม่เห็นปุ่มในหน้าแรก ' : '')
+          . ($staffHasBtn ? 'เจ้าหน้าที่ทั่วไปเห็นปุ่มที่กดแล้วโดนปฏิเสธ' : ''));
+
+// ── G6: ปุ่มในหน้าแรกต้องเป็น POST + CSRF เหมือนในหน้าตั้งค่า ──
+//    🔴 ถ้าทำเป็นลิงก์ธรรมดา จะโดนดึงไฟล์ทั้งฐานข้อมูลด้วย <img src> จากเว็บอื่นได้
+$isPostWithToken = (bool) preg_match(
+    '#<form[^>]*method="POST"[^>]*action="[^"]*backup\.php"[^>]*>\s*<input[^>]*name="csrf_token"#i',
+    $dashAdmin);
+check('PAGE-G6', $isPostWithToken,
+    'ปุ่มสำรองข้อมูลในหน้าแรกเป็น POST พร้อม CSRF token — ดึงจากเว็บอื่นไม่ได้',
+    '🔴 ปุ่มไม่ได้เป็น POST+CSRF — เว็บอื่นดึงไฟล์ฐานข้อมูลทั้งก้อนไปได้');
+
+
+
 // ============================================================
 echo "\n── H. หน้าตอนฐานข้อมูลล่ม (UAT รอบ 3 ข้อ ต.1) ──\n";
 // ============================================================
