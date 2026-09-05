@@ -657,7 +657,11 @@ class ReportRepository
 
         $stmt = $this->pdo->prepare("
             SELECT u.name, u.phone, bk.title, {$borrowDateCol}, {$dueDateCol},
-                   DATEDIFF(b.due_date, CURDATE()) as days_left
+                   DATEDIFF(b.due_date, CURDATE()) as days_left,
+                   -- 📞 [UAT รอบ 2 ฎ.7] ช่องนี้ว่าง = ยังไม่เคยโทร บรรณารักษ์เขียนมือลงไปได้
+                   --    ถ้าเคยกดปุ่ม จดว่าโทรแล้ว จะขึ้นวันที่ + ผลการโทร
+                   --    CONCAT_WS ข้าม NULL ให้เอง → ยังไม่เคยโทรจะได้ '' ไม่ใช่คำว่า NULL
+                   CONCAT_WS(' · ', DATE_FORMAT(b.contacted_at, '%d/%m/%Y'), NULLIF(b.contact_note, '')) as contacted
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id
@@ -697,7 +701,11 @@ class ReportRepository
         // 📝 ใช้ query() เพราะไม่มี user input (parameter ทั้งหมดมาจาก code ภายใน)
         return $this->pdo->query("
             SELECT u.name, u.phone, bk.title, {$borrowDateCol}, {$dueDateCol},
-                   DATEDIFF(CURDATE(), b.due_date) as days_overdue
+                   DATEDIFF(CURDATE(), b.due_date) as days_overdue,
+                   -- 📞 [UAT รอบ 2 ฎ.7] ช่องนี้ว่าง = ยังไม่เคยโทร บรรณารักษ์เขียนมือลงไปได้
+                   --    ถ้าเคยกดปุ่ม จดว่าโทรแล้ว จะขึ้นวันที่ + ผลการโทร
+                   --    CONCAT_WS ข้าม NULL ให้เอง → ยังไม่เคยโทรจะได้ '' ไม่ใช่คำว่า NULL
+                   CONCAT_WS(' · ', DATE_FORMAT(b.contacted_at, '%d/%m/%Y'), NULLIF(b.contact_note, '')) as contacted
             FROM borrows b
             JOIN users u ON b.user_id = u.id
             JOIN books bk ON b.book_id = bk.id

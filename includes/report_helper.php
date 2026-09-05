@@ -81,9 +81,10 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             // 📝 หนังสือค้างส่ง (ไม่ใช้ date range เพราะดูแค่ "ตอนนี้")
             return [
                 'data' => $repo->getOverdueReport(),
-                'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)'],
+                'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เกินกำหนด (วัน)', 'โทรแล้วเมื่อ'],
                 'filename' => "overdue_books_" . date('Y-m-d'),
                 'title' => 'รายงานหนังสือค้างส่ง',
+                'uses_date_range' => false,
             ];
 
         case 'due_soon':
@@ -92,9 +93,10 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
             //    ระบบไม่ส่งอีเมล บรรณารักษ์จึงพิมพ์ใบนี้ออกมาแล้วโทรเอง
             return [
                 'data' => $repo->getDueSoonReport(DUE_SOON_DAYS),
-                'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เหลืออีก (วัน)'],
+                'headers' => ['ชื่อผู้ยืม', 'เบอร์โทร', 'หนังสือ', 'วันที่ยืม', 'กำหนดคืน', 'เหลืออีก (วัน)', 'โทรแล้วเมื่อ'],
                 'filename' => "due_soon_" . date('Y-m-d'),
                 'title' => 'ใบรายชื่อโทรตาม — ครบกำหนดภายใน ' . DUE_SOON_DAYS . ' วัน',
+                'uses_date_range' => false,
             ];
 
         case 'borrows':
@@ -109,7 +111,13 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
         case 'unpaid':
             // 📝 สมาชิกค้างชำระ
             return [
-                'data' => $repo->getUnpaidFinesReport($start, $end),
+                // 🔴 [UAT รอบ 2] เดิมส่ง $start/$end เข้าไป ทำให้เปิดหน้ามาเห็น "ทั้งหมด 1 รายการ"
+                //    ทั้งที่ค้างจริง 170 คน — เพราะช่วงวันที่ตั้งต้นคือ "เดือนนี้ถึงวันนี้"
+                //    บรรณารักษ์อาจสรุปผิดว่าห้องสมุดแทบไม่มีใครค้างค่าปรับ
+                //
+                // 🧠 "ค้างชำระ" คือภาพ ณ ปัจจุบัน ไม่ใช่ยอดของช่วงเวลา — เหมือน overdue/due_soon
+                //    ที่ไม่ใช้ date range อยู่แล้ว จึงส่ง null (getUnpaidFinesReport รองรับอยู่แล้ว)
+                'data' => $repo->getUnpaidFinesReport(null, null),
                 // 🔴 ต้องมี 6 คอลัมน์ให้ตรงกับที่ query คืนมา (ชื่อ · โทร · หนังสือ · วันที่ · status · เงิน)
                 //    ROADMAP ข้อ 4 เติม b.status เข้าไปใน query แต่ลืมเติมหัวตาราง
                 //    ผลคือ CSV 217 แถวมีคอลัมน์เกินหัว 1 ช่อง ทุกคอลัมน์ตั้งแต่ "ค่าปรับ" เลื่อนผิดตำแหน่ง
@@ -118,7 +126,9 @@ function getReportConfig(string $type, string $start, string $end, $repo, bool $
                 //    ⚠️ ลำดับต้องตรงกับที่ query คืนมาเป๊ะ (ดู getUnpaidFinesReport)
                 'headers' => ['ชื่อสมาชิก', 'เบอร์โทร', 'หนังสือ', 'คืนเมื่อ', 'ประเภท', 'ค้างมา (วัน)', 'ค่าปรับ (บาท)'],
                 'filename' => "unpaid_fines_" . date('Y-m-d'),
-                'title' => 'รายงานสมาชิกค้างชำระ (' . $dateRangeText . ')',
+                // ไม่ใส่ช่วงวันที่ในหัวใบพิมพ์ ไม่งั้นใบที่พิมพ์ออกมาจะโกหกว่ากรองช่วงนั้น
+                'title' => 'รายงานสมาชิกค้างชำระ (ณ ' . formatDate(date('Y-m-d')) . ')',
+                'uses_date_range' => false,
             ];
 
         case 'dormant':

@@ -917,6 +917,33 @@ class BorrowService
      *
      * ✅ Use case: admin/payments.php → ปุ่ม "ยกเว้นค่าปรับ"
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: จดว่าโทรตามแล้ว (ผ่านชั้น Service เพื่อ validate ก่อน)
+     * ==========================================================================
+     *
+     * 🛡️ ตรวจ 2 อย่างก่อนเขียน:
+     *    1. รายการยืมมีจริง — กันการยิง id มั่ว ๆ เข้ามา
+     *    2. หมายเหตุยาวไม่เกิน 255 — ตรงกับความยาวคอลัมน์ ไม่งั้น MySQL ตัดเงียบ
+     *
+     * 🧠 ไม่ห้ามจดซ้ำ — โทรหลายรอบเป็นเรื่องปกติ ระบบเก็บครั้งล่าสุดไว้
+     *
+     * 📥 Input: @param int $borrowId, @param string $note, @param int|null $staffId
+     * 📤 Output: @return bool
+     * @throws Exception ถ้าไม่พบรายการ หรือหมายเหตุยาวเกิน
+     */
+    public function recordContact(int $borrowId, string $note, ?int $staffId): bool
+    {
+        $note = trim($note);
+        if (mb_strlen($note) > 255) {
+            throw new Exception('หมายเหตุต้องไม่เกิน 255 ตัวอักษร');
+        }
+        if (!$this->borrowRepo->findById($borrowId)) {
+            throw new Exception('ไม่พบรายการยืม');
+        }
+        return $this->borrowRepo->recordContact($borrowId, $note, $staffId);
+    }
+
     public function waiveFine(int $borrowId, string $note, int $waivedBy, string $waiverRole = 'staff'): array
     {
         // 📝 ตรวจเหตุผลก่อนเปิด transaction — ไม่ต้องไปล็อคแถวถ้ายังไงก็ไม่ผ่าน

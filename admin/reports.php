@@ -78,6 +78,10 @@ $reportConfig = getReportConfig($reportType, $startDate, $endDate, $reportRepo, 
 $data = $reportConfig['data'];       // array ข้อมูลรายงาน
 $headers = $reportConfig['headers']; // หัวคอลัมน์ตาราง
 $filename = $reportConfig['filename']; // ชื่อไฟล์สำหรับ export
+// 🧠 บางรายงานเป็น "ภาพ ณ ปัจจุบัน" ไม่ได้กรองตามช่วงเวลา (ค้างชำระ · ค้างส่ง · ใบโทรตาม)
+//    เดิมยังโชว์ช่องวันที่ให้กดทั้งที่กดแล้วไม่มีผลอะไร — สับสนเปล่า ๆ
+//    ธงนี้มาจาก getReportConfig() ซึ่งเป็น SSOT เดียวกับที่กำหนดว่ารายงานไหนกรองวันที่จริง
+$usesDateRange = $reportConfig['uses_date_range'] ?? true;
 
 // ── CSV Export: stream download แล้ว exit ──
 if ($isExport) {
@@ -167,6 +171,7 @@ require_once __DIR__ . '/header.php';
 $startDateDisplay = date('d/m/Y', strtotime($startDate));
 $endDateDisplay = date('d/m/Y', strtotime($endDate));
 ?>
+<?php if ($usesDateRange): ?>
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
     <form method="GET" class="flex flex-wrap items-end gap-4" id="dateFilterForm">
         <input type="hidden" name="report" value="<?= $reportType ?>">
@@ -198,7 +203,19 @@ $endDateDisplay = date('d/m/Y', strtotime($endDate));
         </div>
     </form>
 </div>
+<?php else: ?>
+    <?php // รายงานกลุ่มนี้เป็นภาพ ณ ปัจจุบัน — บอกให้ชัดแทนที่จะโชว์ช่องวันที่ที่กดแล้วไม่มีผล ?>
+    <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-6 text-sm text-slate-600">
+        <i class="bi bi-info-circle mr-1"></i>
+        รายงานนี้แสดง<strong>สภาพ ณ ตอนนี้ทั้งหมด</strong> ไม่ได้กรองตามช่วงวันที่
+    </div>
+<?php endif; ?>
 
+<?php // 📅 ปฏิทินเลือกช่วงวันที่ — โหลดเฉพาะรายงานที่ใช้ช่วงวันที่จริง
+      //    🔴 รายงานที่กรอง ณ ปัจจุบัน (ค้างชำระ/ค้างส่ง/ใกล้ครบกำหนด) ไม่มีช่องวันที่ให้ผูก
+      //       ถ้ายังโหลดสคริปต์ไว้ จะเหลือ defaultDate ลอย ๆ ที่ไม่ตรงกับตัวกรองจริง
+      //       — หน้าจอ "พูด" ช่วงวันที่หนึ่ง แต่ระบบกรองอีกอย่าง (ยาม PAGE-E2 จับข้อนี้)
+if ($usesDateRange): ?>
 <script src="<?= APP_URL ?>/assets/vendor/flatpickr/flatpickr.min.js"></script>
 <script src="<?= APP_URL ?>/assets/vendor/flatpickr/th.js"></script>
 <script>
@@ -271,6 +288,7 @@ function setDateRange(range) {
     document.getElementById('end_date_hidden').value = formatDateISO(today);
 }
 </script>
+<?php endif; ?>
 
 <!-- Report Navigation -->
 <div class="border-b border-gray-200 mb-6">

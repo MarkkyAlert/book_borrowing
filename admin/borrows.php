@@ -117,6 +117,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirectToList('borrows.php', LIST_STATE_BORROWS);
     }
 
+    // 📞 [UAT รอบ 2 ฎ.7] จดว่าโทรตามแล้ว — วางสายแล้วต้องมีที่จด
+    //    ไม่งั้นพรุ่งนี้เปิดมาไม่รู้ว่าโทรใครไปแล้ว ต้องไล่ใหม่ทั้งใบทุกวัน
+    if ($action === 'record_contact') {
+        $borrowId = (int) ($_POST['borrow_id'] ?? 0);
+        $note     = trim($_POST['contact_note'] ?? '');
+
+        // 🧠 ไม่ใส่ idempotency key เหมือน action อื่น — โทรซ้ำหลายรอบเป็นเรื่องปกติ
+        //    (โทรวันนี้ไม่รับ พรุ่งนี้โทรใหม่) การกันซ้ำจะทำให้จดครั้งที่ 2 ไม่ได้
+        //    ส่วน double-submit ไม่อันตราย เพราะเขียนทับค่าเดิมด้วยค่าเดียวกัน
+        try {
+            $borrowService->recordContact($borrowId, $note, $_SESSION['user_id']);
+            setFlash('success', 'บันทึกว่าโทรตามแล้ว');
+        } catch (Exception $e) {
+            setFlash('error', $e->getMessage());
+        }
+        redirectToList('borrows.php', LIST_STATE_BORROWS);
+    }
+
     if ($action === 'return') {
         $borrowId = (int) ($_POST['borrow_id'] ?? 0);
         $payNow = isset($_POST['pay_now']);
@@ -289,6 +307,18 @@ require_once __DIR__ . '/header.php';
                             <td class="px-6 py-4">
                                 <div class="font-medium text-gray-900"><?= e($borrow['user_name']) ?></div>
                                 <div class="text-xs text-gray-500 mt-0.5"><?= e($borrow['user_phone'] ?: $borrow['user_email']) ?></div>
+                                <?php // 📞 ร่องรอยการโทรตาม — วางไว้ใต้เบอร์ เพราะเป็นเรื่องเดียวกัน ?>
+                                <?php if (!empty($borrow['contacted_at'])): ?>
+                                    <div class="text-xs text-indigo-600 mt-1 flex items-start" title="<?= e($borrow['contact_note'] ?? '') ?>">
+                                        <i class="bi bi-telephone-outbound mr-1 mt-0.5"></i>
+                                        <span>
+                                            โทรแล้ว <?= formatDate(substr($borrow['contacted_at'], 0, 10)) ?>
+                                            <?php if (!empty($borrow['contact_note'])): ?>
+                                                <span class="text-gray-500">· <?= e($borrow['contact_note']) ?></span>
+                                            <?php endif; ?>
+                                        </span>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 text-gray-600"><?= formatDate($borrow['borrow_date']) ?></td>
                             <td class="px-6 py-4 text-gray-600">
@@ -360,6 +390,24 @@ require_once __DIR__ . '/header.php';
                                             data-price="<?= $borrow['book_price'] !== null ? (float) $borrow['book_price'] : '' ?>">
                                         <i class="bi bi-exclamation-triangle mr-1.5"></i>หาย/ชำรุด
                                     </button>
+                                    <?php
+                                        // 📞 ขึ้นปุ่มเฉพาะแถวที่มีเหตุให้โทร — เกินกำหนดแล้ว หรือใกล้ครบกำหนด
+                                        //    เล่มที่เพิ่งยืมไปไม่ต้องโทร ปุ่มจะรกช่องการจัดการเปล่า ๆ
+                                        $daysLeft   = (int) floor((strtotime($borrow['due_date']) - strtotime('today')) / 86400);
+                                        $worthCalling = $isOverdue || $daysLeft <= DUE_SOON_DAYS;
+                                    ?>
+                                    <?php if ($worthCalling): ?>
+                                        <button type="button" class="btn-contact inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-indigo-700 bg-indigo-100 hover:bg-indigo-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                onclick="openContactModal(this)"
+                                                data-borrow-id="<?= $borrow['id'] ?>"
+                                                data-book-title="<?= e($borrow['book_title']) ?>"
+                                                data-user-name="<?= e($borrow['user_name']) ?>"
+                                                data-user-phone="<?= e($borrow['user_phone'] ?? '') ?>"
+                                                data-contacted="<?= !empty($borrow['contacted_at']) ? e(formatDate(substr($borrow['contacted_at'], 0, 10))) : '' ?>"
+                                                data-note="<?= e($borrow['contact_note'] ?? '') ?>">
+                                            <i class="bi bi-telephone mr-1.5"></i>จดว่าโทรแล้ว
+                                        </button>
+                                    <?php endif; ?>
                                 <?php elseif (in_array($borrow['status'], ['lost', 'damaged'], true)): ?>
                                     <?php // ↩️ หาหนังสือเจอทีหลังเป็นเรื่องปกติ — ต้องย้อนได้ แต่ต้องเหลือร่องรอย ?>
                                     <button type="button" class="btn-undo-lost inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
@@ -581,6 +629,80 @@ function closeRenewModal() {
     </div>
 </div>
 
+<?php // 📞 Modal จดว่าโทรแล้ว — กดโทรจากในนี้ได้เลย แล้วจดผลทันทีตอนวางสาย ?>
+<div id="contactModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="contactBackdrop"></div>
+
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" id="contactPanel">
+
+            <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold leading-6 text-white flex items-center">
+                        <i class="bi bi-telephone mr-2"></i>จดว่าโทรตามแล้ว
+                    </h3>
+                    <button type="button" class="text-white/80 hover:text-white focus:outline-none" onclick="closeContactModal()">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form method="POST" id="contactForm">
+                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                <input type="hidden" name="action" value="record_contact">
+                <input type="hidden" name="borrow_id" id="contactBorrowId" value="">
+
+                <div class="px-6 py-5 space-y-4">
+                    <div class="text-center">
+                        <p class="font-bold text-gray-900" id="contactBookTitle"></p>
+                        <p class="text-sm text-gray-500 mt-0.5">
+                            <i class="bi bi-person mr-1"></i>ผู้ยืม: <span id="contactUserName"></span>
+                        </p>
+                        <?php // ☎️ กดเบอร์ในนี้โทรออกได้เลย — ไม่ต้องสลับไปหน้าอื่นหาเบอร์ ?>
+                        <a href="#" id="contactPhoneLink" class="inline-flex items-center mt-2.5 px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition-colors">
+                            <i class="bi bi-telephone-outbound mr-2"></i><span id="contactPhoneText"></span>
+                        </a>
+                        <p id="contactNoPhone" class="hidden mt-2.5 text-sm text-amber-700">
+                            <i class="bi bi-exclamation-circle mr-1"></i>สมาชิกคนนี้ไม่ได้ให้เบอร์โทรไว้
+                        </p>
+                    </div>
+
+                    <?php // 🕘 เคยโทรไปแล้วต้องเห็นก่อนโทรซ้ำ ไม่งั้นโทรทวนซ้ำคนเดิม ?>
+                    <div id="contactPrev" class="hidden bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs text-indigo-800">
+                        <i class="bi bi-clock-history mr-1"></i>โทรครั้งล่าสุด <span class="font-bold" id="contactPrevDate"></span><span id="contactPrevNote"></span>
+                    </div>
+
+                    <div>
+                        <label for="contactNote" class="block text-sm font-medium text-gray-700 mb-1.5">ผลการโทร</label>
+                        <?php // ⚡ ปุ่มลัด — ผลการโทรวนอยู่ไม่กี่แบบ พิมพ์เองทุกครั้งเสียเวลา ?>
+                        <div class="flex flex-wrap gap-1.5 mb-2">
+                            <?php foreach (['รับสาย จะมาคืน', 'ไม่รับสาย', 'เบอร์ติดต่อไม่ได้', 'ฝากข้อความไว้'] as $preset): ?>
+                                <button type="button" onclick="setContactNote(this)" data-note="<?= e($preset) ?>"
+                                        class="px-2.5 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors">
+                                    <?= e($preset) ?>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                        <textarea name="contact_note" id="contactNote" rows="2" maxlength="255"
+                                  class="w-full rounded-xl border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 shadow-sm text-sm"
+                                  placeholder="เช่น รับสาย บอกว่าพรุ่งนี้จะเอามาคืน"></textarea>
+                        <p class="mt-1 text-xs text-gray-500">ไม่กรอกก็ได้ — ระบบจดวันที่โทรให้อยู่แล้ว · จดทับครั้งก่อน ไม่เก็บทุกสาย</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                    <button type="button" onclick="closeContactModal()" class="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30">
+                        <i class="bi bi-check-lg mr-1"></i>บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <?php // ↩️ Modal ย้อนการแจ้ง — บอกให้ชัดว่าเงินที่จ่ายไปแล้วระบบไม่คืนให้เอง ?>
 <div id="undoLostModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
     <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity opacity-0" id="undoLostBackdrop"></div>
@@ -712,6 +834,58 @@ function closeUndoLostModal() {
     document.getElementById('undoLostBackdrop').classList.add('opacity-0');
     document.getElementById('undoLostPanel').classList.add('opacity-0', 'translate-y-4', 'sm:scale-95');
     setTimeout(() => document.getElementById('undoLostModal').classList.add('hidden'), 200);
+}
+
+// 📞 จดว่าโทรตามแล้ว
+function openContactModal(btn) {
+    document.getElementById('contactBorrowId').value = btn.dataset.borrowId;
+    document.getElementById('contactBookTitle').textContent = btn.dataset.bookTitle;
+    document.getElementById('contactUserName').textContent = btn.dataset.userName;
+
+    // ☎️ ไม่มีเบอร์ก็ยังจดได้ (อาจไปตามที่ห้องเรียน) แค่ซ่อนปุ่มโทร
+    const phone = (btn.dataset.userPhone || '').trim();
+    const link = document.getElementById('contactPhoneLink');
+    const noPhone = document.getElementById('contactNoPhone');
+    if (phone) {
+        link.href = 'tel:' + phone.replace(/[^0-9+]/g, '');
+        document.getElementById('contactPhoneText').textContent = phone;
+        link.classList.remove('hidden');
+        noPhone.classList.add('hidden');
+    } else {
+        link.classList.add('hidden');
+        noPhone.classList.remove('hidden');
+    }
+
+    // 🕘 เคยโทรแล้วโชว์ให้เห็น + เติมหมายเหตุเดิมไว้ให้แก้ต่อ
+    const prev = document.getElementById('contactPrev');
+    if (btn.dataset.contacted) {
+        document.getElementById('contactPrevDate').textContent = btn.dataset.contacted;
+        document.getElementById('contactPrevNote').textContent = btn.dataset.note ? ' · ' + btn.dataset.note : '';
+        prev.classList.remove('hidden');
+    } else {
+        prev.classList.add('hidden');
+    }
+    document.getElementById('contactNote').value = btn.dataset.note || '';
+
+    const modal = document.getElementById('contactModal');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('contactBackdrop').classList.remove('opacity-0');
+        document.getElementById('contactPanel').classList.remove('opacity-0', 'translate-y-4', 'sm:scale-95');
+    }, 10);
+}
+
+function closeContactModal() {
+    document.getElementById('contactBackdrop').classList.add('opacity-0');
+    document.getElementById('contactPanel').classList.add('opacity-0', 'translate-y-4', 'sm:scale-95');
+    setTimeout(() => document.getElementById('contactModal').classList.add('hidden'), 200);
+}
+
+// ⚡ ปุ่มลัดเติมข้อความ — กดซ้ำปุ่มเดิมเพื่อล้างได้
+function setContactNote(btn) {
+    const box = document.getElementById('contactNote');
+    box.value = (box.value === btn.dataset.note) ? '' : btn.dataset.note;
+    box.focus();
 }
 
 document.addEventListener('DOMContentLoaded', function () {

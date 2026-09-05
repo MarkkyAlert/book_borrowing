@@ -1162,6 +1162,32 @@ class BorrowRepository
      * 📤 Output: @return int จำนวนครั้ง (ทุก status)
      * ✅ Use case: MemberService::deleteMember() เช็คก่อนลบ
      */
+    /**
+     * ==========================================================================
+     * 🎯 จุดประสงค์: จดว่าโทรตามรายการยืมนี้ไปแล้ว
+     * ==========================================================================
+     *
+     * 🔴 [UAT รอบ 2 ข้อ ฎ.7] ระบบทำใบโทรตามให้ กดโทรออกได้ แต่วางสายแล้วไม่มีที่จด
+     *    พรุ่งนี้เปิดมาก็ไม่รู้ว่าโทรใครไปแล้ว ต้องไล่ใหม่ตั้งแต่ต้นทุกวัน
+     *
+     * 🧠 จดทับของเดิมทุกครั้ง (ไม่เก็บประวัติทุกสาย) — บรรณารักษ์ต้องการรู้แค่
+     *    "โทรล่าสุดเมื่อไหร่ ผลเป็นยังไง" การเก็บทุกสายต้องมีตารางแยกและหน้าดูประวัติ
+     *    ซึ่งเกินความจำเป็นของงานนี้ (ถ้าลูกค้าต้องการค่อยขยายเป็นตาราง contact_logs)
+     *
+     * ⚠️ เขียนแค่ 3 คอลัมน์นี้เท่านั้น — ห้ามแตะ status/fine/วันกำหนดคืน
+     *
+     * 📥 Input: @param int $borrowId, @param string $note, @param int|null $staffId
+     * 📤 Output: @return bool
+     * ✅ Use case: admin/borrows.php ปุ่ม "จดว่าโทรแล้ว"
+     */
+    public function recordContact(int $borrowId, string $note, ?int $staffId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE borrows SET contacted_at = NOW(), contacted_by = ?, contact_note = ? WHERE id = ?"
+        );
+        return $stmt->execute([$staffId, $note === '' ? null : $note, $borrowId]);
+    }
+
     public function countByUser(int $userId): int
     {
         // 🔄 Flow: MemberService::deleteMember() → countByUser()

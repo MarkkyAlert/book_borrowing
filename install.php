@@ -212,6 +212,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `fine_waived_by` INT NULL DEFAULT NULL COMMENT 'ผู้ยกเว้น',
                 `fine_waived_note` VARCHAR(255) NULL DEFAULT NULL COMMENT 'เหตุผลที่ยกเว้น',
                 `notes` TEXT DEFAULT NULL COMMENT 'หมายเหตุ',
+                `contacted_at` DATETIME NULL COMMENT 'โทรตามครั้งล่าสุดเมื่อไหร่ (NULL = ยังไม่เคยโทร)',
+                `contacted_by` INT NULL COMMENT 'เจ้าหน้าที่ที่โทร',
+                `contact_note` VARCHAR(255) NULL COMMENT 'ผลการโทร เช่น ไม่รับสาย / รับปากว่าจะเอามาคืนพรุ่งนี้',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_status` (`status`),
@@ -223,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (`book_id`) REFERENCES `books`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
                 CONSTRAINT `fk_borrows_waived_by` FOREIGN KEY (`fine_waived_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+                CONSTRAINT `fk_borrows_contacted_by` FOREIGN KEY (`contacted_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE,
                 CONSTRAINT `fk_borrows_lost_reported_by` FOREIGN KEY (`lost_reported_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
