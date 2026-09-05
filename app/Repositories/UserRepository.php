@@ -227,8 +227,13 @@ class UserRepository
         // 📝 SQL: ดึงผู้ใช้ตาม ID (member + staff)
         // 🛡️ role IN (...) ป้องกันดึง/แก้ไข admin ผ่านเมธอดนี้
         // 🛡️ SELECT เฉพาะ column — ไม่รวม password hash
+        //
+        // 🔴 [UAT รอบ 4] ต้องดึง is_active ติดมาด้วย — ผู้เรียกต้องตัดสินใจเองว่าจะยอมให้ทำอะไร
+        //    ⚠️ **ห้ามใส่ AND is_active = 1 ตรงนี้** เพราะเมธอดนี้ใช้แสดงข้อมูลสมาชิกในหน้าอื่นด้วย
+        //       ถ้ากรองทิ้ง การรับคืนหนังสือและการดูประวัติของคนที่เลิกใช้งานแล้วจะพังตาม
+        //       ซึ่งแย่กว่าเดิม — หนังสือจะถูกขังอยู่กับคนที่ติดต่อไม่ได้
         $stmt = $this->pdo->prepare("
-            SELECT id, name, email, phone, role, created_at 
+            SELECT id, name, email, phone, role, is_active, created_at 
             FROM users WHERE id = ? AND role IN ('member', 'staff')
         ");
         $stmt->execute([$id]);

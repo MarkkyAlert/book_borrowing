@@ -58,6 +58,14 @@ register_shutdown_function(function () use ($pdo, $TAG): void {
     if (!$ids) return;
     $in = implode(',', array_map('intval', $ids));
     $pdo->exec("DELETE FROM payments WHERE borrow_id IN (SELECT id FROM borrows WHERE user_id IN ($in))");
+
+    // 🔴 คืนสต็อกก่อนลบรายการยืม — ลบทิ้งเฉย ๆ จะทำให้ available หายไปถาวร
+    //    เจอจริงตอนเพิ่ม MEM-B10: fixture ยืม 2 เล่ม แต่เทสต์คืนแค่เล่มเดียว
+    //    เล่มที่เหลือถูก DELETE ทั้งที่ยัง 'borrowing' → หนังสือของจริงหายจากชั้นไป 1 เล่ม
+    $pdo->exec("UPDATE books b
+                JOIN borrows br ON br.book_id = b.id
+                SET b.available = b.available + 1
+                WHERE br.user_id IN ($in) AND br.status = 'borrowing'");
     $pdo->exec("DELETE FROM borrows WHERE user_id IN ($in)");
     $pdo->exec("DELETE FROM reservations WHERE user_id IN ($in)");
     $pdo->exec("DELETE FROM users WHERE id IN ($in)");
@@ -124,9 +132,12 @@ echo "\n── B. สถานะเลิกใช้งาน ──\n";
 $mid = $real['id'];
 $inDropdown = fn(): bool => (bool) array_filter($userRepo->findAllMembers(), fn($u) => (int) $u['id'] === (int) $mid);
 
-// ให้ยืมหนังสือค้างไว้ 1 เล่ม ก่อนปิดใช้งาน
-$bookId = (int) $pdo->query("SELECT id FROM books WHERE available > 2 AND is_reference = 0 LIMIT 1")->fetchColumn();
-$borrowSv->createBorrow($mid, [$bookId]);
+// ให้ยืมหนังสือค้างไว้ 2 เล่ม ก่อนปิดใช้งาน
+//   เล่มที่ 1 ไว้ทดสอบว่ายัง "รับคืน" ได้ (MEM-B4)
+//   เล่มที่ 2 ไว้ทดสอบว่า "ต่ออายุ" ไม่ได้ (MEM-B10) — ต้องยืมตอนยังใช้งานอยู่
+$bookIds = $pdo->query("SELECT id FROM books WHERE available > 2 AND is_reference = 0 LIMIT 2")
+    ->fetchAll(PDO::FETCH_COLUMN);
+$borrowSv->createBorrow($mid, array_map('intval', $bookIds));
 
 check('MEM-B0', $inDropdown() && $auth->login("{$TAG}@example.com", '123456') !== null,
     'ก่อนปิดใช้งาน: อยู่ในรายชื่อตอนบันทึกการยืม และเข้าระบบได้',
@@ -157,6 +168,76 @@ catch (Exception $e) { $returned = false; }
 check('MEM-B4', $returned,
     'ยังรับคืนหนังสือของคนที่ปิดใช้งานได้ — หนังสือไม่ถูกขัง',
     '🔴 รับคืนไม่ได้ หนังสือจะค้างอยู่กับคนที่ติดต่อไม่ได้ตลอดไป');
+
+// ── B8: 🔴 [UAT รอบ 4] ยืมเล่มใหม่ให้คนที่ปิดใช้งานแล้ว ต้องไม่ได้ ──
+//    เดิมระบบแค่ซ่อนเขาจากดรอปดาวน์ (MEM-B2) ซึ่งเป็นการซ่อน ไม่ใช่กฎ
+//    ยาม MEM-B2 จึงเขียวมาตลอดทั้งที่ยืมทะลุได้จริง — ข้อนี้ปิดช่องนั้น
+$newBook = (int) $pdo->query("SELECT id FROM books WHERE available > 2 AND is_reference = 0 LIMIT 1 OFFSET 4")
+    ->fetchColumn();
+$borrowBlocked = false; $blockMsg = '';
+try {
+    $borrowSv->createBorrow($mid, [$newBook]);
+} catch (Exception $e) {
+    $borrowBlocked = true; $blockMsg = $e->getMessage();
+}
+check('MEM-B8', $borrowBlocked && str_contains($blockMsg, 'เลิกใช้งาน'),
+    'ยืมเล่มใหม่ให้คนที่ปิดใช้งานไม่ได้ และข้อความบอกสาเหตุ: "' . mb_substr($blockMsg, 0, 60) . '..."',
+    '🔴 ' . (!$borrowBlocked ? 'ยืมสำเร็จทั้งที่ปิดใช้งานแล้ว' : "ข้อความไม่บอกสาเหตุ: {$blockMsg}"));
+
+// ── B9: ยิงผ่านหน้าเว็บจริง ต้องไม่มีรายการยืมเกิดขึ้น ──
+//    🧠 นี่คือชั้นที่บั๊กอยู่จริง — แท็บที่เปิดค้าง / กดย้อนกลับ / สแกนบัตรสมาชิก
+//       ล้วนยิง POST เข้ามาโดยไม่ผ่านดรอปดาวน์
+$BASE = rtrim(APP_URL, '/');
+$jar  = tempnam(sys_get_temp_dir(), 'memst');
+register_shutdown_function(fn() => @unlink($jar));
+$httpB = function (string $method, string $url, array $f = []) use ($jar): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $jar,
+        CURLOPT_COOKIEFILE => $jar, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
+    if ($method === 'POST') { curl_setopt($ch, CURLOPT_POST, true); curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($f)); }
+    $b = (string) curl_exec($ch); curl_close($ch); return $b;
+};
+$csrfB  = fn(string $h) => preg_match('/name="csrf_token"\s+value="([^"]+)"/', $h, $m) ? $m[1] : '';
+$adminPw = $argv[1] ?? '123456';
+$lg = $httpB('POST', "{$BASE}/login.php", ['csrf_token' => $csrfB($httpB('GET', "{$BASE}/login.php")),
+    'email' => 'admin@library.com', 'password' => $adminPw]);
+if (!str_contains($lg, 'ออกจากระบบ') && !str_contains($lg, 'แดชบอร์ด')) {
+    fail('MEM-B9', '🔴 ล็อกอินไม่สำเร็จ — ข้ามการทดสอบผ่านหน้าเว็บ (ตรวจ Apache/รหัสผ่านแอดมิน)');
+} else {
+    $countBefore = (int) $pdo->query("SELECT COUNT(*) FROM borrows WHERE user_id = {$mid}")->fetchColumn();
+    // 🔴 ต้องใช้ **หนังสือคนละเล่ม** กับ MEM-B8
+    //    ถ้าใช้เล่มเดิม แล้ววันหนึ่งด่าน is_active หายไป ระบบจะยังบล็อกอยู่ดี
+    //    เพราะติดกฎ "ห้ามยืมเล่มเดิมซ้ำ" (F-36) → ยามข้อนี้จะเขียวด้วยเหตุผลผิด
+    //    (พิสูจน์แล้วตอนทำลายโค้ด: ใช้เล่มเดิมแล้วถอดด่านออก ยามยังไม่แดง)
+    $webBook = (int) $pdo->query("SELECT id FROM books WHERE available > 2 AND is_reference = 0 LIMIT 1 OFFSET 6")
+        ->fetchColumn();
+    $form = $httpB('GET', "{$BASE}/admin/borrow_form.php");
+    $resp = $httpB('POST', "{$BASE}/admin/borrow_form.php",
+        ['csrf_token' => $csrfB($form), 'user_id' => $mid, 'book_ids' => [$webBook]]);
+    $countAfter = (int) $pdo->query("SELECT COUNT(*) FROM borrows WHERE user_id = {$mid}")->fetchColumn();
+    check('MEM-B9', $countAfter === $countBefore && !str_contains($resp, 'บันทึกการยืมสำเร็จ'),
+        'ยิง POST ตรงเข้าหน้าบันทึกการยืม (เหมือนแท็บค้าง/สแกนบัตร) ก็ยังยืมไม่ได้',
+        "🔴 มีรายการยืมเพิ่มขึ้น {$countBefore}→{$countAfter} — หน้าเว็บยังปล่อยผ่าน");
+}
+
+// ── B10: ต่ออายุให้คนที่ปิดใช้งานแล้ว ต้องไม่ได้ ──
+//    🧠 ต่ออายุ = ยืดเวลาให้คนที่เลิกใช้บริการแล้ว หนังสือยิ่งกลับชั้นช้า
+$renewId = (int) $pdo->query("SELECT id FROM borrows WHERE user_id = {$mid} AND status = 'borrowing' LIMIT 1")->fetchColumn();
+$renewBlocked = false; $renewMsg = '';
+if ($renewId === 0) {
+    fail('MEM-B10', '🔴 ไม่เหลือรายการยืมไว้ทดสอบต่ออายุ — fixture ผิด');
+} else {
+    try { $borrowSv->renewBorrow($renewId); }
+    catch (Exception $e) { $renewBlocked = true; $renewMsg = $e->getMessage(); }
+    check('MEM-B10', $renewBlocked && str_contains($renewMsg, 'เลิกใช้งาน'),
+        'ต่ออายุให้คนที่ปิดใช้งานไม่ได้ และข้อความบอกว่ารับคืนได้ตามปกติ',
+        '🔴 ' . (!$renewBlocked ? 'ต่ออายุสำเร็จทั้งที่ปิดใช้งานแล้ว' : "ข้อความไม่บอกสาเหตุ: {$renewMsg}"));
+}
+
+// 🧹 คืนเล่มที่ใช้ทดสอบต่ออายุผ่านทางปกติ — ไม่ปล่อยให้ cleanup ต้องมาซ่อมสต็อก
+if ($renewId > 0) {
+    try { $borrowSv->returnBook($renewId); } catch (Exception $e) { /* cleanup ซ่อมให้อยู่แล้ว */ }
+}
 
 $svc->updateMember($mid, ['name' => "[{$TAG}] มีอีเมล", 'email' => "{$TAG}@example.com", 'is_active' => 1]);
 check('MEM-B5', $inDropdown() && $auth->login("{$TAG}@example.com", '123456') !== null,
